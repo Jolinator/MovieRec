@@ -1,7 +1,8 @@
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '')
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080').replace(/\/$/, '')
+const HEALTH_ENDPOINT = '/movieAPI/health'
 
 export async function getHealth() {
-  const response = await fetch(`${API_BASE_URL}/health`, {
+  const response = await fetch(`${API_BASE_URL}${HEALTH_ENDPOINT}`, {
     headers: { Accept: 'application/json, text/plain;q=0.9, */*;q=0.8' },
   })
 
