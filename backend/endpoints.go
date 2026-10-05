@@ -1,13 +1,14 @@
 package main
 
 import (
-	"encoding/json"
 	"net/http"
 	"strings"
 )
 
 func RegisterEndpoints(mux *http.ServeMux) {
+	mux.HandleFunc("GET /movieAPI/", healthHandler)
 	mux.HandleFunc("GET /movieAPI/health", healthHandler)
+	mux.HandleFunc("POST /movieAPI/login", loginHandler)
 	mux.HandleFunc("/", redirectToMovieAPI)
 }
 
@@ -16,7 +17,7 @@ func corsMiddleware(next http.Handler) http.Handler {
 		if r.Header.Get("Origin") == "http://localhost:5173" {
 			w.Header().Set("Access-Control-Allow-Origin", "http://localhost:5173")
 			w.Header().Set("Vary", "Origin")
-			w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 		}
 
@@ -41,12 +42,18 @@ func redirectToMovieAPI(w http.ResponseWriter, r *http.Request) {
 }
 
 func healthHandler(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, map[string]string{"message": "API is healthy!"})
+	response := HealthResponse{Message: "API is healthy!"}
+	writeJSON(w, response)
 }
 
-func writeJSON(w http.ResponseWriter, value any) {
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(value); err != nil {
-		http.Error(w, "could not encode response", http.StatusInternalServerError)
+func loginHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
 	}
+
+	// Handle login logic here 
+	
+	response := LoginResponse{LoggedIn: true}
+	writeJSON(w, response)
 }
