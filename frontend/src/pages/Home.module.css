@@ -1,0 +1,14 @@
+.home {
+  display: grid;
+  min-height: 100vh;
+  place-content: center;
+  justify-items: center;
+  gap: 24px;
+  padding: 24px;
+}
+
+.title {
+  margin: 0;
+  font-size: clamp(4rem, 16vw, 10rem);
+  letter-spacing: .06em;
+}
