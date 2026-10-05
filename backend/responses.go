@@ -12,13 +12,11 @@ type HealthResponse struct {
 type LoginResponse struct {
 	LoggedIn bool   `json:"loggedIn"`
 	UserID   string `json:"userId,omitempty"`
-
 }
 
 type SignUpResponse struct {
-	Sucess bool   `json:"sucess"`
-	UserID   string `json:"userId,omitempty"`
-	
+	Success bool   `json:"success"`
+	UserID string `json:"userId,omitempty"`
 }
 
 func writeJSON(w http.ResponseWriter, value any) {

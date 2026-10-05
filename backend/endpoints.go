@@ -85,6 +85,6 @@ func signUpHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Replace this example response with credential verification later.
-	response := SignUpResponse{Sucess: true, UserID: request.UserName} //for now send username back as user ID but will be different
+	response := SignUpResponse{Success: true, UserID: request.UserName} //for now send username back as user ID but will be different
 	writeJSON(w, response)
 }
