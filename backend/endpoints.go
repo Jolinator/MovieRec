@@ -52,8 +52,13 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Handle login logic here 
-	
-	response := LoginResponse{LoggedIn: true}
+	request, err := decodeAndValidate[LoginPostFormat](r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Replace this example response with credential verification later.
+	response := LoginResponse{LoggedIn: true, UserID: request.UserName} //for now send username back as user ID but will be different
 	writeJSON(w, response)
 }
