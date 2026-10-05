@@ -1,11 +1,8 @@
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080').replace(/\/$/, '')
 const HEALTH_ENDPOINT = '/movieAPI/health'
+const LOGIN_ENDPOINT = '/movieAPI/login'
 
-export async function getHealth() {
-  const response = await fetch(`${API_BASE_URL}${HEALTH_ENDPOINT}`, {
-    headers: { Accept: 'application/json, text/plain;q=0.9, */*;q=0.8' },
-  })
-
+async function readResponse(response) {
   const contentType = response.headers.get('content-type') ?? ''
   const body = contentType.includes('application/json')
     ? await response.json()
@@ -17,4 +14,25 @@ export async function getHealth() {
   }
 
   return body
+}
+
+export async function getHealth() {
+  const response = await fetch(`${API_BASE_URL}${HEALTH_ENDPOINT}`, {
+    headers: { Accept: 'application/json, text/plain;q=0.9, */*;q=0.8' },
+  })
+
+  return readResponse(response)
+}
+
+export async function login({ username, password }) {
+  const response = await fetch(`${API_BASE_URL}${LOGIN_ENDPOINT}`, {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ username, password }),
+  })
+
+  return readResponse(response)
 }

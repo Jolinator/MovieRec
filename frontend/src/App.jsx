@@ -1,6 +1,22 @@
-import React from 'react'
+import React, { useState } from 'react'
 import Home from './pages/Home'
+import Login from './pages/Login'
 
 export default function App() {
-  return <Home />
+  const [page, setPage] = useState('home')
+  const [username, setUsername] = useState('')
+
+  if (page === 'login') {
+    return (
+      <Login
+        onBack={() => setPage('home')}
+        onLoginSuccess={(loggedInUsername) => {
+          setUsername(loggedInUsername)
+          setPage('home')
+        }}
+      />
+    )
+  }
+
+  return <Home onLoginClick={() => setPage('login')} username={username} />
 }
