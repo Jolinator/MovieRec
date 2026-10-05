@@ -31,14 +31,6 @@ func corsMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-func methodAllowedCheck(w http.ResponseWriter, r *http.Request) bool {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return false
-	}
-	return true
-}
-
 func redirectToMovieAPI(w http.ResponseWriter, r *http.Request) {
 
 	if strings.HasPrefix(r.URL.Path, "/movieAPI") {
@@ -51,18 +43,12 @@ func redirectToMovieAPI(w http.ResponseWriter, r *http.Request) {
 }
 
 func healthHandler(w http.ResponseWriter, r *http.Request) {
-	if methodAllowedCheck(w, r) == false {
-		return
-	}
 
 	response := HealthResponse{Message: "API is healthy!"}
 	writeJSON(w, response)
 }
 
 func loginHandler(w http.ResponseWriter, r *http.Request) {
-	if methodAllowedCheck(w, r) == false {
-		return
-	}
 
 	request, return_ := validateRequest[LoginPostFormat](r, w)
 	if return_ == false {
@@ -75,9 +61,6 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func signUpHandler(w http.ResponseWriter, r *http.Request) {
-	if methodAllowedCheck(w, r) == false {
-		return
-	}
 
 	request, return_ := validateRequest[SignUpPostFormat](r, w)
 	if return_ == false {
