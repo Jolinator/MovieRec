@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react'
 import ErrorPopup from '../components/ErrorPopup'
 import LoginButton from '../components/LoginButton'
+import UserBadge from '../components/UserBadge'
 import { getHealth } from '../services/api'
 import styles from './Home.module.css'
 
-export default function Home() {
+export default function Home({ onLoginClick, username }) {
   const [error, setError] = useState('')
 
   useEffect(() => {
@@ -15,8 +16,9 @@ export default function Home() {
 
   return (
     <main className={styles.home}>
+      <UserBadge username={username} />
       <h1 className={styles.title}>HOME</h1>
-      <LoginButton />
+      <LoginButton onClick={onLoginClick} />
 
       {error && <ErrorPopup message={error} onClose={() => setError('')} />}
     </main>

@@ -1,0 +1,49 @@
+.login {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  padding: 24px;
+}
+
+.backButton {
+  position: fixed;
+  top: 24px;
+  left: 24px;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+}
+
+.form {
+  display: grid;
+  width: min(100%, 360px);
+  gap: 16px;
+}
+
+.form h1 { margin: 0 0 8px; }
+
+.form label { display: grid; gap: 6px; font-weight: 700; }
+
+.form input {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #999;
+  border-radius: 6px;
+  font: inherit;
+}
+
+.form button {
+  padding: 11px 24px;
+  border: 1px solid #111;
+  border-radius: 6px;
+  background: #111;
+  color: #fff;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+}
+
+.form button:hover:not(:disabled) { background: #333; }
+.form button:disabled { cursor: wait; opacity: .65; }
+.signUpButton { background: #fff !important; color: #111 !important; }
