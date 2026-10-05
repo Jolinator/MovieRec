@@ -12,6 +12,12 @@ type HealthResponse struct {
 type LoginResponse struct {
 	LoggedIn bool   `json:"loggedIn"`
 	UserID   string `json:"userId,omitempty"`
+
+}
+
+type SignUpResponse struct {
+	Sucess bool   `json:"sucess"`
+	UserID   string `json:"userId,omitempty"`
 	
 }
 

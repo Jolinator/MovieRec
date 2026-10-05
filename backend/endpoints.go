@@ -30,6 +30,14 @@ func corsMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+func methodAllowedCheck(w http.ResponseWriter, r *http.Request) bool {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return false
+	}
+	return true
+}
+
 func redirectToMovieAPI(w http.ResponseWriter, r *http.Request) {
 
 	if strings.HasPrefix(r.URL.Path, "/movieAPI") {
@@ -42,13 +50,16 @@ func redirectToMovieAPI(w http.ResponseWriter, r *http.Request) {
 }
 
 func healthHandler(w http.ResponseWriter, r *http.Request) {
+	if methodAllowedCheck(w, r) == false {
+		return
+	}
+	
 	response := HealthResponse{Message: "API is healthy!"}
 	writeJSON(w, response)
 }
 
 func loginHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	if methodAllowedCheck(w, r) == false {
 		return
 	}
 
@@ -60,5 +71,21 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Replace this example response with credential verification later.
 	response := LoginResponse{LoggedIn: true, UserID: request.UserName} //for now send username back as user ID but will be different
+	writeJSON(w, response)
+}
+
+func signUpHandler(w http.ResponseWriter, r *http.Request) {
+	if methodAllowedCheck(w, r) == false {
+		return
+	}
+
+	request, err := decodeAndValidate[SignUpPostFormat](r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Replace this example response with credential verification later.
+	response := SignUpResponse{Sucess: true, UserID: request.UserName} //for now send username back as user ID but will be different
 	writeJSON(w, response)
 }
