@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import ErrorPopup from '../components/ErrorPopup'
-import { login } from '../services/api'
+import { login, signup } from '../services/api'
 import styles from './Login.module.css'
 
 export default function Login({ onBack, onLoginSuccess }) {
@@ -24,6 +24,30 @@ export default function Login({ onBack, onLoginSuccess }) {
       setError('Incorrect username or password.')
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Unable to log in.')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  async function handleSignup(event) {
+    if (!event.currentTarget.form.reportValidity()) {
+      return
+    }
+
+    setIsSubmitting(true)
+    setError('')
+
+    try {
+      const response = await signup({ username, password })
+
+      if (response?.success === true) {
+        onLoginSuccess(username)
+        return
+      }
+
+      setError('Unable to sign up.')
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'Unable to sign up.')
     } finally {
       setIsSubmitting(false)
     }
@@ -62,7 +86,14 @@ export default function Login({ onBack, onLoginSuccess }) {
         <button type="submit" disabled={isSubmitting}>
           {isSubmitting ? 'Logging in…' : 'Login'}
         </button>
-        <button type="button" className={styles.signUpButton}>Sign up</button>
+        <button
+          type="button"
+          className={styles.signUpButton}
+          onClick={handleSignup}
+          disabled={isSubmitting}
+        >
+          {isSubmitting ? 'Signing up…' : 'Sign up'}
+        </button>
       </form>
 
       {error && <ErrorPopup message={error} onClose={() => setError('')} />}
