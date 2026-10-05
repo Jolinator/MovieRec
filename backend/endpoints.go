@@ -9,6 +9,7 @@ func RegisterEndpoints(mux *http.ServeMux) {
 	mux.HandleFunc("GET /movieAPI/", healthHandler)
 	mux.HandleFunc("GET /movieAPI/health", healthHandler)
 	mux.HandleFunc("POST /movieAPI/login", loginHandler)
+	mux.HandleFunc("POST /movieAPI/signup", signUpHandler)
 	mux.HandleFunc("/", redirectToMovieAPI)
 }
 
@@ -53,7 +54,7 @@ func healthHandler(w http.ResponseWriter, r *http.Request) {
 	if methodAllowedCheck(w, r) == false {
 		return
 	}
-	
+
 	response := HealthResponse{Message: "API is healthy!"}
 	writeJSON(w, response)
 }
@@ -63,9 +64,8 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	request, err := decodeAndValidate[LoginPostFormat](r)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+	request, return_ := validateRequest[LoginPostFormat](r, w)
+	if return_ == false {
 		return
 	}
 
@@ -79,9 +79,8 @@ func signUpHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	request, err := decodeAndValidate[SignUpPostFormat](r)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+	request, return_ := validateRequest[SignUpPostFormat](r, w)
+	if return_ == false {
 		return
 	}
 
