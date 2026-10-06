@@ -24,7 +24,6 @@
 # Logs and databases #
 ######################
 *.log
-*.sql
 *.sqlite
 
 # OS generated files #
@@ -39,6 +38,8 @@ Thumbs.db
 
 #SPECIFIC PROJECT#
 
+.env
+.env.example
 
 /package-lock.json
 
