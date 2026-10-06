@@ -10,7 +10,7 @@ import (
 )
 
 func loadLocalEnvironment() error {
-	path := filepath.Join("..", "database", "db.env")
+	path := filepath.Join("..", "database", "auth.env")
 	_, err := os.Stat(path)
 	if err == nil {
 		if err := godotenv.Load(path); err != nil {
