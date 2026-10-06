@@ -40,7 +40,7 @@ Thumbs.db
 #SPECIFIC PROJECT#
 
 
-/package-lock.json
+package-lock.json
 
 # Frontend dependencies and build output
 frontend/node_modules/
