@@ -61,12 +61,7 @@ func loadDatabaseConfig() (databaseConfig, error) {
 	return config, nil
 }
 
-func openDatabase(ctx context.Context) (*pgxpool.Pool, error) {
-	config, err := loadDatabaseConfig()
-	if err != nil {
-		return nil, err
-	}
-
+func setupConnectionURL(config databaseConfig) url.URL {
 	connectionURL := url.URL{
 		Scheme: "postgres",
 		User:   url.UserPassword(config.user, config.password),
@@ -76,6 +71,19 @@ func openDatabase(ctx context.Context) (*pgxpool.Pool, error) {
 	query := connectionURL.Query()
 	query.Set("sslmode", config.sslMode)
 	connectionURL.RawQuery = query.Encode()
+	return connectionURL
+}
+
+
+func setupPool(ctx context.Context) (*pgxpool.Pool, error) {
+	
+
+	config, err := loadDatabaseConfig()
+	if err != nil {
+		return nil, err
+	}
+
+	connectionURL := setupConnectionURL(config)
 
 	poolConfig, err := pgxpool.ParseConfig(connectionURL.String())
 	if err != nil {
@@ -86,13 +94,31 @@ func openDatabase(ctx context.Context) (*pgxpool.Pool, error) {
 	if err != nil {
 		return nil, fmt.Errorf("create database pool: %w", err)
 	}
+	return pool, nil
+}
 
+func attemptPoolPing(ctx context.Context, pool *pgxpool.Pool) error {
 	pingContext, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
 	if err := pool.Ping(pingContext); err != nil {
 		pool.Close()
-		return nil, fmt.Errorf("connect to database: %w", err)
+		return fmt.Errorf("connect to database: %w", err)
+	}
+	return nil
+}
+
+func openDatabase(ctx context.Context) (*pgxpool.Pool, error) {
+
+
+	pool, err := setupPool(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	err = attemptPoolPing(ctx, pool)
+	if err != nil {
+		return nil, err
 	}
 
 	return pool, nil
