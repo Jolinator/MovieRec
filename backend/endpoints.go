@@ -1,15 +1,23 @@
 package main
 
 import (
+	"context"
 	"net/http"
 	"strings"
+	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func RegisterEndpoints(mux *http.ServeMux) {
-	mux.HandleFunc("GET /movieAPI/", healthHandler)
-	mux.HandleFunc("GET /movieAPI/health", healthHandler)
-	mux.HandleFunc("POST /movieAPI/login", loginHandler)
-	mux.HandleFunc("POST /movieAPI/signup", signUpHandler)
+type Server struct {
+	db *pgxpool.Pool
+}
+
+func RegisterEndpoints(mux *http.ServeMux, server *Server) {
+	mux.HandleFunc("GET /movieAPI/{$}", server.healthHandler)
+	mux.HandleFunc("GET /movieAPI/health", server.healthHandler)
+	mux.HandleFunc("POST /movieAPI/login", server.loginHandler)
+	mux.HandleFunc("POST /movieAPI/signup", server.signUpHandler)
 	mux.HandleFunc("/", redirectToMovieAPI)
 }
 
@@ -42,13 +50,20 @@ func redirectToMovieAPI(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, path, http.StatusTemporaryRedirect)
 }
 
-func healthHandler(w http.ResponseWriter, r *http.Request) {
+func (s *Server) healthHandler(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+	defer cancel()
+
+	if err := s.db.Ping(ctx); err != nil {
+		http.Error(w, "database unavailable", http.StatusServiceUnavailable)
+		return
+	}
 
 	response := HealthResponse{Message: "API is healthy!"}
 	writeJSON(w, response)
 }
 
-func loginHandler(w http.ResponseWriter, r *http.Request) {
+func (s *Server) loginHandler(w http.ResponseWriter, r *http.Request) {
 
 	request, return_ := validateRequest[LoginPostFormat](r, w)
 	if return_ == false {
@@ -60,7 +75,7 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, response)
 }
 
-func signUpHandler(w http.ResponseWriter, r *http.Request) {
+func (s *Server) signUpHandler(w http.ResponseWriter, r *http.Request) {
 
 	request, return_ := validateRequest[SignUpPostFormat](r, w)
 	if return_ == false {
