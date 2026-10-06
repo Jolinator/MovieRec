@@ -36,9 +36,9 @@ func loadDatabaseConfig() (databaseConfig, error) {
 	config := databaseConfig{
 		host:     os.Getenv("DB_HOST"),
 		port:     uint16(port),
-		name:     os.Getenv("DB_NAME"),
-		user:     os.Getenv("DB_USER"),
-		password: os.Getenv("DB_PASSWORD"),
+		name:     os.Getenv("POSTGRES_DB"),
+		user:     os.Getenv("POSTGRES_USER"),
+		password: os.Getenv("POSTGRES_PASSWORD"),
 		sslMode:  os.Getenv("DB_SSLMODE"),
 	}
 
@@ -52,7 +52,7 @@ func loadDatabaseConfig() (databaseConfig, error) {
 		return databaseConfig{}, fmt.Errorf("DB_USER must be set")
 	}
 	if config.password == "" {
-		return databaseConfig{}, fmt.Errorf("DB_PASSWORD must be set")
+		return databaseConfig{}, fmt.Errorf("POSTGRES_PASSWORD must be set")
 	}
 	if config.sslMode == "" {
 		return databaseConfig{}, fmt.Errorf("DB_SSLMODE must be set")
@@ -74,9 +74,7 @@ func setupConnectionURL(config databaseConfig) url.URL {
 	return connectionURL
 }
 
-
 func setupPool(ctx context.Context) (*pgxpool.Pool, error) {
-	
 
 	config, err := loadDatabaseConfig()
 	if err != nil {
@@ -109,7 +107,6 @@ func attemptPoolPing(ctx context.Context, pool *pgxpool.Pool) error {
 }
 
 func openDatabase(ctx context.Context) (*pgxpool.Pool, error) {
-
 
 	pool, err := setupPool(ctx)
 	if err != nil {

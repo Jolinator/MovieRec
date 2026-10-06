@@ -2,7 +2,7 @@ services:
   postgres:
     image: postgres:16
     env_file:
-      - ./database/db.env
+      - ./database/auth.env
     ports:
       - "5434:5432"
     volumes:
@@ -19,14 +19,14 @@ services:
       context: .
       dockerfile: backend/Dockerfile
     env_file:
-      - ./database/db.env
+      - ./database/auth.env
     environment:
       DB_HOST: postgres
       DB_PORT: "5432"
     ports:
       - "8080:8080"
     volumes:
-      - ./database/db.env:/app/database/db.env:ro
+      - ./database/auth.env:/app/database/auth.env:ro
     depends_on:
       postgres:
         condition: service_healthy
