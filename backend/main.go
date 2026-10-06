@@ -8,24 +8,26 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func main() {
-	if err := loadLocalEnvironment(); err != nil {
-		log.Printf("load local environment: %v", err)
-		return
-	}
-
+func AttemptConnect() (context.Context, *pgxpool.Pool, error) {
 	databaseContext, stopDatabaseSignal := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stopDatabaseSignal()
 
 	pool, err := openDatabaseWithRetry(databaseContext, 10, 2*time.Second)
 	if err != nil {
 		log.Printf("database startup failed: %v", err)
-		return
+		return databaseContext, nil, err
 	}
-	defer pool.Close()
 
+	defer pool.Close()
+	return databaseContext, pool, nil
+
+}
+
+func setupServer(pool *pgxpool.Pool) *http.Server {
 	server := &Server{db: pool}
 	mux := http.NewServeMux()
 	RegisterEndpoints(mux, server)
@@ -39,6 +41,10 @@ func main() {
 		WriteTimeout:      10 * time.Second,
 		IdleTimeout:       60 * time.Second,
 	}
+	return httpServer
+}
+
+func RunServer(pool *pgxpool.Pool, httpServer *http.Server) chan error {
 
 	serverErrors := make(chan error, 1)
 	go func() {
@@ -46,7 +52,10 @@ func main() {
 	}()
 
 	log.Println("API running at http://localhost:8080")
+	return serverErrors
+}
 
+func HandleErrors(serverErrors chan error, databaseContext context.Context, httpServer *http.Server) {
 	select {
 	case err := <-serverErrors:
 		if err != nil && err != http.ErrServerClosed {
@@ -60,4 +69,21 @@ func main() {
 			log.Printf("HTTP server shutdown failed: %v", err)
 		}
 	}
+}
+
+func main() {
+	if err := loadLocalEnvironment(); err != nil {
+		log.Printf("load local environment: %v", err)
+		return
+	}
+	databaseContext, pool, err := AttemptConnect()
+	if err != nil {
+		return
+	}
+
+	httpServer := setupServer(pool)
+
+	serverErrors := RunServer(pool, httpServer)
+	
+	HandleErrors(serverErrors, databaseContext, httpServer)
 }
