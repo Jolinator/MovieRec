@@ -25,7 +25,7 @@ func setupServer(pool *pgxpool.Pool) *http.Server {
 	server := &Server{db: pool}
 	mux := http.NewServeMux()
 	RegisterEndpoints(mux, server)
-	handler := corsMiddleware(mux)
+	handler := requestMetricsMiddleware(corsMiddleware(mux))
 
 	httpServer := &http.Server{
 		Addr:              ":8080",
