@@ -38,7 +38,7 @@ Thumbs.db
 
 #SPECIFIC PROJECT#
 
-.env
+*.env
 .env.example
 
 package-lock.json
