@@ -1,4 +1,4 @@
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080').replace(/\/$/, '')
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL.replace(/\/$/, '')
 const HEALTH_ENDPOINT = '/movieAPI/health'
 const LOGIN_ENDPOINT = '/movieAPI/login'
 const SIGNUP_ENDPOINT = '/movieAPI/signup'
