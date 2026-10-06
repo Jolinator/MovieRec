@@ -1,17 +1,15 @@
 services:
   postgres:
     image: postgres:16
-    environment:
-      POSTGRES_DB: ${DB_NAME:-auth}
-      POSTGRES_USER: ${DB_USER:-moviehub}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-moviehub-dev-password}
+    env_file:
+      - ./database/db.env
     ports:
-      - "${DB_PORT:-5432}:5432"
+      - "5434:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - ./database/migrations:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-moviehub} -d ${DB_NAME:-auth}"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 5
