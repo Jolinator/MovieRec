@@ -12,19 +12,13 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func AttemptConnect() (context.Context, *pgxpool.Pool, error) {
-	databaseContext, stopDatabaseSignal := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stopDatabaseSignal()
-
+func AttemptConnect(databaseContext context.Context) (*pgxpool.Pool, error) {
 	pool, err := openDatabaseWithRetry(databaseContext, 10, 2*time.Second)
 	if err != nil {
 		log.Printf("database startup failed: %v", err)
-		return databaseContext, nil, err
+		return nil, err
 	}
-
-	defer pool.Close()
-	return databaseContext, pool, nil
-
+	return pool, nil
 }
 
 func setupServer(pool *pgxpool.Pool) *http.Server {
@@ -76,14 +70,17 @@ func main() {
 		log.Printf("load local environment: %v", err)
 		return
 	}
-	databaseContext, pool, err := AttemptConnect()
+	databaseContext, stopDatabaseSignal := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stopDatabaseSignal()
+
+	pool, err := AttemptConnect(databaseContext)
 	if err != nil {
 		return
 	}
+	defer pool.Close()
 
 	httpServer := setupServer(pool)
 
 	serverErrors := RunServer(pool, httpServer)
-	
 	HandleErrors(serverErrors, databaseContext, httpServer)
 }
