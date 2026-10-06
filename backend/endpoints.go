@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 type Server struct {
@@ -14,6 +15,7 @@ type Server struct {
 }
 
 func RegisterEndpoints(mux *http.ServeMux, server *Server) {
+	mux.Handle("GET /metrics", promhttp.Handler())
 	mux.HandleFunc("GET /movieAPI/{$}", server.healthHandler)
 	mux.HandleFunc("GET /movieAPI/health", server.healthHandler)
 	mux.HandleFunc("POST /movieAPI/login", server.loginHandler)
