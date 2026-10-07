@@ -43,19 +43,19 @@ func loadDatabaseConfig() (databaseConfig, error) {
 	}
 
 	if config.host == "" {
-		config.host = "localhost"
+		return databaseConfig{}, fmt.Errorf("DB_HOST must be set")
 	}
 	if config.name == "" {
-		config.name = "auth"
+		return databaseConfig{}, fmt.Errorf("DB_NAME must be set")
 	}
 	if config.user == "" {
-		config.user = "moviehub"
+		return databaseConfig{}, fmt.Errorf("DB_USER must be set")
 	}
 	if config.password == "" {
 		return databaseConfig{}, fmt.Errorf("POSTGRES_PASSWORD must be set")
 	}
 	if config.sslMode == "" {
-		config.sslMode = "disable"
+		return databaseConfig{}, fmt.Errorf("DB_SSLMODE must be set")
 	}
 
 	return config, nil
