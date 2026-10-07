@@ -92,7 +92,6 @@ func main() {
 
 	if err := importPopularMovies(databaseContext, NewMovieRepository(moviesPool)); err != nil {
 		log.Printf("movie import failed: %v", err)
-		return
 	}
 
 	httpServer := setupServer(pool, moviesPool)
