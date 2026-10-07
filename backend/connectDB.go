@@ -41,12 +41,6 @@ func loadDatabaseConfig(prefix string) (databaseConfig, error) {
 		password: os.Getenv(prefix + "DB_PASSWORD"),
 		sslMode:  os.Getenv(prefix + "DB_SSLMODE"),
 	}
-	if prefix == "" {
-		config.name = os.Getenv("POSTGRES_DB")
-		config.user = os.Getenv("POSTGRES_USER")
-		config.password = os.Getenv("POSTGRES_PASSWORD")
-	}
-
 	if config.host == "" {
 		return databaseConfig{}, fmt.Errorf("DB_HOST must be set")
 	}

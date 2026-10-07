@@ -77,7 +77,7 @@ func main() {
 	databaseContext, stopDatabaseSignal := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stopDatabaseSignal()
 
-	pool, err := AttemptConnect(databaseContext, "")
+	pool, err := AttemptConnect(databaseContext, "AUTH_")
 	if err != nil {
 		return
 	}

@@ -35,15 +35,7 @@ services:
       dockerfile: backend/Dockerfile
     env_file:
       - ./database/auth.env
-    environment:
-      DB_HOST: auth-postgres
-      DB_PORT: "5432"
-      MOVIES_DB_HOST: movies-postgres
-      MOVIES_DB_PORT: "5432"
-      MOVIES_DB_NAME: movies
-      MOVIES_DB_USER: moviehub
-      MOVIES_DB_PASSWORD: moviehub-dev-password
-      MOVIES_DB_SSLMODE: disable
+      - ./database/movies.env
     ports:
       - "8080:8080"
     volumes:
