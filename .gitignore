@@ -51,3 +51,4 @@ frontend/dist/
 frontend/.env
 frontend/.env.local
 frontend/.env.*.local
+database/tls/
