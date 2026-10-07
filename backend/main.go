@@ -21,11 +21,11 @@ func AttemptConnect(databaseContext context.Context, prefix string) (*pgxpool.Po
 	return pool, nil
 }
 
-func setupServer(authDB *pgxpool.Pool, moviesDB *pgxpool.Pool) *http.Server {
+func setupServer(authDB *pgxpool.Pool, moviesDB *pgxpool.Pool, tokenIssuer *TokenIssuer) *http.Server {
 	server := &Server{
-		authDB:       authDB,
-		moviesDB:     moviesDB,
-		userService:  NewUserService(NewUserRepository(authDB)),
+		authDB:      authDB,
+		moviesDB:    moviesDB,
+		userService: NewUserService(NewUserRepository(authDB), tokenIssuer),
 		movieService: NewMovieService(NewMovieRepository(moviesDB)),
 	}
 	mux := http.NewServeMux()
@@ -95,7 +95,18 @@ func main() {
 		return
 	}
 
-	httpServer := setupServer(pool, moviesPool)
+	if err := importPopularMovies(databaseContext, NewMovieRepository(moviesPool)); err != nil {
+		log.Printf("movie import failed: %v", err)
+		return
+	}
+
+	tokenIssuer, err := setupTokenIssuer()
+	if err != nil {
+		log.Printf("JWT startup failed: %v", err)
+		return
+	}
+	
+	httpServer := setupServer(pool, moviesPool, tokenIssuer)
 
 	serverErrors := RunServer(pool, httpServer)
 	HandleErrors(serverErrors, databaseContext, httpServer)
