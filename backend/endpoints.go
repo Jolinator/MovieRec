@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -103,13 +102,4 @@ func (s *Server) signUpHandler(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, SignUpResponse{Success: true, UserID: user.ID.String()})
 }
 
-func writeSignupError(w http.ResponseWriter, err error) {
-	switch {
-	case errors.Is(err, ErrUsernameAlreadyExists):
-		http.Error(w, "username already exists", http.StatusConflict)
-	case errors.Is(err, ErrUserPersistence):
-		http.Error(w, "database unavailable", http.StatusServiceUnavailable)
-	default:
-		http.Error(w, "could not create user", http.StatusInternalServerError)
-	}
-}
+
