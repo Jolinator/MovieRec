@@ -12,26 +12,31 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-var (
-	ErrUsernameAlreadyExists = errors.New("username already exists")
-	ErrUserPersistence       = errors.New("user persistence failed")
-)
-
 type User struct {
 	ID        uuid.UUID
 	Username  string
 	CreatedAt time.Time
 }
 
-type UserRepository struct {
-	db *pgxpool.Pool
+type UserCredentials struct {
+	User
+	PasswordHash string
 }
 
-func NewUserRepository(db *pgxpool.Pool) *UserRepository {
-	return &UserRepository{db: db}
+type UserRepository struct {
+	db       *pgxpool.Pool
+	dbStatus *DBStatus
+}
+
+func NewUserRepository(db *pgxpool.Pool, dbStatus *DBStatus) *UserRepository {
+	return &UserRepository{db: db, dbStatus: dbStatus}
 }
 
 func (r *UserRepository) Create(ctx context.Context, username, passwordHash string) (User, error) {
+	if !r.dbStatus.AuthAvailable() {
+		return User{}, fmt.Errorf("%w: auth database is unavailable", ErrAuthDatabaseUnavailable)
+	}
+
 	const query = `
 		INSERT INTO users (username, password_hash)
 		VALUES ($1, $2)
@@ -53,6 +58,34 @@ func (r *UserRepository) Create(ctx context.Context, username, passwordHash stri
 	}
 
 	return User{}, fmt.Errorf("%w: %v", ErrUserPersistence, err)
+}
+
+func (r *UserRepository) FindByUsername(ctx context.Context, username string) (UserCredentials, error) {
+	if !r.dbStatus.AuthAvailable() {
+		return UserCredentials{}, fmt.Errorf("%w: auth database is unavailable", ErrAuthDatabaseUnavailable)
+	}
+
+	const query = `
+		SELECT id, username, password_hash, created_at
+		FROM users
+		WHERE username = $1
+	`
+
+	var credentials UserCredentials
+	err := r.db.QueryRow(ctx, query, username).Scan(
+		&credentials.ID,
+		&credentials.Username,
+		&credentials.PasswordHash,
+		&credentials.CreatedAt,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return UserCredentials{}, ErrUserNotFound
+	}
+	if err != nil {
+		return UserCredentials{}, fmt.Errorf("%w: find user: %v", ErrUserPersistence, err)
+	}
+
+	return credentials, nil
 }
 
 func isUniqueViolation(err error) bool {

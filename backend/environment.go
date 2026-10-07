@@ -10,7 +10,7 @@ import (
 )
 
 func loadLocalEnvironment() error {
-	for _, name := range []string{"auth.env", "movies.env"} {
+	for _, name := range []string{"auth.env", "movies.env", "tmdb.env"} {
 		path := filepath.Join("..", "secrets", name)
 		_, err := os.Stat(path)
 		if err == nil {
@@ -24,5 +24,6 @@ func loadLocalEnvironment() error {
 		}
 		return fmt.Errorf("check environment file %q: %w", path, err)
 	}
+
 	return nil
 }

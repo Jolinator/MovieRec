@@ -12,24 +12,23 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func AttemptConnect(databaseContext context.Context, prefix string) (*pgxpool.Pool, error) {
-	pool, err := openDatabaseWithRetry(databaseContext, prefix, 10, 2*time.Second)
-	if err != nil {
-		log.Printf("%sdatabase startup failed: %v", prefix, err)
-		return nil, err
-	}
-	return pool, nil
-}
+func setupServer(authDB *pgxpool.Pool, ctx context.Context, moviesDB *pgxpool.Pool, tokenIssuer *TokenIssuer, dbStatus *DBStatus) *http.Server {
 
-func setupServer(authDB *pgxpool.Pool, moviesDB *pgxpool.Pool) *http.Server {
+	movie_repository := NewMovieRepository(moviesDB, dbStatus)
 	server := &Server{
-		authDB:      authDB,
-		moviesDB:    moviesDB,
-		userService: NewUserService(NewUserRepository(authDB)),
+		authDB:       authDB,
+		moviesDB:     moviesDB,
+		dbStatus:     dbStatus,
+		userService:  NewUserService(NewUserRepository(authDB, dbStatus), tokenIssuer),
+		movieService: NewMovieService(movie_repository),
 	}
 	mux := http.NewServeMux()
 	RegisterEndpoints(mux, server)
 	handler := requestMetricsMiddleware(corsMiddleware(mux))
+
+	if err := importPopularMovies(ctx, movie_repository); err != nil {
+		log.Printf("movie import failed: %v", err)
+	}
 
 	httpServer := &http.Server{
 		Addr:              ":8080",
@@ -77,20 +76,29 @@ func main() {
 	databaseContext, stopDatabaseSignal := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stopDatabaseSignal()
 
-	pool, err := AttemptConnect(databaseContext, "AUTH_")
+	authPool, err := setupPool(databaseContext, "AUTH_")
 	if err != nil {
 		return
 	}
-	defer pool.Close()
+	defer authPool.Close()
 
-	moviesPool, err := AttemptConnect(databaseContext, "MOVIES_")
+	moviesPool, err := setupPool(databaseContext, "MOVIES_")
 	if err != nil {
 		return
 	}
 	defer moviesPool.Close()
 
-	httpServer := setupServer(pool, moviesPool)
+	dbStatus := NewDBStatus(authPool, moviesPool)
+	go dbStatus.Start(databaseContext, 5*time.Second)
 
-	serverErrors := RunServer(pool, httpServer)
+	tokenIssuer, err := setupTokenIssuer()
+	if err != nil {
+		log.Printf("JWT startup failed: %v", err)
+	}
+
+	httpServer := setupServer(authPool, databaseContext, moviesPool, tokenIssuer, dbStatus)
+
+	serverErrors := RunServer(authPool, httpServer)
+
 	HandleErrors(serverErrors, databaseContext, httpServer)
 }

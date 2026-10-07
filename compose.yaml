@@ -41,19 +41,20 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
+      network: host
     env_file:
       - ./secrets/auth.env
       - ./secrets/movies.env
+      - ./secrets/tmdb.env
     ports:
       - "8080:8080"
     volumes:
       - ./secrets/auth.env:/app/secrets/auth.env:ro
       - ./secrets/movies.env:/app/secrets/movies.env:ro
-    depends_on:
-      auth-postgres:
-        condition: service_healthy
-      movies-postgres:
-        condition: service_healthy
+      - ./secrets/jwt-private.pem:/app/secrets/jwt-private.pem:ro
+      - ./secrets/tmdb.env:/app/secrets/tmdb.env:ro
+    environment:
+      JWT_PRIVATE_KEY_PATH: /app/secrets/jwt-private.pem
 
   frontend:
     build:
@@ -61,8 +62,6 @@ services:
       dockerfile: frontend/Dockerfile
     ports:
       - "5173:80"
-    depends_on:
-      - backend
 
   prometheus:
     image: prom/prometheus:v3.5.0

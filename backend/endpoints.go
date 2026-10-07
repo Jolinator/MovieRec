@@ -1,26 +1,29 @@
 package main
 
 import (
-	"context"
+	"errors"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 type Server struct {
-	authDB      *pgxpool.Pool
-	moviesDB    *pgxpool.Pool
-	userService *UserService
+	authDB       *pgxpool.Pool
+	moviesDB     *pgxpool.Pool
+	dbStatus     *DBStatus
+	userService  *UserService
+	movieService *MovieService
 }
 
 func RegisterEndpoints(mux *http.ServeMux, server *Server) {
 	mux.Handle("GET /metrics", promhttp.Handler())
 	mux.HandleFunc("GET /movieAPI/{$}", server.healthHandler)
 	mux.HandleFunc("GET /movieAPI/health", server.healthHandler)
+	mux.HandleFunc("GET /movieAPI/movies", server.moviesHandler)
 	mux.HandleFunc("POST /movieAPI/login", server.loginHandler)
+	mux.HandleFunc("POST /movieAPI/logout", server.logoutHandler)
 	mux.HandleFunc("POST /movieAPI/signup", server.signUpHandler)
 	mux.HandleFunc("/", redirectToMovieAPI)
 }
@@ -28,11 +31,12 @@ func RegisterEndpoints(mux *http.ServeMux, server *Server) {
 func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")
-		if origin == "http://localhost:5173" {
+		if origin == "http://localhost:5173" || origin == "https://localhost:5173" {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 			w.Header().Set("Vary", "Origin")
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+			w.Header().Set("Access-Control-Allow-Credentials", "true")
 		}
 
 		if r.Method == http.MethodOptions {
@@ -56,32 +60,33 @@ func redirectToMovieAPI(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) healthHandler(w http.ResponseWriter, r *http.Request) {
-	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
-	defer cancel()
+	auth_available := s.dbStatus.AuthAvailable()
+	movies_available := s.dbStatus.MoviesAvailable()
 
-	if err := s.authDB.Ping(ctx); err != nil {
-		http.Error(w, "database unavailable", http.StatusServiceUnavailable)
-		return
-	}
-	if err := s.moviesDB.Ping(ctx); err != nil {
-		http.Error(w, "movie database unavailable", http.StatusServiceUnavailable)
-		return
-	}
-
-	response := HealthResponse{Message: "API is healthy!"}
+	response := HealthResponse{Message: "API is healthy!", AuthDBAvailable: auth_available, MoviesDBAvailable: movies_available}
 	writeJSON(w, response)
 }
 
 func (s *Server) loginHandler(w http.ResponseWriter, r *http.Request) {
 
-	request, return_ := validateRequest[LoginPostFormat](r, w)
-	if return_ == false {
+	request, ok := validateRequest[LoginPostFormat](r, w)
+	if !ok {
 		return
 	}
 
-	// Replace this example response with credential verification later.
-	response := LoginResponse{LoggedIn: true, UserID: request.UserName} //for now send username back as user ID but will be different
-	writeJSON(w, response)
+	user, token, err := s.userService.Authenticate(r.Context(), request.UserName, request.Password)
+	if err != nil {
+		writeLoginError(w, err)
+		return
+	}
+
+	setAccessTokenCookie(w, token)
+	writeJSON(w, LoginResponse{LoggedIn: true, UserID: user.ID.String()})
+}
+
+func (s *Server) logoutHandler(w http.ResponseWriter, r *http.Request) {
+	clearAccessTokenCookie(w)
+	writeJSON(w, map[string]bool{"success": true})
 }
 
 func (s *Server) signUpHandler(w http.ResponseWriter, r *http.Request) {
@@ -102,4 +107,19 @@ func (s *Server) signUpHandler(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, SignUpResponse{Success: true, UserID: user.ID.String()})
 }
 
-
+func (s *Server) moviesHandler(w http.ResponseWriter, r *http.Request) {
+	movies, err := s.movieService.ListFromQuery(r.Context(), r.URL.Query())
+	if err != nil {
+		if errors.Is(err, ErrInvalidMoviePagination) {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if errors.Is(err, ErrMoviesDatabaseUnavailable) {
+			http.Error(w, ErrMoviesDatabaseUnavailable.Error(), http.StatusServiceUnavailable)
+			return
+		}
+		http.Error(w, "could not load movies", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, movies)
+}

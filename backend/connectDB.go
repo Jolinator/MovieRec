@@ -120,13 +120,19 @@ func openDatabase(ctx context.Context, prefix string) (*pgxpool.Pool, error) {
 	return pool, nil
 }
 
-func openDatabaseWithRetry(ctx context.Context, prefix string, attempts int, delay time.Duration) (*pgxpool.Pool, error) {
+func PingWithRetry(ctx context.Context, pool *pgxpool.Pool, attempts int, delay time.Duration) error {
+	if attempts < 1 {
+		return fmt.Errorf("database ping attempts must be at least 1")
+	}
+
 	var lastError error
 
 	for attempt := 1; attempt <= attempts; attempt++ {
-		pool, err := openDatabase(ctx, prefix)
+		pingContext, cancel := context.WithTimeout(ctx, 5*time.Second)
+		err := pool.Ping(pingContext)
+		cancel()
 		if err == nil {
-			return pool, nil
+			return nil
 		}
 		lastError = err
 
@@ -139,10 +145,10 @@ func openDatabaseWithRetry(ctx context.Context, prefix string, attempts int, del
 		select {
 		case <-ctx.Done():
 			timer.Stop()
-			return nil, ctx.Err()
+			return ctx.Err()
 		case <-timer.C:
 		}
 	}
 
-	return nil, fmt.Errorf("%sdatabase connection failed after %d attempts: %w", prefix, attempts, lastError)
+	return fmt.Errorf("database ping failed after %d attempts: %w", attempts, lastError)
 }

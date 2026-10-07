@@ -1,0 +1,98 @@
+package main
+
+import (
+	"crypto/rsa"
+	"errors"
+	"fmt"
+	"net/http"
+	"os"
+	"path/filepath"
+	"time"
+
+	"github.com/golang-jwt/jwt/v5"
+)
+
+const (
+	accessTokenLifetime = 15 * time.Minute
+	accessTokenCookie   = "access_token"
+)
+
+var ErrInvalidCredentials = errors.New("invalid credentials")
+
+type TokenIssuer struct {
+	privateKey *rsa.PrivateKey
+	issuer     string
+}
+
+func setupTokenIssuer() (*TokenIssuer, error) {
+	keyPath := os.Getenv("JWT_PRIVATE_KEY_PATH")
+	if keyPath == "" {
+		keyPath = filepath.Join("..", "secrets", "jwt-private.pem")
+	}
+
+	tokenIssuer, err := NewTokenIssuer(keyPath, "moviehub")
+	if err != nil {
+		return nil, fmt.Errorf("initialize token issuer: %w", err)
+	}
+
+	return tokenIssuer, nil
+}
+
+func NewTokenIssuer(keyPath, issuer string) (*TokenIssuer, error) {
+	keyData, err := os.ReadFile(keyPath)
+	if err != nil {
+		return nil, fmt.Errorf("read JWT private key: %w", err)
+	}
+
+	privateKey, err := jwt.ParseRSAPrivateKeyFromPEM(keyData)
+	if err != nil {
+		return nil, fmt.Errorf("parse JWT private key: %w", err)
+	}
+
+	return &TokenIssuer{privateKey: privateKey, issuer: issuer}, nil
+}
+
+func (i *TokenIssuer) Issue(user User) (string, error) {
+	if i == nil || i.privateKey == nil {
+		return "", errors.New("token issuer is not initialized")
+	}
+
+	now := time.Now()
+	claims := jwt.RegisteredClaims{
+		Subject:   user.ID.String(),
+		Issuer:    i.issuer,
+		IssuedAt:  jwt.NewNumericDate(now),
+		ExpiresAt: jwt.NewNumericDate(now.Add(accessTokenLifetime)),
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
+	signedToken, err := token.SignedString(i.privateKey)
+	if err != nil {
+		return "", fmt.Errorf("sign JWT: %w", err)
+	}
+
+	return signedToken, nil
+}
+
+func setAccessTokenCookie(w http.ResponseWriter, token string) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     accessTokenCookie,
+		Value:    token,
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   true,
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   int(accessTokenLifetime.Seconds()),
+	})
+}
+
+func clearAccessTokenCookie(w http.ResponseWriter) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     accessTokenCookie,
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   true,
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   -1,
+	})
+}
