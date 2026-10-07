@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -9,11 +10,12 @@ import (
 )
 
 type UserService struct {
-	repository *UserRepository
+	repository  *UserRepository
+	tokenIssuer *TokenIssuer
 }
 
-func NewUserService(repository *UserRepository) *UserService {
-	return &UserService{repository: repository}
+func NewUserService(repository *UserRepository, tokenIssuer *TokenIssuer) *UserService {
+	return &UserService{repository: repository, tokenIssuer: tokenIssuer}
 }
 
 func (s *UserService) Register(ctx context.Context, username, password string) (User, error) {
@@ -28,6 +30,27 @@ func (s *UserService) Register(ctx context.Context, username, password string) (
 	}
 
 	return user, nil
+}
+
+func (s *UserService) Authenticate(ctx context.Context, username, password string) (User, string, error) {
+	credentials, err := s.repository.FindByUsername(ctx, strings.TrimSpace(username))
+	if err != nil {
+		if errors.Is(err, ErrUserNotFound) {
+			return User{}, "", ErrInvalidCredentials
+		}
+		return User{}, "", fmt.Errorf("find user for login: %w", err)
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(credentials.PasswordHash), []byte(password)); err != nil {
+		return User{}, "", ErrInvalidCredentials
+	}
+
+	token, err := s.tokenIssuer.Issue(credentials.User)
+	if err != nil {
+		return User{}, "", fmt.Errorf("issue login token: %w", err)
+	}
+
+	return credentials.User, token, nil
 }
 
 func hashPassword(password string) (string, error) {

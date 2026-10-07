@@ -1,6 +1,7 @@
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL.replace(/\/$/, '')
 const HEALTH_ENDPOINT = '/movieAPI/health'
 const LOGIN_ENDPOINT = '/movieAPI/login'
+const LOGOUT_ENDPOINT = '/movieAPI/logout'
 const SIGNUP_ENDPOINT = '/movieAPI/signup'
 const MOVIES_ENDPOINT = '/movieAPI/movies'
 
@@ -31,11 +32,22 @@ export async function getHealth() {
 export async function login({ username, password }) {
   const response = await fetch(`${API_BASE_URL}${LOGIN_ENDPOINT}`, {
     method: 'POST',
+    credentials: 'include',
     headers: {
       Accept: 'application/json',
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({ userName: username, password: password }),
+  })
+
+  return readResponse(response)
+}
+
+export async function logout() {
+  const response = await fetch(`${API_BASE_URL}${LOGOUT_ENDPOINT}`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { Accept: 'application/json' },
   })
 
   return readResponse(response)

@@ -41,6 +41,7 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
+      network: host
     env_file:
       - ./secrets/auth.env
       - ./secrets/movies.env
@@ -50,6 +51,9 @@ services:
     volumes:
       - ./secrets/auth.env:/app/secrets/auth.env:ro
       - ./secrets/movies.env:/app/secrets/movies.env:ro
+      - ./secrets/jwt-private.pem:/app/secrets/jwt-private.pem:ro
+    environment:
+      JWT_PRIVATE_KEY_PATH: /app/secrets/jwt-private.pem
       - ./secrets/tmdb.env:/app/secrets/tmdb.env:ro
     depends_on:
       auth-postgres:

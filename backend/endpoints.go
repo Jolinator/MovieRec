@@ -23,6 +23,7 @@ func RegisterEndpoints(mux *http.ServeMux, server *Server) {
 	mux.HandleFunc("GET /movieAPI/health", server.healthHandler)
 	mux.HandleFunc("GET /movieAPI/movies", server.moviesHandler)
 	mux.HandleFunc("POST /movieAPI/login", server.loginHandler)
+	mux.HandleFunc("POST /movieAPI/logout", server.logoutHandler)
 	mux.HandleFunc("POST /movieAPI/signup", server.signUpHandler)
 	mux.HandleFunc("/", redirectToMovieAPI)
 }
@@ -30,11 +31,12 @@ func RegisterEndpoints(mux *http.ServeMux, server *Server) {
 func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")
-		if origin == "http://localhost:5173" {
+		if origin == "http://localhost:5173" || origin == "https://localhost:5173" {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 			w.Header().Set("Vary", "Origin")
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+			w.Header().Set("Access-Control-Allow-Credentials", "true")
 		}
 
 		if r.Method == http.MethodOptions {
@@ -73,14 +75,24 @@ func (s *Server) healthHandler(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) loginHandler(w http.ResponseWriter, r *http.Request) {
 
-	request, return_ := validateRequest[LoginPostFormat](r, w)
-	if return_ == false {
+	request, ok := validateRequest[LoginPostFormat](r, w)
+	if !ok {
 		return
 	}
 
-	// Replace this example response with credential verification later.
-	response := LoginResponse{LoggedIn: true, UserID: request.UserName} //for now send username back as user ID but will be different
-	writeJSON(w, response)
+	user, token, err := s.userService.Authenticate(r.Context(), request.UserName, request.Password)
+	if err != nil {
+		writeLoginError(w, err)
+		return
+	}
+
+	setAccessTokenCookie(w, token)
+	writeJSON(w, LoginResponse{LoggedIn: true, UserID: user.ID.String()})
+}
+
+func (s *Server) logoutHandler(w http.ResponseWriter, r *http.Request) {
+	clearAccessTokenCookie(w)
+	writeJSON(w, map[string]bool{"success": true})
 }
 
 func (s *Server) signUpHandler(w http.ResponseWriter, r *http.Request) {

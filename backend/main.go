@@ -12,11 +12,11 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func setupServer(authDB *pgxpool.Pool, moviesDB *pgxpool.Pool, dbStatus *DBStatus) *http.Server {
+func setupServer(authDB *pgxpool.Pool, moviesDB *pgxpool.Pool, tokenIssuer *TokenIssuer, dbStatus *DBStatus) *http.Server {
 	server := &Server{
 		authDB:       authDB,
 		moviesDB:     moviesDB,
-		dbStatus:    dbStatus,
+		dbStatus:     dbStatus,
 		userService:  NewUserService(NewUserRepository(authDB, dbStatus)),
 		movieService: NewMovieService(NewMovieRepository(moviesDB)),
 	}
@@ -89,11 +89,16 @@ func main() {
 	if err := importPopularMovies(databaseContext, NewMovieRepository(moviesPool)); err != nil {
 		log.Printf("movie import failed: %v", err)
 	}
-	
+
 	dbStatus := NewDBStatus(authPool, moviesPool)
 	go dbStatus.Start(databaseContext, 5*time.Second)
 
-	httpServer := setupServer(authPool, moviesPool, dbStatus)
+	tokenIssuer, err := setupTokenIssuer()
+	if err != nil {
+		log.Printf("JWT startup failed: %v", err)
+	}
+
+	httpServer := setupServer(pool, moviesPool, tokenIssuer, dbStatus)
 
 	serverErrors := RunServer(authPool, httpServer)
 
