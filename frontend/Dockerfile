@@ -5,7 +5,7 @@ WORKDIR /app
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci --no-audit --no-fund
 
-COPY frontend/ft.env ./.env
+COPY secrets/ft.env ./.env
 COPY frontend/src ./src
 COPY frontend/index.html ./
 #COPY frontend/vite.config.* ./ Maybe necessary for vite config, but not needed for now

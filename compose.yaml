@@ -4,12 +4,12 @@ services:
     entrypoint: ["/usr/local/bin/tls-entrypoint.sh"]
     command: ["postgres", "-c", "ssl=on", "-c", "ssl_cert_file=/tmp/server.crt", "-c", "ssl_key_file=/tmp/server.key"]
     env_file:
-      - ./database/auth.env
+      - ./secrets/auth.env
     ports:
       - "5434:5432"
     volumes:
       - auth-postgres-data:/var/lib/postgresql/data
-      - ./database/tls:/run/postgres-tls:ro
+      - ./secrets/tls:/run/secrets/postgres-tls:ro
       - ./database/tls-entrypoint.sh:/usr/local/bin/tls-entrypoint.sh:ro
       - ./database/migrations/auth:/docker-entrypoint-initdb.d:ro
     healthcheck:
@@ -23,12 +23,12 @@ services:
     entrypoint: ["/usr/local/bin/tls-entrypoint.sh"]
     command: ["postgres", "-c", "ssl=on", "-c", "ssl_cert_file=/tmp/server.crt", "-c", "ssl_key_file=/tmp/server.key"]
     env_file:
-      - ./database/movies.env
+      - ./secrets/movies.env
     ports:
       - "5435:5432"
     volumes:
       - movies-postgres-data:/var/lib/postgresql/data
-      - ./database/tls:/run/postgres-tls:ro
+      - ./secrets/tls:/run/secrets/postgres-tls:ro
       - ./database/tls-entrypoint.sh:/usr/local/bin/tls-entrypoint.sh:ro
       - ./database/migrations/movies:/docker-entrypoint-initdb.d:ro
     healthcheck:
@@ -42,13 +42,13 @@ services:
       context: .
       dockerfile: backend/Dockerfile
     env_file:
-      - ./database/auth.env
-      - ./database/movies.env
+      - ./secrets/auth.env
+      - ./secrets/movies.env
     ports:
       - "8080:8080"
     volumes:
-      - ./database/auth.env:/app/database/auth.env:ro
-      - ./database/movies.env:/app/database/movies.env:ro
+      - ./secrets/auth.env:/app/secrets/auth.env:ro
+      - ./secrets/movies.env:/app/secrets/movies.env:ro
     depends_on:
       auth-postgres:
         condition: service_healthy

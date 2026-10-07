@@ -11,7 +11,7 @@ import (
 
 func loadLocalEnvironment() error {
 	for _, name := range []string{"auth.env", "movies.env"} {
-		path := filepath.Join("..", "database", name)
+		path := filepath.Join("..", "secrets", name)
 		_, err := os.Stat(path)
 		if err == nil {
 			if err := godotenv.Load(path); err != nil {
