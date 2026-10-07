@@ -1,0 +1,83 @@
+services:
+  auth-postgres:
+    image: postgres:16
+    env_file:
+      - ./database/auth.env
+    ports:
+      - "5434:5432"
+    volumes:
+      - auth-postgres-data:/var/lib/postgresql/data
+      - ./database/migrations/auth:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  movies-postgres:
+    image: postgres:16
+    env_file:
+      - ./database/movies.env
+    ports:
+      - "5435:5432"
+    volumes:
+      - movies-postgres-data:/var/lib/postgresql/data
+      - ./database/migrations/movies:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    env_file:
+      - ./database/auth.env
+      - ./database/movies.env
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./database/auth.env:/app/database/auth.env:ro
+      - ./database/movies.env:/app/database/movies.env:ro
+    depends_on:
+      auth-postgres:
+        condition: service_healthy
+      movies-postgres:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    depends_on:
+      - backend
+
+  grafana:
+    image: grafana/grafana:12.2.0
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+      - prometheus
+
+volumes:
+  prometheus-data:
+  grafana-data:
+  auth-postgres-data:
+  movies-postgres-data:
