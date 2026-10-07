@@ -77,9 +77,7 @@ services:
       - prometheus
 
 volumes:
-  postgres-data:
   prometheus-data:
   grafana-data:
-volumes:
   auth-postgres-data:
   movies-postgres-data:
