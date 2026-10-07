@@ -2,13 +2,12 @@ package main
 
 import (
 	"context"
-	"errors"
+
 	"fmt"
 	"net/url"
 	"strconv"
 )
 
-var ErrInvalidMoviePagination = errors.New("invalid movie pagination")
 
 const (
 	defaultMovieLimit = 20

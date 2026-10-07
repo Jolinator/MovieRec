@@ -55,12 +55,6 @@ services:
       - ./secrets/tmdb.env:/app/secrets/tmdb.env:ro
     environment:
       JWT_PRIVATE_KEY_PATH: /app/secrets/jwt-private.pem
-      
-    depends_on:
-      auth-postgres:
-        condition: service_healthy
-      movies-postgres:
-        condition: service_healthy
 
   frontend:
     build:
@@ -68,8 +62,6 @@ services:
       dockerfile: frontend/Dockerfile
     ports:
       - "5173:80"
-    depends_on:
-      - backend
 
   prometheus:
     image: prom/prometheus:v3.5.0

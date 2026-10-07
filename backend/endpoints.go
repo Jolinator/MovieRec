@@ -60,16 +60,10 @@ func redirectToMovieAPI(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) healthHandler(w http.ResponseWriter, r *http.Request) {
-	if !s.dbStatus.AuthAvailable() {
-		http.Error(w, "database unavailable", http.StatusServiceUnavailable)
-		return
-	}
-	if !s.dbStatus.MoviesAvailable() {
-		http.Error(w, "movie database unavailable", http.StatusServiceUnavailable)
-		return
-	}
+	auth_available := s.dbStatus.AuthAvailable()
+	movies_available := s.dbStatus.MoviesAvailable()
 
-	response := HealthResponse{Message: "API is healthy!"}
+	response := HealthResponse{Message: "API is healthy!", AuthDBAvailable: auth_available, MoviesDBAvailable: movies_available}
 	writeJSON(w, response)
 }
 
@@ -114,14 +108,18 @@ func (s *Server) signUpHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) moviesHandler(w http.ResponseWriter, r *http.Request) {
-    movies, err := s.movieService.ListFromQuery(r.Context(), r.URL.Query())
-    if err != nil {
-        if errors.Is(err, ErrInvalidMoviePagination) {
-            http.Error(w, err.Error(), http.StatusBadRequest)
-            return
-        }
-        http.Error(w, "could not load movies", http.StatusInternalServerError)
-        return
-    }
-    writeJSON(w, movies)
+	movies, err := s.movieService.ListFromQuery(r.Context(), r.URL.Query())
+	if err != nil {
+		if errors.Is(err, ErrInvalidMoviePagination) {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if errors.Is(err, ErrMoviesDatabaseUnavailable) {
+			http.Error(w, ErrMoviesDatabaseUnavailable.Error(), http.StatusServiceUnavailable)
+			return
+		}
+		http.Error(w, "could not load movies", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, movies)
 }
