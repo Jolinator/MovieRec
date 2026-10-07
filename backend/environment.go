@@ -10,8 +10,10 @@ import (
 )
 
 func loadLocalEnvironment() error {
-	for _, name := range []string{"auth.env", "movies.env"} {
-		path := filepath.Join("..", "database", name)
+	for _, path := range []string{
+		filepath.Join("..", "database", "auth.env"),
+		filepath.Join("..", "database", "movies.env"),
+	} {
 		_, err := os.Stat(path)
 		if err == nil {
 			if err := godotenv.Load(path); err != nil {
@@ -24,5 +26,10 @@ func loadLocalEnvironment() error {
 		}
 		return fmt.Errorf("check environment file %q: %w", path, err)
 	}
+
+	if err := godotenv.Load("tmdb.env"); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("load environment file %q: %w", "tmdb.env", err)
+	}
+
 	return nil
 }

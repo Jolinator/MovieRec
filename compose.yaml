@@ -44,6 +44,7 @@ services:
     env_file:
       - ./database/auth.env
       - ./database/movies.env
+      - ./backend/tmdb.env
     ports:
       - "8080:8080"
     volumes:
