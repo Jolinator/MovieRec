@@ -12,32 +12,21 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-<<<<<<< HEAD
-func AttemptConnect(databaseContext context.Context) (*pgxpool.Pool, error) {
-	pool, err := openDatabaseWithRetry(databaseContext, 10, 2*time.Second)
-	if err != nil {
-		log.Printf("database startup failed: %v", err)
-=======
 func AttemptConnect(databaseContext context.Context, prefix string) (*pgxpool.Pool, error) {
 	pool, err := openDatabaseWithRetry(databaseContext, prefix, 10, 2*time.Second)
 	if err != nil {
 		log.Printf("%sdatabase startup failed: %v", prefix, err)
->>>>>>> c27a1b0 (new movie database)
 		return nil, err
 	}
 	return pool, nil
 }
 
-<<<<<<< HEAD
-func setupServer(dbPool *pgxpool.Pool) *http.Server {
-	server := &Server{
-		dbPool:      dbPool,
-		userService: NewUserService(NewUserRepository(dbPool)),
-	}
-=======
 func setupServer(authDB *pgxpool.Pool, moviesDB *pgxpool.Pool) *http.Server {
-	server := &Server{authDB: authDB, moviesDB: moviesDB}
->>>>>>> c27a1b0 (new movie database)
+	server := &Server{
+		authDB:      authDB,
+		moviesDB:    moviesDB,
+		userService: NewUserService(NewUserRepository(authDB)),
+	}
 	mux := http.NewServeMux()
 	RegisterEndpoints(mux, server)
 	handler := requestMetricsMiddleware(corsMiddleware(mux))
@@ -88,19 +77,12 @@ func main() {
 	databaseContext, stopDatabaseSignal := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stopDatabaseSignal()
 
-<<<<<<< HEAD
-	pool, err := AttemptConnect(databaseContext)
-=======
 	pool, err := AttemptConnect(databaseContext, "")
->>>>>>> c27a1b0 (new movie database)
 	if err != nil {
 		return
 	}
 	defer pool.Close()
 
-<<<<<<< HEAD
-	httpServer := setupServer(pool)
-=======
 	moviesPool, err := AttemptConnect(databaseContext, "MOVIES_")
 	if err != nil {
 		return
@@ -108,7 +90,6 @@ func main() {
 	defer moviesPool.Close()
 
 	httpServer := setupServer(pool, moviesPool)
->>>>>>> c27a1b0 (new movie database)
 
 	serverErrors := RunServer(pool, httpServer)
 	HandleErrors(serverErrors, databaseContext, httpServer)

@@ -14,8 +14,6 @@ services:
       timeout: 5s
       retries: 5
 
-<<<<<<< HEAD
-=======
   movies-postgres:
     image: postgres:16
     env_file:
@@ -31,7 +29,6 @@ services:
       timeout: 5s
       retries: 5
 
->>>>>>> c27a1b0 (new movie database)
   backend:
     build:
       context: .
@@ -39,10 +36,6 @@ services:
     env_file:
       - ./database/auth.env
     environment:
-<<<<<<< HEAD
-      DB_HOST: postgres
-      DB_PORT: "5432"
-=======
       DB_HOST: auth-postgres
       DB_PORT: "5432"
       MOVIES_DB_HOST: movies-postgres
@@ -51,21 +44,15 @@ services:
       MOVIES_DB_USER: moviehub
       MOVIES_DB_PASSWORD: moviehub-dev-password
       MOVIES_DB_SSLMODE: disable
->>>>>>> c27a1b0 (new movie database)
     ports:
       - "8080:8080"
     volumes:
       - ./database/auth.env:/app/database/auth.env:ro
-<<<<<<< HEAD
-    depends_on:
-      postgres:
-=======
       - ./database/movies.env:/app/database/movies.env:ro
     depends_on:
       auth-postgres:
         condition: service_healthy
       movies-postgres:
->>>>>>> c27a1b0 (new movie database)
         condition: service_healthy
 
   frontend:
@@ -77,33 +64,6 @@ services:
     depends_on:
       - backend
 
-<<<<<<< HEAD
-  prometheus:
-    image: prom/prometheus:v3.5.0
-    ports:
-      - "9090:9090"
-    volumes:
-      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - prometheus-data:/prometheus
-    depends_on:
-      - backend
-
-  grafana:
-    image: grafana/grafana:12.2.0
-    ports:
-      - "3000:3000"
-    volumes:
-      - grafana-data:/var/lib/grafana
-      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
-    depends_on:
-      - prometheus
-
-volumes:
-  postgres-data:
-  prometheus-data:
-  grafana-data:
-=======
 volumes:
   auth-postgres-data:
   movies-postgres-data:
->>>>>>> c27a1b0 (new movie database)

@@ -12,13 +12,9 @@ import (
 )
 
 type Server struct {
-<<<<<<< HEAD
-	dbPool      *pgxpool.Pool
+	authDB      *pgxpool.Pool
+	moviesDB    *pgxpool.Pool
 	userService *UserService
-=======
-	authDB   *pgxpool.Pool
-	moviesDB *pgxpool.Pool
->>>>>>> c27a1b0 (new movie database)
 }
 
 func RegisterEndpoints(mux *http.ServeMux, server *Server) {
@@ -64,11 +60,7 @@ func (s *Server) healthHandler(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 	defer cancel()
 
-<<<<<<< HEAD
-	if err := s.dbPool.Ping(ctx); err != nil {
-=======
 	if err := s.authDB.Ping(ctx); err != nil {
->>>>>>> c27a1b0 (new movie database)
 		http.Error(w, "database unavailable", http.StatusServiceUnavailable)
 		return
 	}

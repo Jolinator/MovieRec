@@ -36,12 +36,6 @@ func loadDatabaseConfig(prefix string) (databaseConfig, error) {
 	config := databaseConfig{
 		host:     os.Getenv(prefix + "DB_HOST"),
 		port:     uint16(port),
-<<<<<<< HEAD:backend/connectDB.go
-		name:     os.Getenv("POSTGRES_DB"),
-		user:     os.Getenv("POSTGRES_USER"),
-		password: os.Getenv("POSTGRES_PASSWORD"),
-		sslMode:  os.Getenv("DB_SSLMODE"),
-=======
 		name:     os.Getenv(prefix + "DB_NAME"),
 		user:     os.Getenv(prefix + "DB_USER"),
 		password: os.Getenv(prefix + "DB_PASSWORD"),
@@ -51,7 +45,6 @@ func loadDatabaseConfig(prefix string) (databaseConfig, error) {
 		config.name = os.Getenv("POSTGRES_DB")
 		config.user = os.Getenv("POSTGRES_USER")
 		config.password = os.Getenv("POSTGRES_PASSWORD")
->>>>>>> c27a1b0 (new movie database):backend/database.go
 	}
 
 	if config.host == "" {
@@ -64,11 +57,7 @@ func loadDatabaseConfig(prefix string) (databaseConfig, error) {
 		return databaseConfig{}, fmt.Errorf("%sDB_USER must be set", prefix)
 	}
 	if config.password == "" {
-<<<<<<< HEAD:backend/connectDB.go
-		return databaseConfig{}, fmt.Errorf("POSTGRES_PASSWORD must be set")
-=======
 		return databaseConfig{}, fmt.Errorf("%sDB_PASSWORD must be set", prefix)
->>>>>>> c27a1b0 (new movie database):backend/database.go
 	}
 	if config.sslMode == "" {
 		return databaseConfig{}, fmt.Errorf("DB_SSLMODE must be set")
@@ -77,7 +66,6 @@ func loadDatabaseConfig(prefix string) (databaseConfig, error) {
 	return config, nil
 }
 
-<<<<<<< HEAD:backend/connectDB.go
 func setupConnectionURL(config databaseConfig) url.URL {
 	connectionURL := url.URL{
 		Scheme: "postgres",
@@ -91,15 +79,9 @@ func setupConnectionURL(config databaseConfig) url.URL {
 	return connectionURL
 }
 
-func setupPool(ctx context.Context) (*pgxpool.Pool, error) {
-
-	config, err := loadDatabaseConfig()
-=======
-
 func setupPool(ctx context.Context, prefix string) (*pgxpool.Pool, error) {
 
 	config, err := loadDatabaseConfig(prefix)
->>>>>>> c27a1b0 (new movie database):backend/database.go
 	if err != nil {
 		return nil, err
 	}
@@ -129,15 +111,9 @@ func attemptPoolPing(ctx context.Context, pool *pgxpool.Pool) error {
 	return nil
 }
 
-<<<<<<< HEAD:backend/connectDB.go
-func openDatabase(ctx context.Context) (*pgxpool.Pool, error) {
-
-	pool, err := setupPool(ctx)
-=======
 func openDatabase(ctx context.Context, prefix string) (*pgxpool.Pool, error) {
 
 	pool, err := setupPool(ctx, prefix)
->>>>>>> c27a1b0 (new movie database):backend/database.go
 	if err != nil {
 		return nil, err
 	}
