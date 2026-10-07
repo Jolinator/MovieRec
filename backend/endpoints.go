@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 
@@ -11,7 +12,7 @@ import (
 type Server struct {
 	authDB       *pgxpool.Pool
 	moviesDB     *pgxpool.Pool
-	dbStatus    *DBStatus
+	dbStatus     *DBStatus
 	userService  *UserService
 	movieService *MovieService
 }
@@ -100,3 +101,15 @@ func (s *Server) signUpHandler(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, SignUpResponse{Success: true, UserID: user.ID.String()})
 }
 
+func (s *Server) moviesHandler(w http.ResponseWriter, r *http.Request) {
+    movies, err := s.movieService.ListFromQuery(r.Context(), r.URL.Query())
+    if err != nil {
+        if errors.Is(err, ErrInvalidMoviePagination) {
+            http.Error(w, err.Error(), http.StatusBadRequest)
+            return
+        }
+        http.Error(w, "could not load movies", http.StatusInternalServerError)
+        return
+    }
+    writeJSON(w, movies)
+}
