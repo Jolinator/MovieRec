@@ -11,7 +11,9 @@ import (
 )
 
 type Server struct {
-	db *pgxpool.Pool
+	authDB      *pgxpool.Pool
+	moviesDB    *pgxpool.Pool
+	userService *UserService
 }
 
 func RegisterEndpoints(mux *http.ServeMux, server *Server) {
@@ -57,8 +59,12 @@ func (s *Server) healthHandler(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 	defer cancel()
 
-	if err := s.db.Ping(ctx); err != nil {
+	if err := s.authDB.Ping(ctx); err != nil {
 		http.Error(w, "database unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	if err := s.moviesDB.Ping(ctx); err != nil {
+		http.Error(w, "movie database unavailable", http.StatusServiceUnavailable)
 		return
 	}
 
@@ -80,12 +86,20 @@ func (s *Server) loginHandler(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) signUpHandler(w http.ResponseWriter, r *http.Request) {
 
-	request, return_ := validateRequest[SignUpPostFormat](r, w)
-	if return_ == false {
+	request, ok := validateRequest[SignUpPostFormat](r, w)
+	if !ok {
 		return
 	}
 
-	// Replace this example response with credential verification later.
-	response := SignUpResponse{Success: true, UserID: request.UserName} //for now send username back as user ID but will be different
-	writeJSON(w, response)
+	user, err := s.userService.Register(r.Context(), request.UserName, request.Password)
+	if err != nil {
+		writeSignupError(w, err)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	writeJSON(w, SignUpResponse{Success: true, UserID: user.ID.String()})
 }
+
+

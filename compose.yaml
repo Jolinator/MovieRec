@@ -1,13 +1,28 @@
 services:
-  postgres:
+  auth-postgres:
     image: postgres:16
     env_file:
       - ./database/auth.env
     ports:
       - "5434:5432"
     volumes:
-      - postgres-data:/var/lib/postgresql/data
-      - ./database/migrations:/docker-entrypoint-initdb.d:ro
+      - auth-postgres-data:/var/lib/postgresql/data
+      - ./database/migrations/auth:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  movies-postgres:
+    image: postgres:16
+    env_file:
+      - ./database/movies.env
+    ports:
+      - "5435:5432"
+    volumes:
+      - movies-postgres-data:/var/lib/postgresql/data
+      - ./database/migrations/movies:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
@@ -21,14 +36,23 @@ services:
     env_file:
       - ./database/auth.env
     environment:
-      DB_HOST: postgres
+      DB_HOST: auth-postgres
       DB_PORT: "5432"
+      MOVIES_DB_HOST: movies-postgres
+      MOVIES_DB_PORT: "5432"
+      MOVIES_DB_NAME: movies
+      MOVIES_DB_USER: moviehub
+      MOVIES_DB_PASSWORD: moviehub-dev-password
+      MOVIES_DB_SSLMODE: disable
     ports:
       - "8080:8080"
     volumes:
       - ./database/auth.env:/app/database/auth.env:ro
+      - ./database/movies.env:/app/database/movies.env:ro
     depends_on:
-      postgres:
+      auth-postgres:
+        condition: service_healthy
+      movies-postgres:
         condition: service_healthy
 
   frontend:
@@ -64,3 +88,6 @@ volumes:
   postgres-data:
   prometheus-data:
   grafana-data:
+volumes:
+  auth-postgres-data:
+  movies-postgres-data:

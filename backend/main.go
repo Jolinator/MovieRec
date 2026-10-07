@@ -12,17 +12,21 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func AttemptConnect(databaseContext context.Context) (*pgxpool.Pool, error) {
-	pool, err := openDatabaseWithRetry(databaseContext, 10, 2*time.Second)
+func AttemptConnect(databaseContext context.Context, prefix string) (*pgxpool.Pool, error) {
+	pool, err := openDatabaseWithRetry(databaseContext, prefix, 10, 2*time.Second)
 	if err != nil {
-		log.Printf("database startup failed: %v", err)
+		log.Printf("%sdatabase startup failed: %v", prefix, err)
 		return nil, err
 	}
 	return pool, nil
 }
 
-func setupServer(pool *pgxpool.Pool) *http.Server {
-	server := &Server{db: pool}
+func setupServer(authDB *pgxpool.Pool, moviesDB *pgxpool.Pool) *http.Server {
+	server := &Server{
+		authDB:      authDB,
+		moviesDB:    moviesDB,
+		userService: NewUserService(NewUserRepository(authDB)),
+	}
 	mux := http.NewServeMux()
 	RegisterEndpoints(mux, server)
 	handler := requestMetricsMiddleware(corsMiddleware(mux))
@@ -73,13 +77,19 @@ func main() {
 	databaseContext, stopDatabaseSignal := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stopDatabaseSignal()
 
-	pool, err := AttemptConnect(databaseContext)
+	pool, err := AttemptConnect(databaseContext, "")
 	if err != nil {
 		return
 	}
 	defer pool.Close()
 
-	httpServer := setupServer(pool)
+	moviesPool, err := AttemptConnect(databaseContext, "MOVIES_")
+	if err != nil {
+		return
+	}
+	defer moviesPool.Close()
+
+	httpServer := setupServer(pool, moviesPool)
 
 	serverErrors := RunServer(pool, httpServer)
 	HandleErrors(serverErrors, databaseContext, httpServer)
