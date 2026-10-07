@@ -23,9 +23,10 @@ func AttemptConnect(databaseContext context.Context, prefix string) (*pgxpool.Po
 
 func setupServer(authDB *pgxpool.Pool, moviesDB *pgxpool.Pool) *http.Server {
 	server := &Server{
-		authDB:      authDB,
-		moviesDB:    moviesDB,
-		userService: NewUserService(NewUserRepository(authDB)),
+		authDB:       authDB,
+		moviesDB:     moviesDB,
+		userService:  NewUserService(NewUserRepository(authDB)),
+		movieService: NewMovieService(NewMovieRepository(moviesDB)),
 	}
 	mux := http.NewServeMux()
 	RegisterEndpoints(mux, server)
@@ -88,6 +89,11 @@ func main() {
 		return
 	}
 	defer moviesPool.Close()
+
+	if err := importPopularMovies(databaseContext, NewMovieRepository(moviesPool)); err != nil {
+		log.Printf("movie import failed: %v", err)
+		return
+	}
 
 	httpServer := setupServer(pool, moviesPool)
 

@@ -16,7 +16,16 @@ type LoginResponse struct {
 
 type SignUpResponse struct {
 	Success bool   `json:"success"`
-	UserID string `json:"userId,omitempty"`
+	UserID  string `json:"userId,omitempty"`
+}
+
+type MovieResponse struct {
+	TMDBID        int     `json:"tmdbId"`
+	Title         string  `json:"title"`
+	AverageRating float64 `json:"averageRating"`
+	PosterPath    *string `json:"posterPath"`
+	Synopsis      string  `json:"synopsis"`
+	BackdropPath  *string `json:"backdropPath"`
 }
 
 func writeJSON(w http.ResponseWriter, value any) {

@@ -38,6 +38,7 @@ Thumbs.db
 
 #SPECIFIC PROJECT#
 
+secrets/
 *.env
 .env.example
 
@@ -46,9 +47,3 @@ package-lock.json
 # Frontend dependencies and build output
 frontend/node_modules/
 frontend/dist/
-
-# Local frontend configuration
-frontend/.env
-frontend/.env.local
-frontend/.env.*.local
-database/tls/

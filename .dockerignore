@@ -5,4 +5,5 @@ frontend/dist
 backend/tmp
 *.log
 .env
-database/*.env
+secrets/*.env
+!secrets/ft.env
