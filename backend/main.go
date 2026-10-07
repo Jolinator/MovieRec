@@ -21,8 +21,11 @@ func AttemptConnect(databaseContext context.Context) (*pgxpool.Pool, error) {
 	return pool, nil
 }
 
-func setupServer(pool *pgxpool.Pool) *http.Server {
-	server := &Server{db: pool}
+func setupServer(dbPool *pgxpool.Pool) *http.Server {
+	server := &Server{
+		dbPool:      dbPool,
+		userService: NewUserService(NewUserRepository(dbPool)),
+	}
 	mux := http.NewServeMux()
 	RegisterEndpoints(mux, server)
 	handler := requestMetricsMiddleware(corsMiddleware(mux))
