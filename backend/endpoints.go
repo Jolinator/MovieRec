@@ -1,11 +1,8 @@
 package main
 
 import (
-	"context"
-	"errors"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -14,6 +11,7 @@ import (
 type Server struct {
 	authDB       *pgxpool.Pool
 	moviesDB     *pgxpool.Pool
+	dbStatus    *DBStatus
 	userService  *UserService
 	movieService *MovieService
 }
@@ -59,14 +57,11 @@ func redirectToMovieAPI(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) healthHandler(w http.ResponseWriter, r *http.Request) {
-	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
-	defer cancel()
-
-	if err := s.authDB.Ping(ctx); err != nil {
+	if !s.dbStatus.AuthAvailable() {
 		http.Error(w, "database unavailable", http.StatusServiceUnavailable)
 		return
 	}
-	if err := s.moviesDB.Ping(ctx); err != nil {
+	if !s.dbStatus.MoviesAvailable() {
 		http.Error(w, "movie database unavailable", http.StatusServiceUnavailable)
 		return
 	}
@@ -103,19 +98,5 @@ func (s *Server) signUpHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	writeJSON(w, SignUpResponse{Success: true, UserID: user.ID.String()})
-}
-
-
-func (s *Server) moviesHandler(w http.ResponseWriter, r *http.Request) {
-	movies, err := s.movieService.ListFromQuery(r.Context(), r.URL.Query())
-	if err != nil {
-		if errors.Is(err, ErrInvalidMoviePagination) {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		http.Error(w, "could not load movies", http.StatusInternalServerError)
-		return
-	}
-	writeJSON(w, movies)
 }
 

@@ -24,14 +24,19 @@ type User struct {
 }
 
 type UserRepository struct {
-	db *pgxpool.Pool
+	db       *pgxpool.Pool
+	dbStatus *DBStatus
 }
 
-func NewUserRepository(db *pgxpool.Pool) *UserRepository {
-	return &UserRepository{db: db}
+func NewUserRepository(db *pgxpool.Pool, dbStatus *DBStatus) *UserRepository {
+	return &UserRepository{db: db, dbStatus: dbStatus}
 }
 
 func (r *UserRepository) Create(ctx context.Context, username, passwordHash string) (User, error) {
+	if !r.dbStatus.AuthAvailable() {
+		return User{}, fmt.Errorf("%w: auth database is unavailable", ErrUserPersistence)
+	}
+
 	const query = `
 		INSERT INTO users (username, password_hash)
 		VALUES ($1, $2)
