@@ -46,14 +46,19 @@ func mapTMDBMovie(movie TMDBMovie) (Movie, error) {
 }
 
 type MovieRepository struct {
-	db *pgxpool.Pool
+	db        *pgxpool.Pool
+	db_status *DBStatus
 }
 
-func NewMovieRepository(db *pgxpool.Pool) *MovieRepository {
-	return &MovieRepository{db: db}
+func NewMovieRepository(db *pgxpool.Pool, dbStatus *DBStatus) *MovieRepository {
+	return &MovieRepository{db: db, db_status: dbStatus}
 }
 
 func (r *MovieRepository) Upsert(ctx context.Context, movie Movie) error {
+	if !r.db_status.MoviesAvailable() {
+		return fmt.Errorf("movies database is unavailable")
+	}
+
 	const query = `
 		INSERT INTO movies (
 			tmdb_id, title, average_rating, poster_path, synopsis, backdrop_path
@@ -84,6 +89,10 @@ func (r *MovieRepository) Upsert(ctx context.Context, movie Movie) error {
 }
 
 func (r *MovieRepository) List(ctx context.Context, limit, offset int) ([]Movie, error) {
+	if !r.db_status.MoviesAvailable() {
+		return []Movie{}, fmt.Errorf("movies database is unavailable")
+	}
+	
 	const query = `
 		SELECT tmdb_id, title, average_rating, poster_path, synopsis, backdrop_path
 		FROM movies

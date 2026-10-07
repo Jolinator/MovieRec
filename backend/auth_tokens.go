@@ -53,6 +53,10 @@ func NewTokenIssuer(keyPath, issuer string) (*TokenIssuer, error) {
 }
 
 func (i *TokenIssuer) Issue(user User) (string, error) {
+	if i == nil || i.privateKey == nil {
+		return "", errors.New("token issuer is not initialized")
+	}
+
 	now := time.Now()
 	claims := jwt.RegisteredClaims{
 		Subject:   user.ID.String(),

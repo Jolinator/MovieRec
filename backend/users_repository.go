@@ -67,6 +67,10 @@ func (r *UserRepository) Create(ctx context.Context, username, passwordHash stri
 }
 
 func (r *UserRepository) FindByUsername(ctx context.Context, username string) (UserCredentials, error) {
+	if !r.dbStatus.AuthAvailable() {
+		return UserCredentials{}, fmt.Errorf("%w: auth database is unavailable", ErrUserPersistence)
+	}
+
 	const query = `
 		SELECT id, username, password_hash, created_at
 		FROM users

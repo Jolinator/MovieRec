@@ -52,9 +52,10 @@ services:
       - ./secrets/auth.env:/app/secrets/auth.env:ro
       - ./secrets/movies.env:/app/secrets/movies.env:ro
       - ./secrets/jwt-private.pem:/app/secrets/jwt-private.pem:ro
+      - ./secrets/tmdb.env:/app/secrets/tmdb.env:ro
     environment:
       JWT_PRIVATE_KEY_PATH: /app/secrets/jwt-private.pem
-      - ./secrets/tmdb.env:/app/secrets/tmdb.env:ro
+      
     depends_on:
       auth-postgres:
         condition: service_healthy
