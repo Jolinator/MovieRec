@@ -1,19 +1,37 @@
 services:
-  postgres:
+  auth-postgres:
     image: postgres:16
     env_file:
       - ./database/auth.env
     ports:
       - "5434:5432"
     volumes:
-      - postgres-data:/var/lib/postgresql/data
-      - ./database/migrations:/docker-entrypoint-initdb.d:ro
+      - auth-postgres-data:/var/lib/postgresql/data
+      - ./database/migrations/auth:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 5
 
+<<<<<<< HEAD
+=======
+  movies-postgres:
+    image: postgres:16
+    env_file:
+      - ./database/movies.env
+    ports:
+      - "5435:5432"
+    volumes:
+      - movies-postgres-data:/var/lib/postgresql/data
+      - ./database/migrations/movies:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+>>>>>>> c27a1b0 (new movie database)
   backend:
     build:
       context: .
@@ -21,14 +39,33 @@ services:
     env_file:
       - ./database/auth.env
     environment:
+<<<<<<< HEAD
       DB_HOST: postgres
       DB_PORT: "5432"
+=======
+      DB_HOST: auth-postgres
+      DB_PORT: "5432"
+      MOVIES_DB_HOST: movies-postgres
+      MOVIES_DB_PORT: "5432"
+      MOVIES_DB_NAME: movies
+      MOVIES_DB_USER: moviehub
+      MOVIES_DB_PASSWORD: moviehub-dev-password
+      MOVIES_DB_SSLMODE: disable
+>>>>>>> c27a1b0 (new movie database)
     ports:
       - "8080:8080"
     volumes:
       - ./database/auth.env:/app/database/auth.env:ro
+<<<<<<< HEAD
     depends_on:
       postgres:
+=======
+      - ./database/movies.env:/app/database/movies.env:ro
+    depends_on:
+      auth-postgres:
+        condition: service_healthy
+      movies-postgres:
+>>>>>>> c27a1b0 (new movie database)
         condition: service_healthy
 
   frontend:
@@ -40,6 +77,7 @@ services:
     depends_on:
       - backend
 
+<<<<<<< HEAD
   prometheus:
     image: prom/prometheus:v3.5.0
     ports:
@@ -64,3 +102,8 @@ volumes:
   postgres-data:
   prometheus-data:
   grafana-data:
+=======
+volumes:
+  auth-postgres-data:
+  movies-postgres-data:
+>>>>>>> c27a1b0 (new movie database)

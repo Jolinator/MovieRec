@@ -22,8 +22,8 @@ type databaseConfig struct {
 	sslMode  string
 }
 
-func loadDatabaseConfig() (databaseConfig, error) {
-	portValue := os.Getenv("DB_PORT")
+func loadDatabaseConfig(prefix string) (databaseConfig, error) {
+	portValue := os.Getenv(prefix + "DB_PORT")
 	if portValue == "" {
 		portValue = "5432"
 	}
@@ -34,25 +34,41 @@ func loadDatabaseConfig() (databaseConfig, error) {
 	}
 
 	config := databaseConfig{
-		host:     os.Getenv("DB_HOST"),
+		host:     os.Getenv(prefix + "DB_HOST"),
 		port:     uint16(port),
+<<<<<<< HEAD:backend/connectDB.go
 		name:     os.Getenv("POSTGRES_DB"),
 		user:     os.Getenv("POSTGRES_USER"),
 		password: os.Getenv("POSTGRES_PASSWORD"),
 		sslMode:  os.Getenv("DB_SSLMODE"),
+=======
+		name:     os.Getenv(prefix + "DB_NAME"),
+		user:     os.Getenv(prefix + "DB_USER"),
+		password: os.Getenv(prefix + "DB_PASSWORD"),
+		sslMode:  os.Getenv(prefix + "DB_SSLMODE"),
+	}
+	if prefix == "" {
+		config.name = os.Getenv("POSTGRES_DB")
+		config.user = os.Getenv("POSTGRES_USER")
+		config.password = os.Getenv("POSTGRES_PASSWORD")
+>>>>>>> c27a1b0 (new movie database):backend/database.go
 	}
 
 	if config.host == "" {
 		return databaseConfig{}, fmt.Errorf("DB_HOST must be set")
 	}
 	if config.name == "" {
-		return databaseConfig{}, fmt.Errorf("DB_NAME must be set")
+		return databaseConfig{}, fmt.Errorf("%sDB_NAME must be set", prefix)
 	}
 	if config.user == "" {
-		return databaseConfig{}, fmt.Errorf("DB_USER must be set")
+		return databaseConfig{}, fmt.Errorf("%sDB_USER must be set", prefix)
 	}
 	if config.password == "" {
+<<<<<<< HEAD:backend/connectDB.go
 		return databaseConfig{}, fmt.Errorf("POSTGRES_PASSWORD must be set")
+=======
+		return databaseConfig{}, fmt.Errorf("%sDB_PASSWORD must be set", prefix)
+>>>>>>> c27a1b0 (new movie database):backend/database.go
 	}
 	if config.sslMode == "" {
 		return databaseConfig{}, fmt.Errorf("DB_SSLMODE must be set")
@@ -61,6 +77,7 @@ func loadDatabaseConfig() (databaseConfig, error) {
 	return config, nil
 }
 
+<<<<<<< HEAD:backend/connectDB.go
 func setupConnectionURL(config databaseConfig) url.URL {
 	connectionURL := url.URL{
 		Scheme: "postgres",
@@ -77,6 +94,12 @@ func setupConnectionURL(config databaseConfig) url.URL {
 func setupPool(ctx context.Context) (*pgxpool.Pool, error) {
 
 	config, err := loadDatabaseConfig()
+=======
+
+func setupPool(ctx context.Context, prefix string) (*pgxpool.Pool, error) {
+
+	config, err := loadDatabaseConfig(prefix)
+>>>>>>> c27a1b0 (new movie database):backend/database.go
 	if err != nil {
 		return nil, err
 	}
@@ -106,9 +129,15 @@ func attemptPoolPing(ctx context.Context, pool *pgxpool.Pool) error {
 	return nil
 }
 
+<<<<<<< HEAD:backend/connectDB.go
 func openDatabase(ctx context.Context) (*pgxpool.Pool, error) {
 
 	pool, err := setupPool(ctx)
+=======
+func openDatabase(ctx context.Context, prefix string) (*pgxpool.Pool, error) {
+
+	pool, err := setupPool(ctx, prefix)
+>>>>>>> c27a1b0 (new movie database):backend/database.go
 	if err != nil {
 		return nil, err
 	}
@@ -121,11 +150,11 @@ func openDatabase(ctx context.Context) (*pgxpool.Pool, error) {
 	return pool, nil
 }
 
-func openDatabaseWithRetry(ctx context.Context, attempts int, delay time.Duration) (*pgxpool.Pool, error) {
+func openDatabaseWithRetry(ctx context.Context, prefix string, attempts int, delay time.Duration) (*pgxpool.Pool, error) {
 	var lastError error
 
 	for attempt := 1; attempt <= attempts; attempt++ {
-		pool, err := openDatabase(ctx)
+		pool, err := openDatabase(ctx, prefix)
 		if err == nil {
 			return pool, nil
 		}
@@ -145,5 +174,5 @@ func openDatabaseWithRetry(ctx context.Context, attempts int, delay time.Duratio
 		}
 	}
 
-	return nil, fmt.Errorf("database connection failed after %d attempts: %w", attempts, lastError)
+	return nil, fmt.Errorf("%sdatabase connection failed after %d attempts: %w", prefix, attempts, lastError)
 }
