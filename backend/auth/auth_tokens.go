@@ -1,8 +1,7 @@
-package main
+package auth
 
 import (
 	"crypto/rsa"
-	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -17,14 +16,12 @@ const (
 	accessTokenCookie   = "access_token"
 )
 
-var ErrInvalidCredentials = errors.New("invalid credentials")
-
 type TokenIssuer struct {
 	privateKey *rsa.PrivateKey
 	issuer     string
 }
 
-func setupTokenIssuer() (*TokenIssuer, error) {
+func SetupTokenIssuer() (*TokenIssuer, error) {
 	keyPath := os.Getenv("JWT_PRIVATE_KEY_PATH")
 	if keyPath == "" {
 		keyPath = filepath.Join("..", "secrets", "jwt-private.pem")
@@ -54,7 +51,7 @@ func NewTokenIssuer(keyPath, issuer string) (*TokenIssuer, error) {
 
 func (i *TokenIssuer) Issue(user User) (string, error) {
 	if i == nil || i.privateKey == nil {
-		return "", errors.New("token issuer is not initialized")
+		return "", fmt.Errorf("token issuer is not initialized")
 	}
 
 	now := time.Now()
@@ -74,7 +71,7 @@ func (i *TokenIssuer) Issue(user User) (string, error) {
 	return signedToken, nil
 }
 
-func setAccessTokenCookie(w http.ResponseWriter, token string) {
+func SetAccessTokenCookie(w http.ResponseWriter, token string) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     accessTokenCookie,
 		Value:    token,
@@ -86,7 +83,7 @@ func setAccessTokenCookie(w http.ResponseWriter, token string) {
 	})
 }
 
-func clearAccessTokenCookie(w http.ResponseWriter) {
+func ClearAccessTokenCookie(w http.ResponseWriter) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     accessTokenCookie,
 		Path:     "/",

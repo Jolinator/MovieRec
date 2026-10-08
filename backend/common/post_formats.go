@@ -1,4 +1,4 @@
-package main
+package common
 
 import (
 	"encoding/json"
@@ -27,7 +27,7 @@ func decodeAndValidate[T Validatable](r *http.Request) (T, error) {
 	return body, nil
 }
 
-func validateRequest[T Validatable](r *http.Request, w http.ResponseWriter) (T, bool) {
+func ValidateRequest[T Validatable](r *http.Request, w http.ResponseWriter) (T, bool) {
 	request, err := decodeAndValidate[T](r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)

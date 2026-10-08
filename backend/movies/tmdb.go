@@ -1,4 +1,4 @@
-package main
+package movies
 
 import (
 	"context"
@@ -13,23 +13,23 @@ import (
 )
 
 const (
-	tmdbDiscoverURL      = "https://api.themoviedb.org/3/discover/movie"
+	tmdbDiscoverURL       = "https://api.themoviedb.org/3/discover/movie"
 	defaultTMDBMovieLimit = 500
 )
 
 type TMDBMovie struct {
-	ID            int     `json:"id"`
-	Title         string  `json:"title"`
-	Overview      string  `json:"overview"`
-	PosterPath    *string `json:"poster_path"`
-	BackdropPath  *string `json:"backdrop_path"`
-	VoteAverage   float64 `json:"vote_average"`
+	ID           int     `json:"id"`
+	Title        string  `json:"title"`
+	Overview     string  `json:"overview"`
+	PosterPath   *string `json:"poster_path"`
+	BackdropPath *string `json:"backdrop_path"`
+	VoteAverage  float64 `json:"vote_average"`
 }
 
 type tmdbDiscoverResponse struct {
-	Page         int         `json:"page"`
-	TotalPages   int         `json:"total_pages"`
-	Results      []TMDBMovie `json:"results"`
+	Page       int         `json:"page"`
+	TotalPages int         `json:"total_pages"`
+	Results    []TMDBMovie `json:"results"`
 }
 
 type TMDBClient struct {
@@ -38,7 +38,7 @@ type TMDBClient struct {
 	baseURL    string
 }
 
-func tmdbImportLimit() (int, error) {
+func ImportLimit() (int, error) {
 	value := os.Getenv("TMDB_IMPORT_LIMIT")
 	if value == "" {
 		return defaultTMDBMovieLimit, nil

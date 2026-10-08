@@ -1,4 +1,4 @@
-package main
+package movies
 
 import (
 	"context"
@@ -6,6 +6,8 @@ import (
 	"math"
 	"strings"
 
+	"backend/common"
+	"backend/database"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -47,16 +49,16 @@ func mapTMDBMovie(movie TMDBMovie) (Movie, error) {
 
 type MovieRepository struct {
 	db        *pgxpool.Pool
-	db_status *DBStatus
+	db_status *database.DBStatus
 }
 
-func NewMovieRepository(db *pgxpool.Pool, dbStatus *DBStatus) *MovieRepository {
+func NewMovieRepository(db *pgxpool.Pool, dbStatus *database.DBStatus) *MovieRepository {
 	return &MovieRepository{db: db, db_status: dbStatus}
 }
 
 func (r *MovieRepository) Upsert(ctx context.Context, movie Movie) error {
 	if !r.db_status.MoviesAvailable() {
-		return fmt.Errorf("movies database is unavailable")
+		return common.ErrMoviesDatabaseUnavailable
 	}
 
 	const query = `
@@ -90,9 +92,9 @@ func (r *MovieRepository) Upsert(ctx context.Context, movie Movie) error {
 
 func (r *MovieRepository) List(ctx context.Context, limit, offset int) ([]Movie, error) {
 	if !r.db_status.MoviesAvailable() {
-		return []Movie{}, fmt.Errorf("movies database is unavailable")
+		return []Movie{}, common.ErrMoviesDatabaseUnavailable
 	}
-	
+
 	const query = `
 		SELECT tmdb_id, title, average_rating, poster_path, synopsis, backdrop_path
 		FROM movies

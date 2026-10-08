@@ -1,4 +1,4 @@
-package main
+package database
 
 import (
 	"errors"
@@ -9,7 +9,7 @@ import (
 	"github.com/joho/godotenv"
 )
 
-func loadLocalEnvironment() error {
+func LoadLocalEnvironment() error {
 	for _, name := range []string{"auth.env", "movies.env", "tmdb.env"} {
 		path := filepath.Join("..", "secrets", name)
 		_, err := os.Stat(path)

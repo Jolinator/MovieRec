@@ -1,13 +1,13 @@
-package main
+package movies
 
 import (
 	"context"
-
 	"fmt"
 	"net/url"
 	"strconv"
-)
 
+	"backend/common"
+)
 
 const (
 	defaultMovieLimit = 20
@@ -27,7 +27,7 @@ func NewMovieService(repository *MovieRepository) *MovieService {
 	return &MovieService{repository: repository}
 }
 
-func (s *MovieService) ListFromQuery(ctx context.Context, query url.Values) ([]MovieResponse, error) {
+func (s *MovieService) ListFromQuery(ctx context.Context, query url.Values) ([]common.MovieResponse, error) {
 	pagination, err := parseMoviePagination(query)
 	if err != nil {
 		return nil, err
@@ -53,7 +53,7 @@ func parseMoviePagination(query url.Values) (MoviePagination, error) {
 		if err != nil {
 			return MoviePagination{}, fmt.Errorf(
 				"%w: %s must be an integer",
-				ErrInvalidMoviePagination,
+				common.ErrInvalidMoviePagination,
 				name,
 			)
 		}
@@ -66,7 +66,7 @@ func parseMoviePagination(query url.Values) (MoviePagination, error) {
 	return pagination, nil
 }
 
-func (s *MovieService) List(ctx context.Context, pagination MoviePagination) ([]MovieResponse, error) {
+func (s *MovieService) List(ctx context.Context, pagination MoviePagination) ([]common.MovieResponse, error) {
 	if err := validateMoviePagination(pagination.Limit, pagination.Offset); err != nil {
 		return nil, err
 	}
@@ -76,7 +76,7 @@ func (s *MovieService) List(ctx context.Context, pagination MoviePagination) ([]
 		return nil, fmt.Errorf("list movies: %w", err)
 	}
 
-	response := make([]MovieResponse, 0, len(movies))
+	response := make([]common.MovieResponse, 0, len(movies))
 	for _, movie := range movies {
 		response = append(response, movieResponse(movie))
 	}
@@ -85,16 +85,16 @@ func (s *MovieService) List(ctx context.Context, pagination MoviePagination) ([]
 
 func validateMoviePagination(limit, offset int) error {
 	if limit < 1 || limit > maxMovieLimit {
-		return fmt.Errorf("%w: limit must be between 1 and %d", ErrInvalidMoviePagination, maxMovieLimit)
+		return fmt.Errorf("%w: limit must be between 1 and %d", common.ErrInvalidMoviePagination, maxMovieLimit)
 	}
 	if offset < 0 {
-		return fmt.Errorf("%w: offset must be a non-negative integer", ErrInvalidMoviePagination)
+		return fmt.Errorf("%w: offset must be a non-negative integer", common.ErrInvalidMoviePagination)
 	}
 	return nil
 }
 
-func movieResponse(movie Movie) MovieResponse {
-	return MovieResponse{
+func movieResponse(movie Movie) common.MovieResponse {
+	return common.MovieResponse{
 		TMDBID:        movie.TMDBID,
 		Title:         movie.Title,
 		AverageRating: movie.AverageRating,

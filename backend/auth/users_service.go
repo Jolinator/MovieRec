@@ -1,4 +1,4 @@
-package main
+package auth
 
 import (
 	"context"
@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"backend/common"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -35,14 +36,14 @@ func (s *UserService) Register(ctx context.Context, username, password string) (
 func (s *UserService) Authenticate(ctx context.Context, username, password string) (User, string, error) {
 	credentials, err := s.repository.FindByUsername(ctx, strings.TrimSpace(username))
 	if err != nil {
-		if errors.Is(err, ErrUserNotFound) {
-			return User{}, "", ErrInvalidCredentials
+		if errors.Is(err, common.ErrUserNotFound) {
+			return User{}, "", common.ErrInvalidCredentials
 		}
 		return User{}, "", fmt.Errorf("find user for login: %w", err)
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(credentials.PasswordHash), []byte(password)); err != nil {
-		return User{}, "", ErrInvalidCredentials
+		return User{}, "", common.ErrInvalidCredentials
 	}
 
 	token, err := s.tokenIssuer.Issue(credentials.User)

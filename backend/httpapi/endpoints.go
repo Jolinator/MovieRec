@@ -1,20 +1,25 @@
-package main
+package httpapi
 
 import (
 	"errors"
 	"net/http"
 	"strings"
 
-	"github.com/jackc/pgx/v5/pgxpool"
+	"backend/auth"
+	"backend/common"
+	"backend/database"
+	"backend/movies"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 type Server struct {
-	authDB       *pgxpool.Pool
-	moviesDB     *pgxpool.Pool
-	dbStatus     *DBStatus
-	userService  *UserService
-	movieService *MovieService
+	dbStatus     *database.DBStatus
+	userService  *auth.UserService
+	movieService *movies.MovieService
+}
+
+func NewServer(dbStatus *database.DBStatus, userService *auth.UserService, movieService *movies.MovieService) *Server {
+	return &Server{dbStatus: dbStatus, userService: userService, movieService: movieService}
 }
 
 func RegisterEndpoints(mux *http.ServeMux, server *Server) {
@@ -28,7 +33,7 @@ func RegisterEndpoints(mux *http.ServeMux, server *Server) {
 	mux.HandleFunc("/", redirectToMovieAPI)
 }
 
-func corsMiddleware(next http.Handler) http.Handler {
+func CorsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")
 		if origin == "http://localhost:5173" || origin == "https://localhost:5173" {
@@ -63,13 +68,13 @@ func (s *Server) healthHandler(w http.ResponseWriter, r *http.Request) {
 	auth_available := s.dbStatus.AuthAvailable()
 	movies_available := s.dbStatus.MoviesAvailable()
 
-	response := HealthResponse{Message: "API is healthy!", AuthDBAvailable: auth_available, MoviesDBAvailable: movies_available}
-	writeJSON(w, response)
+	response := common.HealthResponse{Message: "API is healthy!", AuthDBAvailable: auth_available, MoviesDBAvailable: movies_available}
+	common.WriteJSON(w, response)
 }
 
 func (s *Server) loginHandler(w http.ResponseWriter, r *http.Request) {
 
-	request, ok := validateRequest[LoginPostFormat](r, w)
+	request, ok := common.ValidateRequest[common.LoginPostFormat](r, w)
 	if !ok {
 		return
 	}
@@ -80,18 +85,18 @@ func (s *Server) loginHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	setAccessTokenCookie(w, token)
-	writeJSON(w, LoginResponse{LoggedIn: true, UserID: user.ID.String()})
+	auth.SetAccessTokenCookie(w, token)
+	common.WriteJSON(w, common.LoginResponse{LoggedIn: true, UserID: user.ID.String()})
 }
 
 func (s *Server) logoutHandler(w http.ResponseWriter, r *http.Request) {
-	clearAccessTokenCookie(w)
-	writeJSON(w, map[string]bool{"success": true})
+	auth.ClearAccessTokenCookie(w)
+	common.WriteJSON(w, map[string]bool{"success": true})
 }
 
 func (s *Server) signUpHandler(w http.ResponseWriter, r *http.Request) {
 
-	request, ok := validateRequest[SignUpPostFormat](r, w)
+	request, ok := common.ValidateRequest[common.SignUpPostFormat](r, w)
 	if !ok {
 		return
 	}
@@ -104,22 +109,22 @@ func (s *Server) signUpHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	writeJSON(w, SignUpResponse{Success: true, UserID: user.ID.String()})
+	common.WriteJSON(w, common.SignUpResponse{Success: true, UserID: user.ID.String()})
 }
 
 func (s *Server) moviesHandler(w http.ResponseWriter, r *http.Request) {
-	movies, err := s.movieService.ListFromQuery(r.Context(), r.URL.Query())
+	movieList, err := s.movieService.ListFromQuery(r.Context(), r.URL.Query())
 	if err != nil {
-		if errors.Is(err, ErrInvalidMoviePagination) {
+		if errors.Is(err, common.ErrInvalidMoviePagination) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		if errors.Is(err, ErrMoviesDatabaseUnavailable) {
-			http.Error(w, ErrMoviesDatabaseUnavailable.Error(), http.StatusServiceUnavailable)
+		if errors.Is(err, common.ErrMoviesDatabaseUnavailable) {
+			http.Error(w, common.ErrMoviesDatabaseUnavailable.Error(), http.StatusServiceUnavailable)
 			return
 		}
 		http.Error(w, "could not load movies", http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, movies)
+	common.WriteJSON(w, movieList)
 }

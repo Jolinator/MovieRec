@@ -1,4 +1,4 @@
-package main
+package common
 
 import (
 	"encoding/json"
@@ -30,7 +30,7 @@ type MovieResponse struct {
 	BackdropPath  *string `json:"backdropPath"`
 }
 
-func writeJSON(w http.ResponseWriter, value any) {
+func WriteJSON(w http.ResponseWriter, value any) {
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(value); err != nil {
 		http.Error(w, "could not encode response", http.StatusInternalServerError)

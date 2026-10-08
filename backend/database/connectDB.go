@@ -1,4 +1,4 @@
-package main
+package database
 
 import (
 	"context"
@@ -13,7 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-type databaseConfig struct {
+type DatabaseConfig struct {
 	host     string
 	port     uint16
 	name     string
@@ -22,7 +22,7 @@ type databaseConfig struct {
 	sslMode  string
 }
 
-func loadDatabaseConfig(prefix string) (databaseConfig, error) {
+func loadDatabaseConfig(prefix string) (DatabaseConfig, error) {
 	portValue := os.Getenv(prefix + "DB_PORT")
 	if portValue == "" {
 		portValue = "5432"
@@ -30,10 +30,10 @@ func loadDatabaseConfig(prefix string) (databaseConfig, error) {
 
 	port, err := strconv.ParseUint(portValue, 10, 16)
 	if err != nil || port == 0 {
-		return databaseConfig{}, fmt.Errorf("invalid DB_PORT %q", portValue)
+		return DatabaseConfig{}, fmt.Errorf("invalid DB_PORT %q", portValue)
 	}
 
-	config := databaseConfig{
+	config := DatabaseConfig{
 		host:     os.Getenv(prefix + "DB_HOST"),
 		port:     uint16(port),
 		name:     os.Getenv(prefix + "DB_NAME"),
@@ -42,25 +42,25 @@ func loadDatabaseConfig(prefix string) (databaseConfig, error) {
 		sslMode:  os.Getenv(prefix + "DB_SSLMODE"),
 	}
 	if config.host == "" {
-		return databaseConfig{}, fmt.Errorf("DB_HOST must be set")
+		return DatabaseConfig{}, fmt.Errorf("DB_HOST must be set")
 	}
 	if config.name == "" {
-		return databaseConfig{}, fmt.Errorf("%sDB_NAME must be set", prefix)
+		return DatabaseConfig{}, fmt.Errorf("%sDB_NAME must be set", prefix)
 	}
 	if config.user == "" {
-		return databaseConfig{}, fmt.Errorf("%sDB_USER must be set", prefix)
+		return DatabaseConfig{}, fmt.Errorf("%sDB_USER must be set", prefix)
 	}
 	if config.password == "" {
-		return databaseConfig{}, fmt.Errorf("%sDB_PASSWORD must be set", prefix)
+		return DatabaseConfig{}, fmt.Errorf("%sDB_PASSWORD must be set", prefix)
 	}
 	if config.sslMode == "" {
-		return databaseConfig{}, fmt.Errorf("DB_SSLMODE must be set")
+		return DatabaseConfig{}, fmt.Errorf("DB_SSLMODE must be set")
 	}
 
 	return config, nil
 }
 
-func setupConnectionURL(config databaseConfig) url.URL {
+func setupConnectionURL(config DatabaseConfig) url.URL {
 	connectionURL := url.URL{
 		Scheme: "postgres",
 		User:   url.UserPassword(config.user, config.password),
@@ -73,7 +73,7 @@ func setupConnectionURL(config databaseConfig) url.URL {
 	return connectionURL
 }
 
-func setupPool(ctx context.Context, prefix string) (*pgxpool.Pool, error) {
+func SetupPool(ctx context.Context, prefix string) (*pgxpool.Pool, error) {
 
 	config, err := loadDatabaseConfig(prefix)
 	if err != nil {
@@ -107,7 +107,7 @@ func attemptPoolPing(ctx context.Context, pool *pgxpool.Pool) error {
 
 func openDatabase(ctx context.Context, prefix string) (*pgxpool.Pool, error) {
 
-	pool, err := setupPool(ctx, prefix)
+	pool, err := SetupPool(ctx, prefix)
 	if err != nil {
 		return nil, err
 	}

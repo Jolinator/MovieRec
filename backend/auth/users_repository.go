@@ -1,4 +1,4 @@
-package main
+package auth
 
 import (
 	"context"
@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"time"
 
+	"backend/common"
+	"backend/database"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -25,16 +27,16 @@ type UserCredentials struct {
 
 type UserRepository struct {
 	db       *pgxpool.Pool
-	dbStatus *DBStatus
+	dbStatus *database.DBStatus
 }
 
-func NewUserRepository(db *pgxpool.Pool, dbStatus *DBStatus) *UserRepository {
+func NewUserRepository(db *pgxpool.Pool, dbStatus *database.DBStatus) *UserRepository {
 	return &UserRepository{db: db, dbStatus: dbStatus}
 }
 
 func (r *UserRepository) Create(ctx context.Context, username, passwordHash string) (User, error) {
 	if !r.dbStatus.AuthAvailable() {
-		return User{}, fmt.Errorf("%w: auth database is unavailable", ErrAuthDatabaseUnavailable)
+		return User{}, fmt.Errorf("%w: auth database is unavailable", common.ErrAuthDatabaseUnavailable)
 	}
 
 	const query = `
@@ -51,18 +53,18 @@ func (r *UserRepository) Create(ctx context.Context, username, passwordHash stri
 	}
 
 	if isUniqueViolation(err) {
-		return User{}, ErrUsernameAlreadyExists
+		return User{}, common.ErrUsernameAlreadyExists
 	}
 	if errors.Is(err, pgx.ErrNoRows) {
-		return User{}, fmt.Errorf("%w: insert returned no user", ErrUserPersistence)
+		return User{}, fmt.Errorf("%w: insert returned no user", common.ErrUserPersistence)
 	}
 
-	return User{}, fmt.Errorf("%w: %v", ErrUserPersistence, err)
+	return User{}, fmt.Errorf("%w: %v", common.ErrUserPersistence, err)
 }
 
 func (r *UserRepository) FindByUsername(ctx context.Context, username string) (UserCredentials, error) {
 	if !r.dbStatus.AuthAvailable() {
-		return UserCredentials{}, fmt.Errorf("%w: auth database is unavailable", ErrAuthDatabaseUnavailable)
+		return UserCredentials{}, fmt.Errorf("%w: auth database is unavailable", common.ErrAuthDatabaseUnavailable)
 	}
 
 	const query = `
@@ -79,10 +81,10 @@ func (r *UserRepository) FindByUsername(ctx context.Context, username string) (U
 		&credentials.CreatedAt,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return UserCredentials{}, ErrUserNotFound
+		return UserCredentials{}, common.ErrUserNotFound
 	}
 	if err != nil {
-		return UserCredentials{}, fmt.Errorf("%w: find user: %v", ErrUserPersistence, err)
+		return UserCredentials{}, fmt.Errorf("%w: find user: %v", common.ErrUserPersistence, err)
 	}
 
 	return credentials, nil

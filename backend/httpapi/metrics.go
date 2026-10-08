@@ -1,4 +1,4 @@
-package main
+package httpapi
 
 import (
 	"net/http"
@@ -44,7 +44,7 @@ func (w *responseStatusRecorder) Write(body []byte) (int, error) {
 	return w.ResponseWriter.Write(body)
 }
 
-func requestMetricsMiddleware(next http.Handler) http.Handler {
+func RequestMetricsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		started := time.Now()
 		recorder := &responseStatusRecorder{ResponseWriter: w}

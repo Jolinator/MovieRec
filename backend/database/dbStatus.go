@@ -1,4 +1,4 @@
-package main
+package database
 
 import (
 	"context"
@@ -7,7 +7,6 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
-
 
 type DBStatus struct {
 	authDB   *pgxpool.Pool
@@ -21,7 +20,6 @@ type DBStatus struct {
 func NewDBStatus(authDB, moviesDB *pgxpool.Pool) *DBStatus {
 	return &DBStatus{authDB: authDB, moviesDB: moviesDB}
 }
-
 
 func (s *DBStatus) Start(ctx context.Context, interval time.Duration) {
 	if interval <= 0 {
