@@ -3,11 +3,22 @@ import styles from './MovieDisplay.module.css'
 
 const IMAGE_BASE_URL = 'https://image.tmdb.org/t/p/w500'
 
-export default function MovieDisplay({ movie }) {
+export default function MovieDisplay({ movie, onSelect }) {
   const posterUrl = movie.posterPath ? `${IMAGE_BASE_URL}${movie.posterPath}` : null
 
   return (
-    <article className={styles.card}>
+    <article
+      className={styles.card}
+      role="button"
+      tabIndex="0"
+      onClick={() => onSelect(movie)}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault()
+          onSelect(movie)
+        }
+      }}
+    >
       {posterUrl ? (
         <img className={styles.poster} src={posterUrl} alt={`${movie.title} poster`} />
       ) : (

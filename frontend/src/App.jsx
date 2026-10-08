@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import Home from './pages/Home'
 import Login from './pages/Login'
+import { logout } from './services/api'
 
 export default function App() {
   const [page, setPage] = useState('home')
@@ -18,5 +19,16 @@ export default function App() {
     )
   }
 
-  return <Home onLoginClick={() => setPage('login')} username={username} />
+  async function handleLogout() {
+    await logout()
+    setUsername('')
+  }
+
+  return (
+    <Home
+      onLoginClick={() => setPage('login')}
+      onLogout={handleLogout}
+      username={username}
+    />
+  )
 }
