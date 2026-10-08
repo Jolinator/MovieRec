@@ -94,8 +94,8 @@ func main() {
 	tokenIssuer, err := auth.SetupTokenIssuer()
 	if err != nil {
 		log.Printf("JWT startup failed: %v", err)
+		return
 	}
-
 	httpServer := setupServer(authPool, databaseContext, moviesPool, tokenIssuer, dbStatus)
 
 	serverErrors := RunServer(authPool, httpServer)
