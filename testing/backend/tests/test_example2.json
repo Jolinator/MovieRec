@@ -4,10 +4,10 @@
         "auth-postgres",
         "movies-postgres"
     ],
-    "requests":[
+    "requests": [
         {
             "method": "GET",
-            "url": "/moviesAPI/Health",
+            "url": "/movieAPI/health",
             "expected_status": 200,
             "expected_response": 
             {
@@ -15,6 +15,12 @@
                 "authDBAvailable": true,
                 "moviesDBAvailable": true
             }
+        },
+        {
+            "method": "GET",
+            "url": "/movieAPI/movies?limit=0",
+            "expected_status": 400,
+            "expected_response": "invalid movie pagination: limit must be between 1 and 100\n"
         }
     ]
 }

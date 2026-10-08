@@ -1,0 +1,28 @@
+{
+    "services": [
+        "backend",
+        "auth-postgres"
+    ],
+    "requests": [
+        {
+            "method": "POST",
+            "url": "/movieAPI/signup",
+            "body": {
+                "userName": "",
+                "password": "short"
+            },
+            "expected_status": 400,
+            "expected_response": "userName is required\n"
+        },
+        {
+            "method": "POST",
+            "url": "/movieAPI/login",
+            "body": {
+                "userName": "missing-user",
+                "password": "ValidPassword123"
+            },
+            "expected_status": 401,
+            "expected_response": "invalid credentials\n"
+        }
+    ]
+}

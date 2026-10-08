@@ -42,6 +42,7 @@ secrets/
 *.env
 .env.example
 __pycache__/
+testing/backend/reports/
 
 package-lock.json
 

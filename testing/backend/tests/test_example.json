@@ -2,10 +2,10 @@
     "services": [
         "backend"
     ],
-    "requests":[
+    "requests": [
         {
             "method": "GET",
-            "url": "/moviesAPI/Health",
+            "url": "/movieAPI/health",
             "expected_status": 200,
             "expected_response": 
             {
@@ -13,6 +13,12 @@
                 "authDBAvailable": false,
                 "moviesDBAvailable": false
             }
+        },
+        {
+            "method": "GET",
+            "url": "/movieAPI/movies",
+            "expected_status": 503,
+            "expected_response": "movies database unavailable\n"
         }
     ]
 }

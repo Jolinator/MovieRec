@@ -1,0 +1,14 @@
+{
+    "services": [
+        "backend",
+        "movies-postgres"
+    ],
+    "requests": [
+        {
+            "method": "GET",
+            "url": "/movieAPI/movies?limit=0",
+            "expected_status": 400,
+            "expected_response": "invalid movie pagination: limit must be between 1 and 100\n"
+        }
+    ]
+}
