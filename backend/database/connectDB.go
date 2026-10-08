@@ -1,4 +1,4 @@
-package main
+package database
 
 import (
 	"context"
@@ -13,7 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-type databaseConfig struct {
+type DatabaseConfig struct {
 	host     string
 	port     uint16
 	name     string
@@ -22,46 +22,45 @@ type databaseConfig struct {
 	sslMode  string
 }
 
-func loadDatabaseConfig() (databaseConfig, error) {
-	portValue := os.Getenv("DB_PORT")
+func loadDatabaseConfig(prefix string) (DatabaseConfig, error) {
+	portValue := os.Getenv(prefix + "DB_PORT")
 	if portValue == "" {
 		portValue = "5432"
 	}
 
 	port, err := strconv.ParseUint(portValue, 10, 16)
 	if err != nil || port == 0 {
-		return databaseConfig{}, fmt.Errorf("invalid DB_PORT %q", portValue)
+		return DatabaseConfig{}, fmt.Errorf("invalid DB_PORT %q", portValue)
 	}
 
-	config := databaseConfig{
-		host:     os.Getenv("DB_HOST"),
+	config := DatabaseConfig{
+		host:     os.Getenv(prefix + "DB_HOST"),
 		port:     uint16(port),
-		name:     os.Getenv("POSTGRES_DB"),
-		user:     os.Getenv("POSTGRES_USER"),
-		password: os.Getenv("POSTGRES_PASSWORD"),
-		sslMode:  os.Getenv("DB_SSLMODE"),
+		name:     os.Getenv(prefix + "DB_NAME"),
+		user:     os.Getenv(prefix + "DB_USER"),
+		password: os.Getenv(prefix + "DB_PASSWORD"),
+		sslMode:  os.Getenv(prefix + "DB_SSLMODE"),
 	}
-
 	if config.host == "" {
-		config.host = "localhost"
+		return DatabaseConfig{}, fmt.Errorf("DB_HOST must be set")
 	}
 	if config.name == "" {
-		config.name = "auth"
+		return DatabaseConfig{}, fmt.Errorf("%sDB_NAME must be set", prefix)
 	}
 	if config.user == "" {
-		config.user = "moviehub"
+		return DatabaseConfig{}, fmt.Errorf("%sDB_USER must be set", prefix)
 	}
 	if config.password == "" {
-		return databaseConfig{}, fmt.Errorf("POSTGRES_PASSWORD must be set")
+		return DatabaseConfig{}, fmt.Errorf("%sDB_PASSWORD must be set", prefix)
 	}
 	if config.sslMode == "" {
-		config.sslMode = "disable"
+		return DatabaseConfig{}, fmt.Errorf("DB_SSLMODE must be set")
 	}
 
 	return config, nil
 }
 
-func setupConnectionURL(config databaseConfig) url.URL {
+func setupConnectionURL(config DatabaseConfig) url.URL {
 	connectionURL := url.URL{
 		Scheme: "postgres",
 		User:   url.UserPassword(config.user, config.password),
@@ -74,9 +73,9 @@ func setupConnectionURL(config databaseConfig) url.URL {
 	return connectionURL
 }
 
-func setupPool(ctx context.Context) (*pgxpool.Pool, error) {
+func SetupPool(ctx context.Context, prefix string) (*pgxpool.Pool, error) {
 
-	config, err := loadDatabaseConfig()
+	config, err := loadDatabaseConfig(prefix)
 	if err != nil {
 		return nil, err
 	}
@@ -106,9 +105,9 @@ func attemptPoolPing(ctx context.Context, pool *pgxpool.Pool) error {
 	return nil
 }
 
-func openDatabase(ctx context.Context) (*pgxpool.Pool, error) {
+func openDatabase(ctx context.Context, prefix string) (*pgxpool.Pool, error) {
 
-	pool, err := setupPool(ctx)
+	pool, err := SetupPool(ctx, prefix)
 	if err != nil {
 		return nil, err
 	}
@@ -121,13 +120,19 @@ func openDatabase(ctx context.Context) (*pgxpool.Pool, error) {
 	return pool, nil
 }
 
-func openDatabaseWithRetry(ctx context.Context, attempts int, delay time.Duration) (*pgxpool.Pool, error) {
+func PingWithRetry(ctx context.Context, pool *pgxpool.Pool, attempts int, delay time.Duration) error {
+	if attempts < 1 {
+		return fmt.Errorf("database ping attempts must be at least 1")
+	}
+
 	var lastError error
 
 	for attempt := 1; attempt <= attempts; attempt++ {
-		pool, err := openDatabase(ctx)
+		pingContext, cancel := context.WithTimeout(ctx, 5*time.Second)
+		err := pool.Ping(pingContext)
+		cancel()
 		if err == nil {
-			return pool, nil
+			return nil
 		}
 		lastError = err
 
@@ -140,10 +145,10 @@ func openDatabaseWithRetry(ctx context.Context, attempts int, delay time.Duratio
 		select {
 		case <-ctx.Done():
 			timer.Stop()
-			return nil, ctx.Err()
+			return ctx.Err()
 		case <-timer.C:
 		}
 	}
 
-	return nil, fmt.Errorf("database connection failed after %d attempts: %w", attempts, lastError)
+	return fmt.Errorf("database ping failed after %d attempts: %w", attempts, lastError)
 }

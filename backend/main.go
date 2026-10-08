@@ -6,29 +6,33 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
+	"backend/auth"
+	"backend/database"
+	"backend/httpapi"
+	"backend/movies"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func AttemptConnect(databaseContext context.Context) (*pgxpool.Pool, error) {
-	pool, err := openDatabaseWithRetry(databaseContext, 10, 2*time.Second)
-	if err != nil {
-		log.Printf("database startup failed: %v", err)
-		return nil, err
-	}
-	return pool, nil
-}
+func setupServer(authDB *pgxpool.Pool, ctx context.Context, moviesDB *pgxpool.Pool, tokenIssuer *auth.TokenIssuer, dbStatus *database.DBStatus, port string) *http.Server {
 
-func setupServer(pool *pgxpool.Pool) *http.Server {
-	server := &Server{db: pool}
+	movieRepository := movies.NewMovieRepository(moviesDB, dbStatus)
+	userService := auth.NewUserService(auth.NewUserRepository(authDB, dbStatus), tokenIssuer)
+	movieService := movies.NewMovieService(movieRepository)
+	server := httpapi.NewServer(dbStatus, userService, movieService)
 	mux := http.NewServeMux()
-	RegisterEndpoints(mux, server)
-	handler := corsMiddleware(mux)
+	httpapi.RegisterEndpoints(mux, server)
+	handler := httpapi.RequestMetricsMiddleware(httpapi.CorsMiddleware(mux))
+
+	if err := movies.ImportPopularMoviesWithRetry(ctx, movieRepository, 10, 2*time.Second); err != nil {
+		log.Printf("movie import failed: %v", err)
+	}
 
 	httpServer := &http.Server{
-		Addr:              ":8080",
+		Addr:              ":" + port,
 		Handler:           handler,
 		ReadTimeout:       10 * time.Second,
 		ReadHeaderTimeout: 5 * time.Second,
@@ -45,7 +49,7 @@ func RunServer(pool *pgxpool.Pool, httpServer *http.Server) chan error {
 		serverErrors <- httpServer.ListenAndServe()
 	}()
 
-	log.Println("API running at http://localhost:8080")
+	log.Printf("API running at http://localhost%s", httpServer.Addr)
 	return serverErrors
 }
 
@@ -65,22 +69,57 @@ func HandleErrors(serverErrors chan error, databaseContext context.Context, http
 	}
 }
 
+func set_port() string {
+	port := os.Getenv("BACKEND_PORT")
+	if port == "" {
+		port = "8080"
+	}
+	portNumber, err := strconv.ParseUint(port, 10, 16)
+	if err != nil || portNumber == 0 {
+		log.Printf("invalid BACKEND_PORT %q", port)
+		return ""
+	}
+	return port
+}
+
 func main() {
-	if err := loadLocalEnvironment(); err != nil {
+	if err := database.LoadLocalEnvironment(); err != nil {
 		log.Printf("load local environment: %v", err)
 		return
 	}
+
 	databaseContext, stopDatabaseSignal := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stopDatabaseSignal()
 
-	pool, err := AttemptConnect(databaseContext)
+	authPool, err := database.SetupPool(databaseContext, "AUTH_")
 	if err != nil {
 		return
 	}
-	defer pool.Close()
+	defer authPool.Close()
 
-	httpServer := setupServer(pool)
+	moviesPool, err := database.SetupPool(databaseContext, "MOVIES_")
+	if err != nil {
+		return
+	}
+	defer moviesPool.Close()
 
-	serverErrors := RunServer(pool, httpServer)
+	dbStatus := database.NewDBStatus(authPool, moviesPool)
+	go dbStatus.Start(databaseContext, 5*time.Second)
+
+	tokenIssuer, err := auth.SetupTokenIssuer()
+	if err != nil {
+		log.Printf("JWT startup failed: %v", err)
+		return
+	}
+
+	port := set_port()
+	if port == "" {
+		return
+	}
+
+	httpServer := setupServer(authPool, databaseContext, moviesPool, tokenIssuer, dbStatus, port)
+
+	serverErrors := RunServer(authPool, httpServer)
+
 	HandleErrors(serverErrors, databaseContext, httpServer)
 }

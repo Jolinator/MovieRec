@@ -1,0 +1,51 @@
+.card {
+  display: flex;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid #ddd;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 4px 16px #0001;
+}
+
+.poster,
+.posterPlaceholder {
+  width: 140px;
+  min-width: 140px;
+  aspect-ratio: 2 / 3;
+  object-fit: cover;
+}
+
+.posterPlaceholder {
+  display: grid;
+  place-items: center;
+  padding: 12px;
+  background: #eee;
+  color: #666;
+  text-align: center;
+}
+
+.content {
+  min-width: 0;
+  padding: 16px;
+}
+
+.content h2 {
+  margin: 0 0 8px;
+  font-size: 1.1rem;
+}
+
+.rating {
+  margin: 0 0 12px;
+  color: #555;
+  font-weight: 700;
+}
+
+.synopsis {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 5;
+  line-height: 1.45;
+}

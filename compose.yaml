@@ -1,13 +1,36 @@
 services:
-  postgres:
+  auth-postgres:
     image: postgres:16
+    entrypoint: ["/usr/local/bin/tls-entrypoint.sh"]
+    command: ["postgres", "-c", "ssl=on", "-c", "ssl_cert_file=/tmp/server.crt", "-c", "ssl_key_file=/tmp/server.key"]
     env_file:
-      - ./database/auth.env
+      - ./secrets/auth.env
     ports:
-      - "5434:5432"
+      - "${AUTH_POSTGRES_PORT:-5434}:5432"
     volumes:
-      - postgres-data:/var/lib/postgresql/data
-      - ./database/migrations:/docker-entrypoint-initdb.d:ro
+      - auth-postgres-data:/var/lib/postgresql/data
+      - ./secrets/tls:/run/secrets/postgres-tls:ro
+      - ./database/tls-entrypoint.sh:/usr/local/bin/tls-entrypoint.sh:ro
+      - ./database/migrations/auth:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  movies-postgres:
+    image: postgres:16
+    entrypoint: ["/usr/local/bin/tls-entrypoint.sh"]
+    command: ["postgres", "-c", "ssl=on", "-c", "ssl_cert_file=/tmp/server.crt", "-c", "ssl_key_file=/tmp/server.key"]
+    env_file:
+      - ./secrets/movies.env
+    ports:
+      - "${MOVIES_POSTGRES_PORT:-5435}:5432"
+    volumes:
+      - movies-postgres-data:/var/lib/postgresql/data
+      - ./secrets/tls:/run/secrets/postgres-tls:ro
+      - ./database/tls-entrypoint.sh:/usr/local/bin/tls-entrypoint.sh:ro
+      - ./database/migrations/movies:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
@@ -18,27 +41,62 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
+      args:
+        BACKEND_PORT: "${BACKEND_PORT:-8080}"
     env_file:
-      - ./database/auth.env
-    environment:
-      DB_HOST: postgres
-      DB_PORT: "5432"
+      - ./secrets/auth.env
+      - ./secrets/movies.env
+      - ./secrets/tmdb.env
+      - ./secrets/ports.env
     ports:
-      - "8080:8080"
+      - "${BACKEND_PORT:-8080}:${BACKEND_PORT:-8080}"
     volumes:
-      - ./database/auth.env:/app/database/auth.env:ro
-    depends_on:
-      postgres:
-        condition: service_healthy
+      - ./secrets/auth.env:/app/secrets/auth.env:ro
+      - ./secrets/movies.env:/app/secrets/movies.env:ro
+      - ./secrets/jwt-private.pem:/app/secrets/jwt-private.pem:ro
+      - ./secrets/jwt-public.pem:/app/secrets/jwt-public.pem:ro
+      - ./secrets/tmdb.env:/app/secrets/tmdb.env:ro
+      - ./secrets/ports.env:/app/secrets/ports.env:ro
+    environment:
+      JWT_PRIVATE_KEY_PATH: /app/secrets/jwt-private.pem
+      JWT_PUBLIC_KEY_PATH: /app/secrets/jwt-public.pem
 
   frontend:
     build:
       context: .
       dockerfile: frontend/Dockerfile
+      args:
+        VITE_API_BASE_URL: "http://localhost:${BACKEND_PORT:-8080}/"
     ports:
-      - "5173:80"
+      - "${FRONTEND_PORT:-5173}:80"
+
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --config.expand-env
+    env_file:
+      - ./secrets/ports.env
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
     depends_on:
       - backend
 
+  grafana:
+    image: grafana/grafana:12.2.0
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+      - prometheus
+
 volumes:
-  postgres-data:
+  prometheus-data:
+  grafana-data:
+  auth-postgres-data:
+  movies-postgres-data:

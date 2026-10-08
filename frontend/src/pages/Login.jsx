@@ -8,10 +8,12 @@ export default function Login({ onBack, onLoginSuccess }) {
   const [password, setPassword] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
 
   async function handleSubmit(event) {
     event.preventDefault()
     setIsSubmitting(true)
+    setSuccess('')
 
     try {
       const response = await login({ username, password })
@@ -36,12 +38,14 @@ export default function Login({ onBack, onLoginSuccess }) {
 
     setIsSubmitting(true)
     setError('')
+    setSuccess('')
 
     try {
       const response = await signup({ username, password })
 
       if (response?.success === true) {
-        onLoginSuccess(username)
+        setPassword('')
+        setSuccess('Account created successfully. You can now log in.')
         return
       }
 
@@ -96,6 +100,7 @@ export default function Login({ onBack, onLoginSuccess }) {
         </button>
       </form>
 
+      {success && <p role="status">{success}</p>}
       {error && <ErrorPopup message={error} onClose={() => setError('')} />}
     </main>
   )

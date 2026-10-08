@@ -1,0 +1,11 @@
+apiVersion: 1
+
+providers:
+  - name: MovieHub
+    orgId: 1
+    folder: MovieHub
+    type: file
+    disableDeletion: true
+    editable: true
+    options:
+      path: /etc/grafana/provisioning/dashboards

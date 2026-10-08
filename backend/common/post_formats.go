@@ -1,4 +1,4 @@
-package main
+package common
 
 import (
 	"encoding/json"
@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"unicode/utf8"
 )
 
 type Validatable interface {
@@ -26,7 +27,7 @@ func decodeAndValidate[T Validatable](r *http.Request) (T, error) {
 	return body, nil
 }
 
-func validateRequest[T Validatable](r *http.Request, w http.ResponseWriter) (T, bool) {
+func ValidateRequest[T Validatable](r *http.Request, w http.ResponseWriter) (T, bool) {
 	request, err := decodeAndValidate[T](r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -56,11 +57,21 @@ func (p LoginPostFormat) Validate() error {
 }
 
 func (p SignUpPostFormat) Validate() error {
-	if strings.TrimSpace(p.UserName) == "" {
+	username := strings.TrimSpace(p.UserName)
+	if username == "" {
 		return errors.New("userName is required")
+	}
+	if utf8.RuneCountInString(username) > 100 {
+		return errors.New("userName must be at most 100 characters")
 	}
 	if p.Password == "" {
 		return errors.New("password is required")
+	}
+	if utf8.RuneCountInString(p.Password) < 8 {
+		return errors.New("password must be at least 8 characters")
+	}
+	if len([]byte(p.Password)) > 72 {
+		return errors.New("password must be at most 72 bytes")
 	}
 	return nil
 }
