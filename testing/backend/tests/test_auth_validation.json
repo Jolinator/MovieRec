@@ -16,6 +16,26 @@
         },
         {
             "method": "POST",
+            "url": "/movieAPI/signup",
+            "body": {
+                "userName": "valid-name",
+                "password": ""
+            },
+            "expected_status": 400,
+            "expected_response": "password is required\n"
+        },
+        {
+            "method": "POST",
+            "url": "/movieAPI/signup",
+            "body": {
+                "userName": "short-password-user",
+                "password": "123"
+            },
+            "expected_status": 400,
+            "expected_response": "password must be at least 8 characters\n"
+        },
+        {
+            "method": "POST",
             "url": "/movieAPI/login",
             "body": {
                 "userName": "missing-user",
@@ -23,6 +43,14 @@
             },
             "expected_status": 401,
             "expected_response": "invalid credentials\n"
+        },
+        {
+            "method": "POST",
+            "url": "/movieAPI/logout",
+            "expected_status": 200,
+            "expected_response": {
+                "success": true
+            }
         }
     ]
 }

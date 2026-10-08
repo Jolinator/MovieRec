@@ -19,6 +19,22 @@
             "url": "/movieAPI/movies",
             "expected_status": 503,
             "expected_response": "movies database unavailable\n"
+        },
+        {
+            "method": "GET",
+            "url": "/movieAPI/movies?limit=invalid",
+            "expected_status": 400,
+            "expected_response": "invalid movie pagination: limit must be an integer\n"
+        },
+        {
+            "method": "GET",
+            "url": "/",
+            "expected_status": 200,
+            "expected_response": {
+                "message": "API is healthy!",
+                "authDBAvailable": false,
+                "moviesDBAvailable": false
+            }
         }
     ]
 }

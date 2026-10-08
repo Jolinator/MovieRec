@@ -66,6 +66,15 @@ class TestOutput:
         )
 
 
+def response_matches(actual: Any, expected: Any, subset: bool = False) -> bool:
+    if subset and isinstance(actual, dict) and isinstance(expected, dict):
+        return all(
+            key in actual and response_matches(actual[key], value, subset=True)
+            for key, value in expected.items()
+        )
+    return actual == expected
+
+
 @dataclass(eq=False)
 class TestRequest:
     method: str
@@ -73,6 +82,8 @@ class TestRequest:
     expected_output: TestOutput
     headers: dict[str, str] = field(default_factory=dict)
     cookies: dict[str, str] = field(default_factory=dict)
+    expected_response_subset: bool = False
+    expected_cookies: dict[str, bool] = field(default_factory=dict)
     body: Any = None
     output: TestOutput | None = None
     error: str | None = None
@@ -83,6 +94,8 @@ class TestRequest:
         url = config.get("url")
         expected_body = config.get("expected_response")
         expected_status = config.get("expected_status", 200)
+        expected_response_subset = config.get("expected_response_subset", False)
+        expected_cookies = config.get("expected_cookies") or {}
 
         if not isinstance(method, str) or not method:
             raise ValueError("Each request needs a non-empty 'method'.")
@@ -92,12 +105,21 @@ class TestRequest:
             raise ValueError("Each request needs an 'expected_response'.")
         if not isinstance(expected_status, int):
             raise ValueError("'expected_status' must be an integer.")
+        if not isinstance(expected_response_subset, bool):
+            raise ValueError("'expected_response_subset' must be a boolean.")
+        if not isinstance(expected_cookies, dict) or not all(
+            isinstance(name, str) and isinstance(present, bool)
+            for name, present in expected_cookies.items()
+        ):
+            raise ValueError("'expected_cookies' must map cookie names to booleans.")
 
         return cls(
             method=method,
             url=url,
             headers=config.get("headers") or {},
             cookies=config.get("cookies") or {},
+            expected_response_subset=expected_response_subset,
+            expected_cookies=expected_cookies,
             body=config.get("body"),
             expected_output=TestOutput(expected_status, expected_body),
         )
@@ -131,12 +153,23 @@ class TestRequest:
             response_body = response.text
 
         self.output = TestOutput(response.status_code, response_body)
+        session_cookie_names = {cookie.name for cookie in session.cookies}
+        for name, should_exist in self.expected_cookies.items():
+            if (name in session_cookie_names) != should_exist:
+                expectation = "present" if should_exist else "absent"
+                self.error = f"Expected cookie {name!r} to be {expectation} in the test session."
+                break
+
         if self.success:
             logger.info(
                 "Request passed: %s %s (HTTP %s)",
                 self.method,
                 self.url,
                 response.status_code,
+            )
+        elif self.error:
+            logger.error(
+                "Request failed: %s %s (%s)", self.method, self.url, self.error
             )
         else:
             logger.error(
@@ -152,7 +185,16 @@ class TestRequest:
 
     @property
     def success(self) -> bool:
-        return self.error is None and self == self.expected_output
+        return (
+            self.error is None
+            and self.output is not None
+            and self.output.status_code == self.expected_output.status_code
+            and response_matches(
+                self.output.body,
+                self.expected_output.body,
+                subset=self.expected_response_subset,
+            )
+        )
 
     def format_report(self) -> str:
         if self.success:
@@ -178,7 +220,11 @@ class TestRequest:
             details.append(
                 f"  - Expected status: `{self.expected_output.status_code}`"
             )
-        if self.output.body != self.expected_output.body:
+        if not response_matches(
+            self.output.body,
+            self.expected_output.body,
+            subset=self.expected_response_subset,
+        ):
             details.extend(
                 [
                     "  - Expected body:",
@@ -385,3 +431,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
+    DockerManager.reset_all()

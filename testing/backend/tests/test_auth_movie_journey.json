@@ -1,0 +1,146 @@
+{
+    "services": [
+        "backend",
+        "auth-postgres",
+        "movies-postgres"
+    ],
+    "requests": [
+        {
+            "method": "GET",
+            "url": "/movieAPI/health",
+            "expected_status": 200,
+            "expected_response": {
+                "message": "API is healthy!",
+                "authDBAvailable": true,
+                "moviesDBAvailable": true
+            }
+        },
+        {
+            "method": "POST",
+            "url": "/movieAPI/signup",
+            "body": {
+                "userName": "backend-integration-user",
+                "password": "StrongPassword123!"
+            },
+            "expected_status": 201,
+            "expected_response": {
+                "success": true
+            },
+            "expected_response_subset": true
+        },
+        {
+            "method": "POST",
+            "url": "/movieAPI/signup",
+            "body": {
+                "userName": "backend-integration-user",
+                "password": "StrongPassword123!"
+            },
+            "expected_status": 409,
+            "expected_response": "username already exists\n"
+        },
+        {
+            "method": "POST",
+            "url": "/movieAPI/login",
+            "body": {
+                "userName": "backend-integration-user",
+                "password": "WrongPassword123!"
+            },
+            "expected_status": 401,
+            "expected_response": "invalid credentials\n"
+        },
+        {
+            "method": "POST",
+            "url": "/movieAPI/login",
+            "body": {
+                "userName": "backend-integration-user",
+                "password": "StrongPassword123!"
+            },
+            "expected_status": 200,
+            "expected_response": {
+                "loggedIn": true
+            },
+            "expected_response_subset": true,
+            "expected_cookies": {
+                "access_token": true
+            }
+        },
+        {
+            "method": "POST",
+            "url": "/movieAPI/logout",
+            "expected_status": 200,
+            "expected_response": {
+                "success": true
+            },
+            "expected_cookies": {
+                "access_token": false
+            }
+        },
+        {
+            "method": "POST",
+            "url": "/movieAPI/login",
+            "body": {
+                "userName": "backend-integration-user",
+                "password": "StrongPassword123!"
+            },
+            "expected_status": 200,
+            "expected_response": {
+                "loggedIn": true
+            },
+            "expected_response_subset": true,
+            "expected_cookies": {
+                "access_token": true
+            }
+        },
+        {
+            "method": "POST",
+            "url": "/movieAPI/logout",
+            "expected_status": 200,
+            "expected_response": {
+                "success": true
+            },
+            "expected_cookies": {
+                "access_token": false
+            }
+        },
+        {
+            "method": "GET",
+            "url": "/movieAPI/movies?limit=0",
+            "expected_status": 400,
+            "expected_response": "invalid movie pagination: limit must be between 1 and 100\n"
+        },
+        {
+            "method": "GET",
+            "url": "/movieAPI/movies?limit=101",
+            "expected_status": 400,
+            "expected_response": "invalid movie pagination: limit must be between 1 and 100\n"
+        },
+        {
+            "method": "GET",
+            "url": "/movieAPI/movies?limit=abc",
+            "expected_status": 400,
+            "expected_response": "invalid movie pagination: limit must be an integer\n"
+        },
+        {
+            "method": "GET",
+            "url": "/movieAPI/movies?offset=-1",
+            "expected_status": 400,
+            "expected_response": "invalid movie pagination: offset must be a non-negative integer\n"
+        },
+        {
+            "method": "GET",
+            "url": "/movieAPI/movies?offset=abc",
+            "expected_status": 400,
+            "expected_response": "invalid movie pagination: offset must be an integer\n"
+        },
+        {
+            "method": "GET",
+            "url": "/movieAPI/health",
+            "expected_status": 200,
+            "expected_response": {
+                "authDBAvailable": true,
+                "moviesDBAvailable": true
+            },
+            "expected_response_subset": true
+        }
+    ]
+}

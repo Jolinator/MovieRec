@@ -9,6 +9,24 @@
             "url": "/movieAPI/movies?limit=0",
             "expected_status": 400,
             "expected_response": "invalid movie pagination: limit must be between 1 and 100\n"
+        },
+        {
+            "method": "GET",
+            "url": "/movieAPI/movies?limit=abc",
+            "expected_status": 400,
+            "expected_response": "invalid movie pagination: limit must be an integer\n"
+        },
+        {
+            "method": "GET",
+            "url": "/movieAPI/movies?offset=abc",
+            "expected_status": 400,
+            "expected_response": "invalid movie pagination: offset must be an integer\n"
+        },
+        {
+            "method": "GET",
+            "url": "/movieAPI/movies?offset=-1",
+            "expected_status": 400,
+            "expected_response": "invalid movie pagination: offset must be a non-negative integer\n"
         }
     ]
 }
