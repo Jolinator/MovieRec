@@ -109,6 +109,7 @@ func main() {
 	tokenIssuer, err := auth.SetupTokenIssuer()
 	if err != nil {
 		log.Printf("JWT startup failed: %v", err)
+		return
 	}
 
 	port := set_port()

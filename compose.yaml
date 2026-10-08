@@ -54,10 +54,12 @@ services:
       - ./secrets/auth.env:/app/secrets/auth.env:ro
       - ./secrets/movies.env:/app/secrets/movies.env:ro
       - ./secrets/jwt-private.pem:/app/secrets/jwt-private.pem:ro
+      - ./secrets/jwt-public.pem:/app/secrets/jwt-public.pem:ro
       - ./secrets/tmdb.env:/app/secrets/tmdb.env:ro
       - ./secrets/ports.env:/app/secrets/ports.env:ro
     environment:
       JWT_PRIVATE_KEY_PATH: /app/secrets/jwt-private.pem
+      JWT_PUBLIC_KEY_PATH: /app/secrets/jwt-public.pem
 
   frontend:
     build:
