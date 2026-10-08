@@ -1,0 +1,20 @@
+{
+    "services": [
+        "backend",
+        "auth-postgres",
+        "movies-postgres"
+    ],
+    "requests":[
+        {
+            "method": "GET",
+            "url": "/moviesAPI/Health",
+            "expected_status": 200,
+            "expected_response": 
+            {
+                "message": "API is healthy!",
+                "authDBAvailable": true,
+                "moviesDBAvailable": true
+            }
+        }
+    ]
+}

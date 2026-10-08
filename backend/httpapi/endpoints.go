@@ -3,6 +3,7 @@ package httpapi
 import (
 	"errors"
 	"net/http"
+	"os"
 	"strings"
 
 	"backend/auth"
@@ -34,9 +35,16 @@ func RegisterEndpoints(mux *http.ServeMux, server *Server) {
 }
 
 func CorsMiddleware(next http.Handler) http.Handler {
+	frontendPort := os.Getenv("FRONTEND_PORT")
+	if frontendPort == "" {
+		frontendPort = "5173"
+	}
+	frontendOrigin := "http://localhost:" + frontendPort
+	secureFrontendOrigin := "https://localhost:" + frontendPort
+
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")
-		if origin == "http://localhost:5173" || origin == "https://localhost:5173" {
+		if origin == frontendOrigin || origin == secureFrontendOrigin {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 			w.Header().Set("Vary", "Origin")
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")

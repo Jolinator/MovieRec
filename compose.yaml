@@ -6,7 +6,7 @@ services:
     env_file:
       - ./secrets/auth.env
     ports:
-      - "5434:5432"
+      - "${AUTH_POSTGRES_PORT:-5434}:5432"
     volumes:
       - auth-postgres-data:/var/lib/postgresql/data
       - ./secrets/tls:/run/secrets/postgres-tls:ro
@@ -25,7 +25,7 @@ services:
     env_file:
       - ./secrets/movies.env
     ports:
-      - "5435:5432"
+      - "${MOVIES_POSTGRES_PORT:-5435}:5432"
     volumes:
       - movies-postgres-data:/var/lib/postgresql/data
       - ./secrets/tls:/run/secrets/postgres-tls:ro
@@ -41,17 +41,21 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
+      args:
+        BACKEND_PORT: "${BACKEND_PORT:-8080}"
     env_file:
       - ./secrets/auth.env
       - ./secrets/movies.env
       - ./secrets/tmdb.env
+      - ./secrets/ports.env
     ports:
-      - "8080:8080"
+      - "${BACKEND_PORT:-8080}:${BACKEND_PORT:-8080}"
     volumes:
       - ./secrets/auth.env:/app/secrets/auth.env:ro
       - ./secrets/movies.env:/app/secrets/movies.env:ro
       - ./secrets/jwt-private.pem:/app/secrets/jwt-private.pem:ro
       - ./secrets/tmdb.env:/app/secrets/tmdb.env:ro
+      - ./secrets/ports.env:/app/secrets/ports.env:ro
     environment:
       JWT_PRIVATE_KEY_PATH: /app/secrets/jwt-private.pem
 
@@ -59,13 +63,20 @@ services:
     build:
       context: .
       dockerfile: frontend/Dockerfile
+      args:
+        VITE_API_BASE_URL: "http://localhost:${BACKEND_PORT:-8080}/"
     ports:
-      - "5173:80"
+      - "${FRONTEND_PORT:-5173}:80"
 
   prometheus:
     image: prom/prometheus:v3.5.0
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --config.expand-env
+    env_file:
+      - ./secrets/ports.env
     ports:
-      - "9090:9090"
+      - "${PROMETHEUS_PORT:-9090}:9090"
     volumes:
       - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus-data:/prometheus
@@ -75,7 +86,7 @@ services:
   grafana:
     image: grafana/grafana:12.2.0
     ports:
-      - "3000:3000"
+      - "${GRAFANA_PORT:-3000}:3000"
     volumes:
       - grafana-data:/var/lib/grafana
       - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro

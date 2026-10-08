@@ -10,8 +10,10 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o /out/backend .
 
 FROM gcr.io/distroless/static-debian12
 
+ARG BACKEND_PORT=8080
+
 WORKDIR /app/backend
 COPY --from=build /out/backend /app/backend/server
 
-EXPOSE 8080
+EXPOSE ${BACKEND_PORT}
 ENTRYPOINT ["/app/backend/server"]

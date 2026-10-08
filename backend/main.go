@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -16,7 +17,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func setupServer(authDB *pgxpool.Pool, ctx context.Context, moviesDB *pgxpool.Pool, tokenIssuer *auth.TokenIssuer, dbStatus *database.DBStatus) *http.Server {
+func setupServer(authDB *pgxpool.Pool, ctx context.Context, moviesDB *pgxpool.Pool, tokenIssuer *auth.TokenIssuer, dbStatus *database.DBStatus, port string) *http.Server {
 
 	movieRepository := movies.NewMovieRepository(moviesDB, dbStatus)
 	userService := auth.NewUserService(auth.NewUserRepository(authDB, dbStatus), tokenIssuer)
@@ -31,7 +32,7 @@ func setupServer(authDB *pgxpool.Pool, ctx context.Context, moviesDB *pgxpool.Po
 	}
 
 	httpServer := &http.Server{
-		Addr:              ":8080",
+		Addr:              ":" + port,
 		Handler:           handler,
 		ReadTimeout:       10 * time.Second,
 		ReadHeaderTimeout: 5 * time.Second,
@@ -48,7 +49,7 @@ func RunServer(pool *pgxpool.Pool, httpServer *http.Server) chan error {
 		serverErrors <- httpServer.ListenAndServe()
 	}()
 
-	log.Println("API running at http://localhost:8080")
+	log.Printf("API running at http://localhost%s", httpServer.Addr)
 	return serverErrors
 }
 
@@ -68,11 +69,25 @@ func HandleErrors(serverErrors chan error, databaseContext context.Context, http
 	}
 }
 
+func set_port() string {
+	port := os.Getenv("BACKEND_PORT")
+	if port == "" {
+		port = "8080"
+	}
+	portNumber, err := strconv.ParseUint(port, 10, 16)
+	if err != nil || portNumber == 0 {
+		log.Printf("invalid BACKEND_PORT %q", port)
+		return ""
+	}
+	return port
+}
+
 func main() {
 	if err := database.LoadLocalEnvironment(); err != nil {
 		log.Printf("load local environment: %v", err)
 		return
 	}
+
 	databaseContext, stopDatabaseSignal := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stopDatabaseSignal()
 
@@ -96,7 +111,12 @@ func main() {
 		log.Printf("JWT startup failed: %v", err)
 	}
 
-	httpServer := setupServer(authPool, databaseContext, moviesPool, tokenIssuer, dbStatus)
+	port := set_port()
+	if port == "" {
+		return
+	}
+
+	httpServer := setupServer(authPool, databaseContext, moviesPool, tokenIssuer, dbStatus, port)
 
 	serverErrors := RunServer(authPool, httpServer)
 
