@@ -41,6 +41,7 @@ Thumbs.db
 secrets/
 *.env
 .env.example
+__pycache__/
 
 package-lock.json
 

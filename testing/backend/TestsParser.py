@@ -7,8 +7,10 @@ from dotenv import load_dotenv
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 load_dotenv(PROJECT_ROOT / "secrets" / "ports.env")
-
-BACKEND_PORT = os.getenv("BACKEND_PORT", "8080")
+env = os.getenv("BACKEND_PORT")
+if env is None:
+    raise ValueError("BACKEND_PORT is not set in the environment variables.")
+BACKEND_PORT = env
 BACKEND_URL = f"http://localhost:{BACKEND_PORT}"
 
 BACKEND_TEST_PATH = Path(__file__).resolve().parent / "tests"
