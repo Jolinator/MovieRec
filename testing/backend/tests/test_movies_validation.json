@@ -27,6 +27,18 @@
             "url": "/movieAPI/movies?offset=-1",
             "expected_status": 400,
             "expected_response": "invalid movie pagination: offset must be a non-negative integer\n"
+        },
+        {
+            "method": "GET",
+            "url": "/movieAPI/movies?genre=abc",
+            "expected_status": 400,
+            "expected_response": "invalid movie pagination: genre must be a positive integer\n"
+        },
+        {
+            "method": "GET",
+            "url": "/movieAPI/movies?genre=-1",
+            "expected_status": 400,
+            "expected_response": "invalid movie pagination: genre must be a positive integer\n"
         }
     ]
 }

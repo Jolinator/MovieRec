@@ -4,6 +4,7 @@ const LOGIN_ENDPOINT = '/movieAPI/login'
 const LOGOUT_ENDPOINT = '/movieAPI/logout'
 const SIGNUP_ENDPOINT = '/movieAPI/signup'
 const MOVIES_ENDPOINT = '/movieAPI/movies'
+const GENRES_ENDPOINT = '/movieAPI/genres'
 
 
 
@@ -66,12 +67,22 @@ export async function signup({ username, password }) {
   return readResponse(response)
 }
 
-export async function getMovies({ limit = 20, offset = 0 } = {}) {
+export async function getMovies({ limit = 20, offset = 0, genreId } = {}) {
   const params = new URLSearchParams({
     limit: String(limit),
     offset: String(offset),
   })
+  if (genreId !== null && genreId !== undefined) {
+    params.set('genre', String(genreId))
+  }
   const response = await fetch(`${API_BASE_URL}${MOVIES_ENDPOINT}?${params}`, {
+    headers: { Accept: 'application/json' },
+  })
+  return readResponse(response)
+}
+
+export async function getGenres() {
+  const response = await fetch(`${API_BASE_URL}${GENRES_ENDPOINT}`, {
     headers: { Accept: 'application/json' },
   })
   return readResponse(response)

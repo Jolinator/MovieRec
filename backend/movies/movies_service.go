@@ -19,8 +19,9 @@ type MovieService struct {
 }
 
 type MoviePagination struct {
-	Limit  int
-	Offset int
+	Limit   int
+	Offset  int
+	GenreID *int
 }
 
 func NewMovieService(repository *MovieRepository) *MovieService {
@@ -59,6 +60,13 @@ func parseMoviePagination(query url.Values) (MoviePagination, error) {
 		}
 		*target = parsed
 	}
+	if value := query.Get("genre"); value != "" {
+		parsed, err := strconv.Atoi(value)
+		if err != nil || parsed <= 0 {
+			return MoviePagination{}, fmt.Errorf("%w: genre must be a positive integer", common.ErrInvalidMoviePagination)
+		}
+		pagination.GenreID = &parsed
+	}
 
 	if err := validateMoviePagination(pagination.Limit, pagination.Offset); err != nil {
 		return MoviePagination{}, err
@@ -71,7 +79,7 @@ func (s *MovieService) List(ctx context.Context, pagination MoviePagination) ([]
 		return nil, err
 	}
 
-	movies, err := s.repository.List(ctx, pagination.Limit, pagination.Offset)
+	movies, err := s.repository.List(ctx, pagination.Limit, pagination.Offset, pagination.GenreID)
 	if err != nil {
 		return nil, fmt.Errorf("list movies: %w", err)
 	}
@@ -81,6 +89,10 @@ func (s *MovieService) List(ctx context.Context, pagination MoviePagination) ([]
 		response = append(response, movieResponse(movie))
 	}
 	return response, nil
+}
+
+func (s *MovieService) ListGenres(ctx context.Context) ([]Genre, error) {
+	return s.repository.ListGenres(ctx)
 }
 
 func validateMoviePagination(limit, offset int) error {

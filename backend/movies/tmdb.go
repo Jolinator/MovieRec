@@ -24,6 +24,7 @@ type TMDBMovie struct {
 	PosterPath   *string `json:"poster_path"`
 	BackdropPath *string `json:"backdrop_path"`
 	VoteAverage  float64 `json:"vote_average"`
+	GenreIDs     []int   `json:"genre_ids"`
 }
 
 type tmdbDiscoverResponse struct {
