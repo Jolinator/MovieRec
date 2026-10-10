@@ -25,7 +25,9 @@ func setupServer(authDB *pgxpool.Pool, ctx context.Context, moviesDB, recommenda
 	go func() {
 		if err := movies.ImportPopularMoviesWithRetry(ctx, movieRepository, 10, 2*time.Second); err != nil {
 			log.Printf("movie import failed: %v", err)
+			return
 		}
+		dbStatus.SetImportedMoviesAvailable(true)
 	}()
 	userService := auth.NewUserService(auth.NewUserRepository(authDB, dbStatus), tokenIssuer)
 	movieService := movies.NewMovieService(movieRepository)

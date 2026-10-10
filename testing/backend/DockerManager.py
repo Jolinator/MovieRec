@@ -21,7 +21,6 @@ class SoftDependecyManager:
         self.allowed_services: set[str] = {
             "movies-postgres",
             "auth-postgres",
-            "recommendations-postgres",
             "backend",
             "frontend",
             "prometheus",
@@ -31,32 +30,36 @@ class SoftDependecyManager:
         self.services: dict[str, Service] = {name: Service(name) for name in self.allowed_services}
         self.services["backend"].add_dependency(self.services["auth-postgres"])
         self.services["backend"].add_dependency(self.services["movies-postgres"])
-        self.services["backend"].add_dependency(self.services["recommendations-postgres"])
         self.services["frontend"].add_dependency(self.services["backend"])
         self.services["prometheus"].add_dependency(self.services["backend"])
         self.services["grafana"].add_dependency(self.services["prometheus"])
 
     def sort_service_list(self, *services: str) -> list[str]:
+        requested = set(services)
         sorted_services: list[str] = []
         visited: set[str] = set()
-        services_set: set[str] = set(services)
 
         def visit(service_name: str):
-            if service_name not in visited:
-                visited.add(service_name)
-                for dependency in self.services[service_name].depends_on:
+            if service_name in visited:
+                return
+            visited.add(service_name)
+            for dependency in sorted(self.services[service_name].depends_on):
+                if dependency in requested:
                     visit(dependency)
-                
-            if service_name in services_set:
-                sorted_services.append(service_name)
+            sorted_services.append(service_name)
 
-        for service in services:
+        for service in sorted(requested):
             visit(service)
 
         return sorted_services
         
 
 soft_dependecy_manager: SoftDependecyManager = SoftDependecyManager()
+
+DATABASE_STATUS_KEYS = {
+    "auth-postgres": "authDBAvailable",
+    "movies-postgres": "moviesDBAvailable",
+}
 
 class DockerManager:
     def __init__(self, reset_all = True):
@@ -85,55 +88,82 @@ class DockerManager:
         target: list[str] | None = None,
         timeout: float = 30,
     ) -> dict[str, bool]:
-        """Wait until the backend reports each requested database available."""
-        database_status_keys = {
-            "auth-postgres": "authDBAvailable",
-            "movies-postgres": "moviesDBAvailable",
-            "recommendations-postgres": "recommendationsDBAvailable",
-        }
-        targets = list(database_status_keys) if target is None else target
-        unknown_targets = set(targets) - database_status_keys.keys()
+        """Wait until requested databases and required backend imports are ready."""
+        targets = self._validate_health_check(target, timeout)
+        check_imports = "backend" in self.required_services
+        if not targets and not check_imports:
+            return {}
+
+        url = f"{self.backend_url}/movieAPI/health"
+        deadline = time.monotonic() + timeout
+        while True:
+            health = self._read_health_status(url)
+            if health is not None and self._health_check_ready(health, targets, check_imports):
+                return {service: health[service] for service in DATABASE_STATUS_KEYS}
+
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise self._health_check_timeout(health, targets, check_imports, timeout)
+            time.sleep(min(1, remaining))
+
+    @staticmethod
+    def _validate_health_check(target: list[str] | None, timeout: float) -> list[str]:
+        targets = list(DATABASE_STATUS_KEYS) if target is None else target
+        unknown_targets = set(targets) - DATABASE_STATUS_KEYS.keys()
         if unknown_targets:
             raise ValueError(
                 f"Unsupported database health-check targets: {sorted(unknown_targets)}"
             )
         if timeout <= 0:
             raise ValueError("timeout must be greater than zero")
-        if not targets:
-            return {}
+        return targets
 
-        url = f"{self.backend_url}/movieAPI/health"
-        deadline = time.monotonic() + timeout
-        latest_status: dict[str, bool] = {}
+    @staticmethod
+    def _read_health_status(url: str) -> dict[str, bool] | None:
+        try:
+            response = requests.get(url, timeout=2)
+            response.raise_for_status()
+            health = response.json()
+            return {
+                service: health.get(status_key) is True
+                for service, status_key in DATABASE_STATUS_KEYS.items()
+            } | {"importedMoviesAvailable": health.get("importedMoviesAvailable") is True}
+        except (requests.RequestException, ValueError):
+            # The backend may still be starting or its health response may be unavailable.
+            return None
 
-        while True:
-            try:
-                response = requests.get(url, timeout=2)
-                response.raise_for_status()
-                health = response.json()
-                latest_status = {
-                    service: health.get(status_key) is True
-                    for service, status_key in database_status_keys.items()
-                }
-                if all(latest_status.get(service, False) for service in targets):
-                    return latest_status
-            except (requests.RequestException, ValueError):
-                # The backend may still be starting, or its health response may
-                # not be available yet. Retry until the shared deadline.
-                pass
+    @staticmethod
+    def _health_check_ready(
+        health: dict[str, bool], targets: list[str], check_imports: bool
+    ) -> bool:
+        databases_ready = all(health.get(service, False) for service in targets)
+        movies_import_ready = (
+            not check_imports
+            or not health.get("movies-postgres", False)
+            or health.get("importedMoviesAvailable", False)
+        )
+        return databases_ready and movies_import_ready
 
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                unavailable = [
-                    service
-                    for service in targets
-                    if not latest_status.get(service, False)
-                ]
-                raise TimeoutError(
-                    "Backend did not report these databases available before "
-                    f"the {timeout:g}s timeout: {', '.join(unavailable)}"
-                )
-            time.sleep(min(1, remaining))
+    @staticmethod
+    def _health_check_timeout(
+        health: dict[str, bool] | None,
+        targets: list[str],
+        check_imports: bool,
+        timeout: float,
+    ) -> TimeoutError:
+        unavailable = [
+            service for service in targets
+            if health is None or not health.get(service, False)
+        ]
+        if (
+            check_imports
+            and health is not None
+            and health.get("movies-postgres", False)
+            and not health.get("importedMoviesAvailable", False)
+        ):
+            unavailable.append("imported movies")
+        waiting_for = ", ".join(unavailable) or "health status"
+        return TimeoutError(f"Backend did not report {waiting_for} ready within {timeout:g}s")
 
 
     def set_required_services(self, *services: str) -> list[CompletedProcess]:
@@ -148,18 +178,12 @@ class DockerManager:
             if "backend" in self.active_services:
                 results.append(self.down_services("backend"))
                 self.active_services.discard("backend")
+
         if "auth-postgres" in self.required_services:
             self.remove_auth()
             self.active_services.discard("auth-postgres")
-            if "backend" in self.active_services:
-                results.append(self.down_services("backend"))
-                self.active_services.discard("backend")
-        if "recommendations-postgres" in self.required_services:
-            self.remove_recommendations()
-            self.active_services.discard("recommendations-postgres")
-            if "backend" in self.active_services:
-                results.append(self.down_services("backend"))
-                self.active_services.discard("backend")
+            
+
 
         
         to_stop = self.active_services - self.required_services
@@ -173,9 +197,9 @@ class DockerManager:
         self.active_services |= to_start
 
         requested_dbs = sorted(
-            self.required_services.intersection({"auth-postgres", "movies-postgres", "recommendations-postgres"})
+            self.required_services.intersection({"auth-postgres", "movies-postgres"})
         )
-        if "backend" in self.required_services and requested_dbs:
+        if "backend" in self.required_services:
             self.health_check_dbs(target=requested_dbs)
         
         return results
@@ -218,13 +242,6 @@ class DockerManager:
             capture_output=True,
             text=True,
         )
-
-    def remove_recommendations(self) -> CompletedProcess:
-        return run(
-            ["docker", "compose", "down", "--volumes", "recommendations-postgres"],
-            capture_output=True,
-            text=True,
-        )
         
 
     def stop_all_services(self, RemoveVolumes: bool = False) -> CompletedProcess:
@@ -242,6 +259,5 @@ class DockerManager:
     def reset_all(self) -> CompletedProcess:
         self.remove_movies()
         self.remove_auth()
-        self.remove_recommendations()
         self.stop_all_services()
         self.active_services = set()

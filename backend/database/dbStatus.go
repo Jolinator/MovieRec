@@ -13,9 +13,10 @@ type DBStatus struct {
 	moviesDB          *pgxpool.Pool
 	recommendationsDB *pgxpool.Pool
 
-	mu                       sync.RWMutex
-	authAvailable            bool
-	moviesAvailable          bool
+	mu                               sync.RWMutex
+	authDbAvailable                  bool
+	moviesDbAvailable       bool
+	importedMoviesAvailable          bool
 	recommendationsAvailable bool
 }
 
@@ -61,10 +62,16 @@ func (s *DBStatus) check(ctx context.Context) {
 	checks.Wait()
 
 	s.mu.Lock()
-	s.authAvailable = authErr == nil
-	s.moviesAvailable = moviesErr == nil
+	s.authDbAvailable = authErr == nil
+	s.moviesDbAvailable = moviesErr == nil
 	s.recommendationsAvailable = recommendationsErr == nil
 	s.mu.Unlock()
+}
+
+func (s *DBStatus) SetImportedMoviesAvailable(available bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.importedMoviesAvailable = available
 }
 
 func (s *DBStatus) RecommendationsAvailable() bool {
@@ -76,11 +83,17 @@ func (s *DBStatus) RecommendationsAvailable() bool {
 func (s *DBStatus) AuthAvailable() bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.authAvailable
+	return s.authDbAvailable
 }
 
 func (s *DBStatus) MoviesAvailable() bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.moviesAvailable
+	return s.moviesDbAvailable
+}
+
+func (s *DBStatus) ImportedMoviesAvailable() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.importedMoviesAvailable
 }
