@@ -10,17 +10,20 @@ import (
 	"backend/common"
 	"backend/database"
 	"backend/movies"
+	"backend/recommendations"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 type Server struct {
-	dbStatus     *database.DBStatus
-	userService  *auth.UserService
-	movieService *movies.MovieService
+	dbStatus      *database.DBStatus
+	userService   *auth.UserService
+	movieService  *movies.MovieService
+	listService   *recommendations.ListService
+	tokenVerifier *auth.TokenVerifier
 }
 
-func NewServer(dbStatus *database.DBStatus, userService *auth.UserService, movieService *movies.MovieService) *Server {
-	return &Server{dbStatus: dbStatus, userService: userService, movieService: movieService}
+func NewServer(dbStatus *database.DBStatus, userService *auth.UserService, movieService *movies.MovieService, listService *recommendations.ListService, tokenVerifier *auth.TokenVerifier) *Server {
+	return &Server{dbStatus: dbStatus, userService: userService, movieService: movieService, listService: listService, tokenVerifier: tokenVerifier}
 }
 
 func RegisterEndpoints(mux *http.ServeMux, server *Server) {
@@ -29,6 +32,9 @@ func RegisterEndpoints(mux *http.ServeMux, server *Server) {
 	mux.HandleFunc("GET /movieAPI/health", server.healthHandler)
 	mux.HandleFunc("GET /movieAPI/movies", server.moviesHandler)
 	mux.HandleFunc("GET /movieAPI/genres", server.genresHandler)
+	mux.Handle("GET /movieAPI/my-list", AuthenticationMiddleware(server.tokenVerifier)(http.HandlerFunc(server.listHandler)))
+	mux.Handle("POST /movieAPI/my-list", AuthenticationMiddleware(server.tokenVerifier)(http.HandlerFunc(server.addToListHandler)))
+	mux.Handle("DELETE /movieAPI/my-list/{tmdbId}", AuthenticationMiddleware(server.tokenVerifier)(http.HandlerFunc(server.removeFromListHandler)))
 	mux.HandleFunc("POST /movieAPI/login", server.loginHandler)
 	mux.HandleFunc("POST /movieAPI/logout", server.logoutHandler)
 	mux.HandleFunc("POST /movieAPI/signup", server.signUpHandler)
@@ -76,8 +82,9 @@ func redirectToMovieAPI(w http.ResponseWriter, r *http.Request) {
 func (s *Server) healthHandler(w http.ResponseWriter, r *http.Request) {
 	auth_available := s.dbStatus.AuthAvailable()
 	movies_available := s.dbStatus.MoviesAvailable()
+	recommendations_available := s.dbStatus.RecommendationsAvailable()
 
-	response := common.HealthResponse{Message: "API is healthy!", AuthDBAvailable: auth_available, MoviesDBAvailable: movies_available}
+	response := common.HealthResponse{Message: "API is healthy!", AuthDBAvailable: auth_available, MoviesDBAvailable: movies_available, RecommendationsDBAvailable: recommendations_available}
 	common.WriteJSON(w, response)
 }
 
@@ -149,4 +156,58 @@ func (s *Server) genresHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	common.WriteJSON(w, genres)
+}
+
+func (s *Server) listHandler(w http.ResponseWriter, r *http.Request) {
+	userID, ok := auth.UserIDFromContext(r.Context())
+	if !ok {
+		http.Error(w, "authentication required", http.StatusUnauthorized)
+		return
+	}
+
+	movies, err := s.listService.List(r.Context(), userID)
+	if err != nil {
+		writeMovieListError(w, err)
+		return
+	}
+	common.WriteJSON(w, movies)
+}
+
+func (s *Server) addToListHandler(w http.ResponseWriter, r *http.Request) {
+	request, ok := common.ValidateRequest[common.AddMovieToListPostFormat](r, w)
+	if !ok {
+		return
+	}
+	userID, ok := auth.UserIDFromContext(r.Context())
+	if !ok {
+		http.Error(w, "authentication required", http.StatusUnauthorized)
+		return
+	}
+
+	movie, err := s.listService.Add(r.Context(), userID, request.TMDBID)
+	if err != nil {
+		writeMovieListError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusCreated)
+	common.WriteJSON(w, movie)
+}
+
+func (s *Server) removeFromListHandler(w http.ResponseWriter, r *http.Request) {
+	tmdbID, err := recommendations.ParseTMDBID(r.PathValue("tmdbId"))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	userID, ok := auth.UserIDFromContext(r.Context())
+	if !ok {
+		http.Error(w, "authentication required", http.StatusUnauthorized)
+		return
+	}
+
+	if err := s.listService.Remove(r.Context(), userID, tmdbID); err != nil {
+		writeMovieListError(w, err)
+		return
+	}
+	common.WriteJSON(w, map[string]bool{"success": true})
 }

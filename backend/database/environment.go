@@ -10,7 +10,7 @@ import (
 )
 
 func LoadLocalEnvironment() error {
-	for _, name := range []string{"auth.env", "movies.env", "tmdb.env", "ports.env"} {
+	for _, name := range []string{"auth.env", "movies.env", "recommendations.env", "tmdb.env", "ports.env"} {
 		path := filepath.Join("..", "secrets", name)
 		_, err := os.Stat(path)
 		if err == nil {

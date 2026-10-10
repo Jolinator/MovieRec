@@ -166,13 +166,14 @@ class TestRequest:
             time.sleep(self.wait_seconds)
         request_url = urljoin(backend_url.rstrip("/") + "/", self.url.lstrip("/"))
         logger.info("Request: %s %s", self.method, request_url)
+        request_cookies = self.cookies or session.cookies.get_dict()
 
         try:
             response = session.request(
                 method=self.method,
                 url=request_url,
                 headers=self.headers,
-                cookies=self.cookies,
+                cookies=request_cookies,
                 json=self.body,
                 timeout=10,
             )

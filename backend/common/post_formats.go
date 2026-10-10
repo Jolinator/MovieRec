@@ -46,6 +46,17 @@ type SignUpPostFormat struct {
 	Password string `json:"password"`
 }
 
+type AddMovieToListPostFormat struct {
+	TMDBID int `json:"tmdbId"`
+}
+
+func (p AddMovieToListPostFormat) Validate() error {
+	if p.TMDBID <= 0 {
+		return errors.New("tmdbId must be a positive integer")
+	}
+	return nil
+}
+
 func (p LoginPostFormat) Validate() error {
 	if strings.TrimSpace(p.UserName) == "" {
 		return errors.New("userName is required")

@@ -13,7 +13,8 @@
             {
                 "message": "API is healthy!",
                 "authDBAvailable": true,
-                "moviesDBAvailable": true
+                "moviesDBAvailable": true,
+                "recommendationsDBAvailable": false
             }
         },
         {

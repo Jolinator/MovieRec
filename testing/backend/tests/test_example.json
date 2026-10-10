@@ -11,7 +11,8 @@
             {
                 "message": "API is healthy!",
                 "authDBAvailable": false,
-                "moviesDBAvailable": false
+                "moviesDBAvailable": false,
+                "recommendationsDBAvailable": false
             }
         },
         {
@@ -33,7 +34,8 @@
             "expected_response": {
                 "message": "API is healthy!",
                 "authDBAvailable": false,
-                "moviesDBAvailable": false
+                "moviesDBAvailable": false,
+                "recommendationsDBAvailable": false
             }
         }
     ]

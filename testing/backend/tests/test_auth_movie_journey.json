@@ -12,7 +12,8 @@
             "expected_response": {
                 "message": "API is healthy!",
                 "authDBAvailable": true,
-                "moviesDBAvailable": true
+                "moviesDBAvailable": true,
+                "recommendationsDBAvailable": false
             }
         },
         {
@@ -138,7 +139,8 @@
             "expected_status": 200,
             "expected_response": {
                 "authDBAvailable": true,
-                "moviesDBAvailable": true
+                "moviesDBAvailable": true,
+                "recommendationsDBAvailable": false
             },
             "expected_response_subset": true
         }

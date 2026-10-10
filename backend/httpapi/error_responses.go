@@ -7,6 +7,23 @@ import (
 	"backend/common"
 )
 
+func writeMovieListError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, common.ErrMovieNotFound):
+		http.Error(w, common.ErrMovieNotFound.Error(), http.StatusNotFound)
+	case errors.Is(err, common.ErrMovieAlreadyInList):
+		http.Error(w, common.ErrMovieAlreadyInList.Error(), http.StatusConflict)
+	case errors.Is(err, common.ErrRecommendationsDatabaseUnavailable):
+		http.Error(w, common.ErrRecommendationsDatabaseUnavailable.Error(), http.StatusServiceUnavailable)
+	case errors.Is(err, common.ErrMoviesDatabaseUnavailable):
+		http.Error(w, common.ErrMoviesDatabaseUnavailable.Error(), http.StatusServiceUnavailable)
+	case errors.Is(err, common.ErrMovieListPersistence):
+		http.Error(w, common.ErrMovieListPersistence.Error(), http.StatusServiceUnavailable)
+	default:
+		http.Error(w, "could not update movie list", http.StatusInternalServerError)
+	}
+}
+
 func writeSignupError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, common.ErrUsernameAlreadyExists):
