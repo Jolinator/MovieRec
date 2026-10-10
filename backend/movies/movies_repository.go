@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"strings"
+	"time"
 
 	"backend/common"
 	"backend/database"
@@ -15,6 +16,7 @@ import (
 type Movie struct {
 	TMDBID        int
 	Title         string
+	ReleaseDate   *time.Time
 	AverageRating float64
 	PosterPath    *string
 	Synopsis      string
@@ -30,6 +32,14 @@ func mapTMDBMovie(movie TMDBMovie) (Movie, error) {
 	if title == "" {
 		return Movie{}, fmt.Errorf("TMDB movie %d has an empty title", movie.ID)
 	}
+	var releaseDate *time.Time
+	if strings.TrimSpace(movie.ReleaseDate) != "" {
+		parsedReleaseDate, err := time.Parse("2006-01-02", movie.ReleaseDate)
+		if err != nil {
+			return Movie{}, fmt.Errorf("TMDB movie %d has invalid release date %q: %w", movie.ID, movie.ReleaseDate, err)
+		}
+		releaseDate = &parsedReleaseDate
+	}
 
 	rating := math.Round(movie.VoteAverage*10) / 10
 	if rating < 0 {
@@ -42,6 +52,7 @@ func mapTMDBMovie(movie TMDBMovie) (Movie, error) {
 	return Movie{
 		TMDBID:        movie.ID,
 		Title:         title,
+		ReleaseDate:   releaseDate,
 		AverageRating: rating,
 		PosterPath:    movie.PosterPath,
 		Synopsis:      movie.Overview,
@@ -72,11 +83,12 @@ func (r *MovieRepository) Upsert(ctx context.Context, movie Movie) error {
 
 	const query = `
 		INSERT INTO movies (
-			tmdb_id, title, average_rating, poster_path, synopsis, backdrop_path
+			tmdb_id, title, release_date, average_rating, poster_path, synopsis, backdrop_path
 		)
-		VALUES ($1, $2, $3, $4, $5, $6)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		ON CONFLICT (tmdb_id) DO UPDATE SET
 			title = EXCLUDED.title,
+			release_date = EXCLUDED.release_date,
 			average_rating = EXCLUDED.average_rating,
 			poster_path = EXCLUDED.poster_path,
 			synopsis = EXCLUDED.synopsis,
@@ -91,6 +103,7 @@ func (r *MovieRepository) Upsert(ctx context.Context, movie Movie) error {
 		query,
 		movie.TMDBID,
 		movie.Title,
+		movie.ReleaseDate,
 		movie.AverageRating,
 		movie.PosterPath,
 		movie.Synopsis,
@@ -123,7 +136,7 @@ func (r *MovieRepository) List(ctx context.Context, limit, offset int, genreID *
 	}
 
 	query := `
-		SELECT tmdb_id, title, average_rating, poster_path, synopsis, backdrop_path
+		SELECT tmdb_id, title, release_date, average_rating, poster_path, synopsis, backdrop_path
 		FROM movies
 	`
 	args := []any{limit, offset}
@@ -148,6 +161,7 @@ func (r *MovieRepository) List(ctx context.Context, limit, offset int, genreID *
 		if err := rows.Scan(
 			&movie.TMDBID,
 			&movie.Title,
+			&movie.ReleaseDate,
 			&movie.AverageRating,
 			&movie.PosterPath,
 			&movie.Synopsis,

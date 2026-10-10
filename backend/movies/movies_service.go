@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/url"
 	"strconv"
+	"time"
 
 	"backend/common"
 )
@@ -106,9 +107,16 @@ func validateMoviePagination(limit, offset int) error {
 }
 
 func movieResponse(movie Movie) common.MovieResponse {
+	var releaseDate *string
+	if movie.ReleaseDate != nil {
+		formattedReleaseDate := movie.ReleaseDate.Format(time.DateOnly)
+		releaseDate = &formattedReleaseDate
+	}
+
 	return common.MovieResponse{
 		TMDBID:        movie.TMDBID,
 		Title:         movie.Title,
+		ReleaseDate:   releaseDate,
 		AverageRating: movie.AverageRating,
 		PosterPath:    movie.PosterPath,
 		Synopsis:      movie.Synopsis,

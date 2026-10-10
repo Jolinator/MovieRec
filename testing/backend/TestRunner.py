@@ -75,6 +75,21 @@ def response_matches(actual: Any, expected: Any, subset: bool = False) -> bool:
     return actual == expected
 
 
+def response_has_fields(actual: Any, fields: list[str]) -> bool:
+    if not fields:
+        return True
+    if not isinstance(actual, list) or not actual:
+        return False
+    return all(
+        isinstance(item, dict) and all(field in item for field in fields)
+        for item in actual
+    )
+
+
+def response_is_non_empty(actual: Any) -> bool:
+    return isinstance(actual, (list, dict, str)) and len(actual) > 0
+
+
 @dataclass(eq=False)
 class TestRequest:
     method: str
@@ -83,6 +98,9 @@ class TestRequest:
     headers: dict[str, str] = field(default_factory=dict)
     cookies: dict[str, str] = field(default_factory=dict)
     expected_response_subset: bool = False
+    required_response_fields: list[str] = field(default_factory=list)
+    expected_response_non_empty: bool = False
+    wait_seconds: float = 0.0
     expected_cookies: dict[str, bool] = field(default_factory=dict)
     body: Any = None
     output: TestOutput | None = None
@@ -95,6 +113,9 @@ class TestRequest:
         expected_body = config.get("expected_response")
         expected_status = config.get("expected_status", 200)
         expected_response_subset = config.get("expected_response_subset", False)
+        required_response_fields = config.get("required_response_fields", [])
+        expected_response_non_empty = config.get("expected_response_non_empty", False)
+        wait_seconds = config.get("wait_seconds", 0.0)
         expected_cookies = config.get("expected_cookies") or {}
 
         if not isinstance(method, str) or not method:
@@ -107,6 +128,14 @@ class TestRequest:
             raise ValueError("'expected_status' must be an integer.")
         if not isinstance(expected_response_subset, bool):
             raise ValueError("'expected_response_subset' must be a boolean.")
+        if not isinstance(required_response_fields, list) or not all(
+            isinstance(field, str) and field for field in required_response_fields
+        ):
+            raise ValueError("'required_response_fields' must be a list of non-empty strings.")
+        if not isinstance(expected_response_non_empty, bool):
+            raise ValueError("'expected_response_non_empty' must be a boolean.")
+        if not isinstance(wait_seconds, (int, float)) or wait_seconds < 0:
+            raise ValueError("'wait_seconds' must be a non-negative number.")
         if not isinstance(expected_cookies, dict) or not all(
             isinstance(name, str) and isinstance(present, bool)
             for name, present in expected_cookies.items()
@@ -119,6 +148,9 @@ class TestRequest:
             headers=config.get("headers") or {},
             cookies=config.get("cookies") or {},
             expected_response_subset=expected_response_subset,
+            required_response_fields=required_response_fields,
+            expected_response_non_empty=expected_response_non_empty,
+            wait_seconds=float(wait_seconds),
             expected_cookies=expected_cookies,
             body=config.get("body"),
             expected_output=TestOutput(expected_status, expected_body),
@@ -130,6 +162,8 @@ class TestRequest:
         session: requests.Session,
         backend_url: str,
     ) -> None:
+        if self.wait_seconds:
+            time.sleep(self.wait_seconds)
         request_url = urljoin(backend_url.rstrip("/") + "/", self.url.lstrip("/"))
         logger.info("Request: %s %s", self.method, request_url)
 
@@ -189,11 +223,17 @@ class TestRequest:
             self.error is None
             and self.output is not None
             and self.output.status_code == self.expected_output.status_code
-            and response_matches(
+            and (
+                self.expected_response_non_empty
+                and response_is_non_empty(self.output.body)
+                or not self.expected_response_non_empty
+                and response_matches(
                 self.output.body,
                 self.expected_output.body,
                 subset=self.expected_response_subset,
+                )
             )
+            and response_has_fields(self.output.body, self.required_response_fields)
         )
 
     def format_report(self) -> str:
@@ -220,11 +260,14 @@ class TestRequest:
             details.append(
                 f"  - Expected status: `{self.expected_output.status_code}`"
             )
-        if not response_matches(
-            self.output.body,
-            self.expected_output.body,
-            subset=self.expected_response_subset,
-        ):
+        if self.expected_response_non_empty:
+            if not response_is_non_empty(self.output.body):
+                details.append("  - Expected a non-empty response body")
+        elif not response_matches(
+                self.output.body,
+                self.expected_output.body,
+                subset=self.expected_response_subset,
+            ):
             details.extend(
                 [
                     "  - Expected body:",
@@ -236,6 +279,11 @@ class TestRequest:
                     json.dumps(self.output.body, indent=2, ensure_ascii=False),
                     "```",
                 ]
+            )
+        if not response_has_fields(self.output.body, self.required_response_fields):
+            details.append(
+                "  - Missing required response fields: "
+                + ", ".join(self.required_response_fields)
             )
         return "\n".join(details)
 

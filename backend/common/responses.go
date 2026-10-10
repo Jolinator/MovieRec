@@ -24,6 +24,7 @@ type SignUpResponse struct {
 type MovieResponse struct {
 	TMDBID        int     `json:"tmdbId"`
 	Title         string  `json:"title"`
+	ReleaseDate   *string `json:"releaseDate"`
 	AverageRating float64 `json:"averageRating"`
 	PosterPath    *string `json:"posterPath"`
 	Synopsis      string  `json:"synopsis"`

@@ -32,6 +32,15 @@
         },
         {
             "method": "GET",
+            "url": "/movieAPI/movies?limit=1",
+            "expected_status": 200,
+            "expected_response": [],
+            "required_response_fields": ["releaseDate"],
+            "expected_response_non_empty": true,
+            "wait_seconds": 30
+        },
+        {
+            "method": "GET",
             "url": "/movieAPI/movies?genre=999&limit=1",
             "expected_status": 200,
             "expected_response": []

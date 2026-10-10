@@ -4,6 +4,7 @@ CREATE TABLE movies (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tmdb_id INTEGER NOT NULL,
     title VARCHAR(500) NOT NULL,
+    release_date DATE,
     average_rating NUMERIC(3, 1) NOT NULL DEFAULT 0,
     poster_path TEXT,
     synopsis TEXT NOT NULL DEFAULT '',
