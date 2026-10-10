@@ -10,6 +10,8 @@
             "expected_response": 
             {
                 "message": "API is healthy!",
+                "backendAvailable": true,
+                "importedMoviesAvailable": false,
                 "authDBAvailable": false,
                 "moviesDBAvailable": false
             }
@@ -32,6 +34,8 @@
             "expected_status": 200,
             "expected_response": {
                 "message": "API is healthy!",
+                "backendAvailable": true,
+                "importedMoviesAvailable": false,
                 "authDBAvailable": false,
                 "moviesDBAvailable": false
             }
