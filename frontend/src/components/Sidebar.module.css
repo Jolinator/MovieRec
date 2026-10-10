@@ -1,0 +1,47 @@
+.sidebar {
+  position: fixed;
+  z-index: 5;
+  top: 76px;
+  bottom: 0;
+  left: 0;
+  width: 220px;
+  padding: 28px 20px;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.services {
+  display: grid;
+  height: 100%;
+  gap: 8px;
+}
+
+.navigation {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+}
+
+.services > :last-child {
+  align-self: end;
+}
+
+.item {
+  width: 100%;
+  padding: 12px 16px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+  text-align: left;
+}
+
+.item:hover {
+  background: var(--surface-raised);
+  color: var(--text);
+}
