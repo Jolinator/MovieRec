@@ -6,14 +6,17 @@ import { logout } from './services/api'
 export default function App() {
   const [page, setPage] = useState('home')
   const [username, setUsername] = useState('')
+  const [loginNotice, setLoginNotice] = useState('')
 
   if (page === 'login') {
     return (
       <Login
         onBack={() => setPage('home')}
+        notice={loginNotice}
         onLoginSuccess={(loggedInUsername) => {
           setUsername(loggedInUsername)
           setPage('home')
+          setLoginNotice('')
         }}
       />
     )
@@ -27,6 +30,7 @@ export default function App() {
   return (
     <Home
       onLoginClick={() => setPage('login')}
+      onRequireLogin={() => { setLoginNotice('Log in to use MovieRec features.'); setPage('login') }}
       onLogout={handleLogout}
       username={username}
     />

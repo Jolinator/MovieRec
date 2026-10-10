@@ -5,11 +5,12 @@ import LoginButton from '../components/LoginButton'
 import LogoutBanner from '../components/LogoutBanner'
 import MovieGrid from '../components/MovieGrid'
 import MovieDetails from '../components/MovieDetails'
+import RecommendationChat from '../components/RecommendationChat'
 import UserBadge from '../components/UserBadge'
 import { getGenres, getHealth, getMovies } from '../services/api'
 import styles from './Home.module.css'
 
-export default function Home({ onLoginClick, onLogout, username }) {
+export default function Home({ onLoginClick, onRequireLogin, onLogout, username }) {
   const pageSize = 99
   const [error, setError] = useState('')
   const [movies, setMovies] = useState([])
@@ -20,7 +21,16 @@ export default function Home({ onLoginClick, onLogout, username }) {
   const [hasMoreMovies, setHasMoreMovies] = useState(true)
   const [isLogoutBannerOpen, setIsLogoutBannerOpen] = useState(false)
   const [selectedMovie, setSelectedMovie] = useState(null)
+  const [isChatOpen, setIsChatOpen] = useState(false)
   const loadMoreRef = useRef(null)
+
+  function openRecommendations() {
+    if (!username) {
+      onRequireLogin()
+      return
+    }
+    setIsChatOpen(true)
+  }
 
   async function handleAuthAction() {
     if (!username) {
@@ -122,6 +132,9 @@ export default function Home({ onLoginClick, onLogout, username }) {
 
       <aside className={styles.sidebar} aria-label="Services">
         <nav className={styles.services}>
+          <button type="button" className={styles.chatButton} onClick={openRecommendations}>
+            Recommendation Chat
+          </button>
           <LoginButton isLoggedIn={Boolean(username)} onClick={handleAuthAction} />
         </nav>
       </aside>
@@ -156,6 +169,7 @@ export default function Home({ onLoginClick, onLogout, username }) {
         {selectedMovie && (
           <MovieDetails movie={selectedMovie} onClose={() => setSelectedMovie(null)} />
         )}
+        {isChatOpen && <RecommendationChat onClose={() => setIsChatOpen(false)} />}
       </main>
     </div>
   )

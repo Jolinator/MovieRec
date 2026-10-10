@@ -1,0 +1,8 @@
+.panel { position: fixed; z-index: 20; top: 76px; right: 0; bottom: 0; left: 220px; overflow-y: auto; padding: clamp(28px, 6vw, 80px); background: var(--background); }
+.heading { display: flex; justify-content: space-between; align-items: center; max-width: 900px; margin: 0 auto; }.heading h2 { margin: 0; color: var(--mauve); font-size: clamp(1.5rem, 3vw, 2.2rem); }.heading button { border: 0; background: none; color: var(--muted); font-size: 1.8rem; cursor: pointer; }.panel > p, .panel form, .reply { width: min(100%, 900px); margin-right: auto; margin-left: auto; }.panel > p { color: var(--muted); }.panel form { display: grid; gap: 10px; margin-top: 32px; }.panel textarea { min-height: 120px; resize: vertical; padding: 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: inherit; font: inherit; }.panel form button { padding: 12px; border: 0; border-radius: 10px; background: var(--mauve); color: var(--background); font-weight: 700; cursor: pointer; }.reply { margin-top: 28px; padding: 16px; border-radius: 10px; background: var(--surface); white-space: pre-wrap; line-height: 1.6; }.error { width: min(100%, 900px); margin: 16px auto; color: #f38ba8; }
+.movieLinks { display: flex; flex-wrap: wrap; gap: 10px; width: min(100%, 900px); margin: 28px auto 0; }
+.movieLink { padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--mauve); font: inherit; font-weight: 700; text-decoration: underline; cursor: pointer; }
+
+@media (max-width: 700px) {
+  .panel { left: 0; padding: 24px 18px; }
+}

@@ -14,21 +14,26 @@ import (
 	"backend/database"
 	"backend/httpapi"
 	"backend/movies"
+	"backend/recommendations"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func setupServer(authDB *pgxpool.Pool, ctx context.Context, moviesDB *pgxpool.Pool, tokenIssuer *auth.TokenIssuer, dbStatus *database.DBStatus, port string) *http.Server {
+func setupServer(authDB *pgxpool.Pool, ctx context.Context, moviesDB *pgxpool.Pool, tokenIssuer *auth.TokenIssuer, tokenVerifier *auth.TokenVerifier, dbStatus *database.DBStatus, port string) *http.Server {
 
 	movieRepository := movies.NewMovieRepository(moviesDB, dbStatus)
+	recommendationService := recommendations.NewService(movieRepository)
 	go func() {
 		if err := movies.ImportPopularMoviesWithRetry(ctx, movieRepository, 10, 2*time.Second); err != nil {
 			log.Printf("movie import failed: %v", err)
 		}
+		if err := recommendationService.InitializeWithRetry(ctx, 30, 2*time.Second); err != nil {
+			log.Printf("recommendation embeddings unavailable: %v", err)
+		}
 	}()
 	userService := auth.NewUserService(auth.NewUserRepository(authDB, dbStatus), tokenIssuer)
 	movieService := movies.NewMovieService(movieRepository)
-	server := httpapi.NewServer(dbStatus, userService, movieService)
+	server := httpapi.NewServer(dbStatus, userService, movieService, recommendationService, tokenVerifier)
 	mux := http.NewServeMux()
 	httpapi.RegisterEndpoints(mux, server)
 	handler := httpapi.RequestMetricsMiddleware(httpapi.CorsMiddleware(mux))
@@ -113,13 +118,18 @@ func main() {
 		log.Printf("JWT startup failed: %v", err)
 		return
 	}
+	tokenVerifier, err := auth.SetupTokenVerifier()
+	if err != nil {
+		log.Printf("JWT verifier startup failed: %v", err)
+		return
+	}
 
 	port := set_port()
 	if port == "" {
 		return
 	}
 
-	httpServer := setupServer(authPool, databaseContext, moviesPool, tokenIssuer, dbStatus, port)
+	httpServer := setupServer(authPool, databaseContext, moviesPool, tokenIssuer, tokenVerifier, dbStatus, port)
 
 	serverErrors := RunServer(authPool, httpServer)
 

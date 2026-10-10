@@ -10,17 +10,20 @@ import (
 	"backend/common"
 	"backend/database"
 	"backend/movies"
+	"backend/recommendations"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 type Server struct {
-	dbStatus     *database.DBStatus
-	userService  *auth.UserService
-	movieService *movies.MovieService
+	dbStatus              *database.DBStatus
+	userService           *auth.UserService
+	movieService          *movies.MovieService
+	recommendationService *recommendations.Service
+	tokenVerifier         *auth.TokenVerifier
 }
 
-func NewServer(dbStatus *database.DBStatus, userService *auth.UserService, movieService *movies.MovieService) *Server {
-	return &Server{dbStatus: dbStatus, userService: userService, movieService: movieService}
+func NewServer(dbStatus *database.DBStatus, userService *auth.UserService, movieService *movies.MovieService, recommendationService *recommendations.Service, tokenVerifier *auth.TokenVerifier) *Server {
+	return &Server{dbStatus: dbStatus, userService: userService, movieService: movieService, recommendationService: recommendationService, tokenVerifier: tokenVerifier}
 }
 
 func RegisterEndpoints(mux *http.ServeMux, server *Server) {
@@ -32,7 +35,27 @@ func RegisterEndpoints(mux *http.ServeMux, server *Server) {
 	mux.HandleFunc("POST /movieAPI/login", server.loginHandler)
 	mux.HandleFunc("POST /movieAPI/logout", server.logoutHandler)
 	mux.HandleFunc("POST /movieAPI/signup", server.signUpHandler)
+	mux.Handle("POST /movieAPI/recommendations/chat", AuthenticationMiddleware(server.tokenVerifier)(http.HandlerFunc(server.recommendationChatHandler)))
 	mux.HandleFunc("/", redirectToMovieAPI)
+}
+
+func (s *Server) recommendationChatHandler(w http.ResponseWriter, r *http.Request) {
+	request, ok := common.ValidateRequest[common.RecommendationChatRequest](r, w)
+	if !ok {
+		return
+	}
+	response, err := s.recommendationService.Chat(r.Context(), request.Message)
+	if err != nil {
+		if errors.Is(err, common.ErrRecommendationsUnavailable) ||
+			errors.Is(err, common.ErrMoviesDatabaseUnavailable) ||
+			errors.Is(err, common.ErrInferenceUnavailable) {
+			http.Error(w, err.Error(), http.StatusServiceUnavailable)
+			return
+		}
+		http.Error(w, "could not generate recommendations", http.StatusBadGateway)
+		return
+	}
+	common.WriteJSON(w, response)
 }
 
 func CorsMiddleware(next http.Handler) http.Handler {

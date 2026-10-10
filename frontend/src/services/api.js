@@ -5,6 +5,7 @@ const LOGOUT_ENDPOINT = '/movieAPI/logout'
 const SIGNUP_ENDPOINT = '/movieAPI/signup'
 const MOVIES_ENDPOINT = '/movieAPI/movies'
 const GENRES_ENDPOINT = '/movieAPI/genres'
+const RECOMMENDATIONS_ENDPOINT = '/movieAPI/recommendations/chat'
 
 
 
@@ -84,6 +85,15 @@ export async function getMovies({ limit = 20, offset = 0, genreId } = {}) {
 export async function getGenres() {
   const response = await fetch(`${API_BASE_URL}${GENRES_ENDPOINT}`, {
     headers: { Accept: 'application/json' },
+  })
+  return readResponse(response)
+}
+
+export async function chatRecommendations(message) {
+  const response = await fetch(`${API_BASE_URL}${RECOMMENDATIONS_ENDPOINT}`, {
+    method: 'POST', credentials: 'include',
+    headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message }),
   })
   return readResponse(response)
 }

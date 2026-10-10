@@ -3,7 +3,7 @@ import ErrorPopup from '../components/ErrorPopup'
 import { login, signup } from '../services/api'
 import styles from './Login.module.css'
 
-export default function Login({ onBack, onLoginSuccess }) {
+export default function Login({ onBack, onLoginSuccess, notice }) {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -62,6 +62,7 @@ export default function Login({ onBack, onLoginSuccess }) {
       <button type="button" className={styles.backButton} onClick={onBack}>Back</button>
       <form className={styles.form} onSubmit={handleSubmit}>
         <h1>Login</h1>
+        {notice && <p role="status">{notice}</p>}
 
         <label>
           Username

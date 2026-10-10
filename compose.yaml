@@ -19,7 +19,7 @@ services:
       retries: 5
 
   movies-postgres:
-    image: postgres:16
+    image: pgvector/pgvector:pg16
     entrypoint: ["/usr/local/bin/tls-entrypoint.sh"]
     command: ["postgres", "-c", "ssl=on", "-c", "ssl_cert_file=/tmp/server.crt", "-c", "ssl_key_file=/tmp/server.key"]
     env_file:
@@ -60,6 +60,44 @@ services:
     environment:
       JWT_PRIVATE_KEY_PATH: /app/secrets/jwt-private.pem
       JWT_PUBLIC_KEY_PATH: /app/secrets/jwt-public.pem
+      EMBEDDING_URL: http://llama-embedding:8080
+      GENERATION_URL: http://llama-generation:8080
+      EMBEDDING_MODEL: "${EMBEDDING_MODEL:-bge-small-en-v1.5-q8_0}"
+      GENERATION_MODEL: "${GENERATION_MODEL:-Qwen3-0.6B-Q4_K_M}"
+    depends_on:
+      - auth-postgres
+      - movies-postgres
+
+  model-downloader:
+    image: curlimages/curl:8.12.1
+    user: "0:0"
+    entrypoint: ["/bin/sh", "/scripts/download-models.sh"]
+    environment:
+      EMBEDDING_MODEL_URL: "https://huggingface.co/CompendiumLabs/bge-small-en-v1.5-gguf/resolve/main/bge-small-en-v1.5-q8_0.gguf"
+      EMBEDDING_MODEL_SHA256: "ec38e8da142596baa913124ae50550de284b6916bf59577ef2f0cb9660c2f514"
+      GENERATION_MODEL_URL: "https://huggingface.co/lm-kit/qwen-3-0.6b-instruct-gguf/resolve/main/Qwen3-0.6B-Q4_K_M.gguf"
+      GENERATION_MODEL_SHA256: "2b1a7ed56061ad1275847412f61e8e009ada37ef865dccc25747dcc76eea9811"
+    volumes:
+      - model-data:/models
+      - ./scripts/download-models.sh:/scripts/download-models.sh:ro
+
+  llama-embedding:
+    image: ghcr.io/ggml-org/llama.cpp:server-v0.4.1
+    command: ["--host", "0.0.0.0", "--port", "8080", "--model", "/models/embedding.gguf", "--embedding"]
+    depends_on:
+      model-downloader:
+        condition: service_completed_successfully
+    volumes:
+      - model-data:/models:ro
+
+  llama-generation:
+    image: ghcr.io/ggml-org/llama.cpp:server-v0.4.1
+    command: ["--host", "0.0.0.0", "--port", "8080", "--model", "/models/qwen.gguf", "--ctx-size", "4096"]
+    depends_on:
+      model-downloader:
+        condition: service_completed_successfully
+    volumes:
+      - model-data:/models:ro
 
   frontend:
     build:
@@ -100,3 +138,4 @@ volumes:
   grafana-data:
   auth-postgres-data:
   movies-postgres-data:
+  model-data:
