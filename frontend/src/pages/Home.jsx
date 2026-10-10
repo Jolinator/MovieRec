@@ -1,17 +1,20 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import ErrorPopup from '../components/ErrorPopup'
+import GenreFilter from '../components/GenreFilter'
 import LoginButton from '../components/LoginButton'
 import LogoutBanner from '../components/LogoutBanner'
 import MovieGrid from '../components/MovieGrid'
 import MovieDetails from '../components/MovieDetails'
 import UserBadge from '../components/UserBadge'
-import { getHealth, getMovies } from '../services/api'
+import { getGenres, getHealth, getMovies } from '../services/api'
 import styles from './Home.module.css'
 
 export default function Home({ onLoginClick, onLogout, username }) {
   const pageSize = 99
   const [error, setError] = useState('')
   const [movies, setMovies] = useState([])
+  const [genres, setGenres] = useState([])
+  const [selectedGenreId, setSelectedGenreId] = useState(null)
   const [isLoadingMovies, setIsLoadingMovies] = useState(true)
   const [isLoadingMore, setIsLoadingMore] = useState(false)
   const [hasMoreMovies, setHasMoreMovies] = useState(true)
@@ -38,15 +41,40 @@ export default function Home({ onLoginClick, onLogout, username }) {
   }
 
   useEffect(() => {
-    Promise.all([getHealth(), getMovies({ limit: pageSize })]).then(([, loadedMovies]) => {
+    getGenres().then((loadedGenres) => {
+      setGenres(loadedGenres)
+    }).catch((requestError) => {
+      setError(requestError instanceof Error ? requestError.message : 'Unable to load genres.')
+    })
+  }, [])
+
+  useEffect(() => {
+    let isCurrentRequest = true
+    setIsLoadingMovies(true)
+    setMovies([])
+    setHasMoreMovies(true)
+
+    Promise.all([getHealth(), getMovies({ limit: pageSize, genreId: selectedGenreId })]).then(([, loadedMovies]) => {
+      if (!isCurrentRequest) {
+        return
+      }
       setMovies(loadedMovies)
       setHasMoreMovies(loadedMovies.length === pageSize)
     }).catch((requestError) => {
+      if (!isCurrentRequest) {
+        return
+      }
       setError(requestError instanceof Error ? requestError.message : 'Unable to reach the backend.')
     }).finally(() => {
-      setIsLoadingMovies(false)
+      if (isCurrentRequest) {
+        setIsLoadingMovies(false)
+      }
     })
-  }, [])
+
+    return () => {
+      isCurrentRequest = false
+    }
+  }, [selectedGenreId])
 
   const loadMoreMovies = useCallback(async () => {
     if (isLoadingMovies || isLoadingMore || !hasMoreMovies) {
@@ -55,7 +83,11 @@ export default function Home({ onLoginClick, onLogout, username }) {
 
     setIsLoadingMore(true)
     try {
-      const loadedMovies = await getMovies({ limit: pageSize, offset: movies.length })
+      const loadedMovies = await getMovies({
+        limit: pageSize,
+        offset: movies.length,
+        genreId: selectedGenreId,
+      })
       setMovies((currentMovies) => [...currentMovies, ...loadedMovies])
       setHasMoreMovies(loadedMovies.length === pageSize)
     } catch (requestError) {
@@ -63,7 +95,7 @@ export default function Home({ onLoginClick, onLogout, username }) {
     } finally {
       setIsLoadingMore(false)
     }
-  }, [hasMoreMovies, isLoadingMore, isLoadingMovies, movies.length])
+  }, [hasMoreMovies, isLoadingMore, isLoadingMovies, movies.length, selectedGenreId])
 
   useEffect(() => {
     const loadMoreElement = loadMoreRef.current
@@ -98,6 +130,11 @@ export default function Home({ onLoginClick, onLogout, username }) {
         <section className={styles.intro}>
           <p className={styles.eyebrow}>Discover your next favourite</p>
           <h2>Popular movies</h2>
+          <GenreFilter
+            genres={genres}
+            selectedGenreId={selectedGenreId}
+            onSelect={setSelectedGenreId}
+          />
         </section>
 
         {isLoadingMovies ? (

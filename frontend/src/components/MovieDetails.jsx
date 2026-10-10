@@ -36,6 +36,9 @@ export default function MovieDetails({ movie, onClose }) {
           <p className={styles.eyebrow}>Movie details</p>
           <h2 id="movie-details-title">{movie.title}</h2>
           <p className={styles.rating}>Rating: {Number(movie.averageRating).toFixed(1)}</p>
+          <p className={styles.releaseDate}>
+            Release date: {movie.releaseDate || 'Unknown'}
+          </p>
           <p className={styles.synopsis}>{movie.synopsis || 'No synopsis available.'}</p>
         </div>
       </section>

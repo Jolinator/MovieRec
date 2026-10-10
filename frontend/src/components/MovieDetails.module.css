@@ -68,9 +68,15 @@
 }
 
 .rating {
-  margin: 0 0 20px;
+  margin: 0 0 8px;
   color: var(--mauve);
   font-weight: 700;
+}
+
+.releaseDate {
+  margin: 0 0 20px;
+  color: var(--muted);
+  font-size: .95rem;
 }
 
 .synopsis {

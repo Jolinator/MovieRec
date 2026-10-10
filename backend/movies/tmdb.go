@@ -20,10 +20,12 @@ const (
 type TMDBMovie struct {
 	ID           int     `json:"id"`
 	Title        string  `json:"title"`
+	ReleaseDate  string  `json:"release_date"`
 	Overview     string  `json:"overview"`
 	PosterPath   *string `json:"poster_path"`
 	BackdropPath *string `json:"backdrop_path"`
 	VoteAverage  float64 `json:"vote_average"`
+	GenreIDs     []int   `json:"genre_ids"`
 }
 
 type tmdbDiscoverResponse struct {

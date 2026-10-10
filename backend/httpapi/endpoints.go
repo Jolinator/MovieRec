@@ -28,6 +28,7 @@ func RegisterEndpoints(mux *http.ServeMux, server *Server) {
 	mux.HandleFunc("GET /movieAPI/{$}", server.healthHandler)
 	mux.HandleFunc("GET /movieAPI/health", server.healthHandler)
 	mux.HandleFunc("GET /movieAPI/movies", server.moviesHandler)
+	mux.HandleFunc("GET /movieAPI/genres", server.genresHandler)
 	mux.HandleFunc("POST /movieAPI/login", server.loginHandler)
 	mux.HandleFunc("POST /movieAPI/logout", server.logoutHandler)
 	mux.HandleFunc("POST /movieAPI/signup", server.signUpHandler)
@@ -139,4 +140,17 @@ func (s *Server) moviesHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	common.WriteJSON(w, movieList)
+}
+
+func (s *Server) genresHandler(w http.ResponseWriter, r *http.Request) {
+	genres, err := s.movieService.ListGenres(r.Context())
+	if err != nil {
+		if errors.Is(err, common.ErrMoviesDatabaseUnavailable) {
+			http.Error(w, common.ErrMoviesDatabaseUnavailable.Error(), http.StatusServiceUnavailable)
+			return
+		}
+		http.Error(w, "could not load genres", http.StatusInternalServerError)
+		return
+	}
+	common.WriteJSON(w, genres)
 }
