@@ -19,21 +19,25 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func setupServer(authDB *pgxpool.Pool, ctx context.Context, moviesDB *pgxpool.Pool, tokenIssuer *auth.TokenIssuer, tokenVerifier *auth.TokenVerifier, dbStatus *database.DBStatus, port string) *http.Server {
+func setupServer(authDB *pgxpool.Pool, ctx context.Context, moviesDB, recommendationsDB *pgxpool.Pool, tokenIssuer *auth.TokenIssuer, tokenVerifier *auth.TokenVerifier, dbStatus *database.DBStatus, port string) *http.Server {
 
 	movieRepository := movies.NewMovieRepository(moviesDB, dbStatus)
 	recommendationService := recommendations.NewService(movieRepository)
 	go func() {
 		if err := movies.ImportPopularMoviesWithRetry(ctx, movieRepository, 10, 2*time.Second); err != nil {
 			log.Printf("movie import failed: %v", err)
+			return
 		}
+		dbStatus.SetImportedMoviesAvailable(true)
 		if err := recommendationService.InitializeWithRetry(ctx, 30, 2*time.Second); err != nil {
 			log.Printf("recommendation embeddings unavailable: %v", err)
 		}
 	}()
 	userService := auth.NewUserService(auth.NewUserRepository(authDB, dbStatus), tokenIssuer)
 	movieService := movies.NewMovieService(movieRepository)
-	server := httpapi.NewServer(dbStatus, userService, movieService, recommendationService, tokenVerifier)
+	listRepository := recommendations.NewListRepository(recommendationsDB, dbStatus)
+	listService := recommendations.NewListService(listRepository, movieRepository)
+	server := httpapi.NewServer(dbStatus, userService, movieService, listService, tokenVerifier, recommendationService)
 	mux := http.NewServeMux()
 	httpapi.RegisterEndpoints(mux, server)
 	handler := httpapi.RequestMetricsMiddleware(httpapi.CorsMiddleware(mux))
@@ -110,7 +114,13 @@ func main() {
 	}
 	defer moviesPool.Close()
 
-	dbStatus := database.NewDBStatus(authPool, moviesPool)
+	recommendationsPool, err := database.SetupPool(databaseContext, "RECOMMENDATIONS_")
+	if err != nil {
+		return
+	}
+	defer recommendationsPool.Close()
+
+	dbStatus := database.NewDBStatus(authPool, moviesPool, recommendationsPool)
 	go dbStatus.Start(databaseContext, 5*time.Second)
 
 	tokenIssuer, err := auth.SetupTokenIssuer()
@@ -129,7 +139,7 @@ func main() {
 		return
 	}
 
-	httpServer := setupServer(authPool, databaseContext, moviesPool, tokenIssuer, tokenVerifier, dbStatus, port)
+	httpServer := setupServer(authPool, databaseContext, moviesPool, recommendationsPool, tokenIssuer, tokenVerifier, dbStatus, port)
 
 	serverErrors := RunServer(authPool, httpServer)
 

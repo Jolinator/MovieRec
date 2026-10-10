@@ -36,8 +36,7 @@
             "expected_status": 200,
             "expected_response": [],
             "required_response_fields": ["releaseDate"],
-            "expected_response_non_empty": true,
-            "wait_seconds": 30
+            "expected_response_non_empty": true
         },
         {
             "method": "GET",

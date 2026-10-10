@@ -12,8 +12,11 @@
             "expected_response": 
             {
                 "message": "API is healthy!",
+                "backendAvailable": true,
+                "importedMoviesAvailable": true,
                 "authDBAvailable": true,
-                "moviesDBAvailable": true
+                "moviesDBAvailable": true,
+                "recommendationsDBAvailable": false
             }
         },
         {

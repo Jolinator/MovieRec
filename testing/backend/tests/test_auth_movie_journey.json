@@ -11,8 +11,11 @@
             "expected_status": 200,
             "expected_response": {
                 "message": "API is healthy!",
+                "backendAvailable": true,
+                "importedMoviesAvailable": true,
                 "authDBAvailable": true,
-                "moviesDBAvailable": true
+                "moviesDBAvailable": true,
+                "recommendationsDBAvailable": false
             }
         },
         {
@@ -137,8 +140,11 @@
             "url": "/movieAPI/health",
             "expected_status": 200,
             "expected_response": {
+                "backendAvailable": true,
+                "importedMoviesAvailable": true,
                 "authDBAvailable": true,
-                "moviesDBAvailable": true
+                "moviesDBAvailable": true,
+                "recommendationsDBAvailable": false
             },
             "expected_response_subset": true
         }

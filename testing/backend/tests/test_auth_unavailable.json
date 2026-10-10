@@ -28,6 +28,8 @@
             "url": "/movieAPI/health",
             "expected_status": 200,
             "expected_response": {
+                "backendAvailable": true,
+                "importedMoviesAvailable": false,
                 "authDBAvailable": false,
                 "moviesDBAvailable": false
             },

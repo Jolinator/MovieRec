@@ -2,6 +2,7 @@ package movies
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"strings"
@@ -10,6 +11,7 @@ import (
 	"backend/common"
 	"backend/database"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -178,6 +180,34 @@ func (r *MovieRepository) List(ctx context.Context, limit, offset int, genreID *
 		return nil, fmt.Errorf("iterate movies: %w", err)
 	}
 	return movies, nil
+}
+
+func (r *MovieRepository) FindByTMDBID(ctx context.Context, tmdbID int) (Movie, error) {
+	if !r.db_status.MoviesAvailable() {
+		return Movie{}, common.ErrMoviesDatabaseUnavailable
+	}
+
+	var movie Movie
+	err := r.db.QueryRow(ctx, `
+		SELECT tmdb_id, title, release_date, average_rating, poster_path, synopsis, backdrop_path
+		FROM movies
+		WHERE tmdb_id = $1
+	`, tmdbID).Scan(
+		&movie.TMDBID,
+		&movie.Title,
+		&movie.ReleaseDate,
+		&movie.AverageRating,
+		&movie.PosterPath,
+		&movie.Synopsis,
+		&movie.BackdropPath,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Movie{}, common.ErrMovieNotFound
+	}
+	if err != nil {
+		return Movie{}, fmt.Errorf("find movie %d: %w", tmdbID, err)
+	}
+	return movie, nil
 }
 
 type Genre struct {

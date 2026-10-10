@@ -100,7 +100,6 @@ class TestRequest:
     expected_response_subset: bool = False
     required_response_fields: list[str] = field(default_factory=list)
     expected_response_non_empty: bool = False
-    wait_seconds: float = 0.0
     expected_cookies: dict[str, bool] = field(default_factory=dict)
     body: Any = None
     output: TestOutput | None = None
@@ -115,7 +114,6 @@ class TestRequest:
         expected_response_subset = config.get("expected_response_subset", False)
         required_response_fields = config.get("required_response_fields", [])
         expected_response_non_empty = config.get("expected_response_non_empty", False)
-        wait_seconds = config.get("wait_seconds", 0.0)
         expected_cookies = config.get("expected_cookies") or {}
 
         if not isinstance(method, str) or not method:
@@ -134,8 +132,6 @@ class TestRequest:
             raise ValueError("'required_response_fields' must be a list of non-empty strings.")
         if not isinstance(expected_response_non_empty, bool):
             raise ValueError("'expected_response_non_empty' must be a boolean.")
-        if not isinstance(wait_seconds, (int, float)) or wait_seconds < 0:
-            raise ValueError("'wait_seconds' must be a non-negative number.")
         if not isinstance(expected_cookies, dict) or not all(
             isinstance(name, str) and isinstance(present, bool)
             for name, present in expected_cookies.items()
@@ -150,7 +146,6 @@ class TestRequest:
             expected_response_subset=expected_response_subset,
             required_response_fields=required_response_fields,
             expected_response_non_empty=expected_response_non_empty,
-            wait_seconds=float(wait_seconds),
             expected_cookies=expected_cookies,
             body=config.get("body"),
             expected_output=TestOutput(expected_status, expected_body),
@@ -162,17 +157,16 @@ class TestRequest:
         session: requests.Session,
         backend_url: str,
     ) -> None:
-        if self.wait_seconds:
-            time.sleep(self.wait_seconds)
         request_url = urljoin(backend_url.rstrip("/") + "/", self.url.lstrip("/"))
         logger.info("Request: %s %s", self.method, request_url)
+        request_cookies = self.cookies or session.cookies.get_dict()
 
         try:
             response = session.request(
                 method=self.method,
                 url=request_url,
                 headers=self.headers,
-                cookies=self.cookies,
+                cookies=request_cookies,
                 json=self.body,
                 timeout=10,
             )
@@ -295,6 +289,7 @@ class BackendTest:
     requests: list[TestRequest]
     docker_manager: DockerManager
     setup_error: str | None = None
+    docker_duration: float = 0.0
     duration: float = 0.0
 
     @classmethod
@@ -333,18 +328,13 @@ class BackendTest:
             self.path.stem,
             ", ".join(self.services),
         )
+        docker_start_time = time.perf_counter()
         try:
-            docker_start_time = time.perf_counter()
             results = self.docker_manager.set_required_services(*self.services)
-
-            docker_end_time = time.perf_counter()
         except Exception as error:
             self.setup_error = str(error)
             logger.error("Could not start services for %s: %s", self.path.stem, error)
-            self.duration = 0.0
-            docker_duration = 0.0
         else:
-            docker_duration = docker_end_time - docker_start_time
             for result in results:
                 logger.info("Docker command:%s", result.args)
             logger.info("Services are ready for %s", self.path.stem)
@@ -354,14 +344,16 @@ class BackendTest:
                     request.send(logger, session, self.docker_manager.backend_url)
             test_ended_at = time.perf_counter()
             self.duration = test_ended_at - test_started_at
+        finally:
+            self.docker_duration = time.perf_counter() - docker_start_time
 
         
 
         logger.info(
-            "Finished test %s: %s (Docker %.2fs, requests %.2fs)",
+            "Finished test %s: %s (Docker %.2fs, tests %.2fs)",
             self.path.stem,
             "PASS" if self.success else "FAIL",
-            docker_duration,
+            self.docker_duration,
             self.duration,
         )
 
@@ -371,6 +363,7 @@ class BackendTest:
             f"## {number}. {self.path.stem} - {status}",
             "",
             f"- Test Duration: `{self.duration:.2f}s`",
+            f"- Docker Duration: `{self.docker_duration:.2f}s`",
             f"- Requested services: `{', '.join(self.services)}`",
             "",
         ]
@@ -383,11 +376,13 @@ class BackendTest:
 
 
 def build_report(
-    tests: list[BackendTest], generated_at: datetime, logs: str, backend_url: str
+    tests: list[BackendTest], generated_at: datetime, logs: str, backend_url: str,
+    total_duration: float, docker_duration: float,
 ) -> str:
     passed = sum(test.success for test in tests)
     failed = len(tests) - passed
-    duration = sum(test.duration for test in tests)
+    test_duration = sum(test.duration for test in tests)
+    processing_duration = max(0.0, total_duration - docker_duration - test_duration)
 
     sections = [
         "# Backend test report",
@@ -395,7 +390,10 @@ def build_report(
         f"- Generated: `{generated_at.astimezone().isoformat(timespec='seconds')}`",
         f"- Backend: `{backend_url}`",
         f"- Result: **{passed} passed, {failed} failed** ({len(tests)} total)",
-        f"- Duration: `{duration:.2f}s`",
+        f"- Total runtime: `{total_duration:.2f}s`",
+        f"- Total Docker time: `{docker_duration:.2f}s`",
+        f"- Total test runtime: `{test_duration:.2f}s`",
+        f"- Processing time: `{processing_duration:.2f}s`",
     ]
     sections.extend(
         [
@@ -437,6 +435,7 @@ def order_tests_to_minimize_service_changes(tests: list[BackendTest]) -> list[Ba
 
 
 def main() -> int:
+    run_started_at = time.perf_counter()
     logger, report_log = configure_logging()
     generated_at = datetime.now().astimezone()
     timestamp = generated_at.strftime("%Y%m%d-%H%M%S-%f")
@@ -456,14 +455,28 @@ def main() -> int:
         return 1
     logger.info("Starting backend test run (%d tests)", len(test_files))
 
+    docker_started_at = time.perf_counter()
     docker_manager = DockerManager(reset_all=True)
+    docker_init_duration = time.perf_counter() - docker_started_at
     tests = [BackendTest.from_file(path, docker_manager) for path in test_files]
     tests = order_tests_to_minimize_service_changes(tests)
     for test in tests:
         test.run(logger)
 
+    total_docker_duration = docker_init_duration + sum(
+        test.docker_duration for test in tests
+    )
+    total_duration = time.perf_counter() - run_started_at
+    total_test_duration = sum(test.duration for test in tests)
+    processing_duration = max(
+        0.0, total_duration - total_docker_duration - total_test_duration
+    )
     passed = sum(test.success for test in tests)
     logger.info("Test summary: %d passed, %d failed", passed, len(tests) - passed)
+    logger.info("Total runtime: %.2fs", total_duration)
+    logger.info("Total Docker time: %.2fs", total_docker_duration)
+    logger.info("Total test runtime: %.2fs", total_test_duration)
+    logger.info("Processing time: %.2fs", processing_duration)
     logger.info("Writing report to %s", report_path)
     report_path.write_text(
         build_report(
@@ -471,6 +484,8 @@ def main() -> int:
             generated_at,
             report_log.report_text(),
             docker_manager.backend_url,
+            total_duration,
+            total_docker_duration,
         ),
         encoding="utf-8",
     )

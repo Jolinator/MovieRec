@@ -1,0 +1,76 @@
+{
+    "services": [
+        "backend",
+        "auth-postgres",
+        "movies-postgres",
+        "recommendations-postgres"
+    ],
+    "requests": [
+        {
+            "method": "POST",
+            "url": "/movieAPI/signup",
+            "body": {
+                "userName": "recommendations-integration-user",
+                "password": "StrongPassword123!"
+            },
+            "expected_status": 201,
+            "expected_response": {
+                "success": true
+            },
+            "expected_response_subset": true
+        },
+        {
+            "method": "POST",
+            "url": "/movieAPI/login",
+            "body": {
+                "userName": "recommendations-integration-user",
+                "password": "StrongPassword123!"
+            },
+            "expected_status": 200,
+            "expected_response": {
+                "loggedIn": true
+            },
+            "expected_response_subset": true,
+            "expected_cookies": {
+                "access_token": true
+            }
+        },
+        {
+            "method": "GET",
+            "url": "/movieAPI/my-list",
+            "expected_status": 200,
+            "expected_response": []
+        },
+        {
+            "method": "POST",
+            "url": "/movieAPI/my-list",
+            "body": {
+                "tmdbId": 27205
+            },
+            "wait_seconds": 30,
+            "expected_status": 201,
+            "expected_response": {},
+            "expected_response_subset": true,
+            "expected_response_non_empty": true
+        },
+        {
+            "method": "GET",
+            "url": "/movieAPI/my-list",
+            "expected_status": 200,
+            "expected_response": [],
+            "expected_response_non_empty": true,
+            "required_response_fields": [
+                "tmdbId",
+                "title"
+            ]
+        },
+        {
+            "method": "DELETE",
+            "url": "/movieAPI/my-list/27205",
+            "expected_status": 200,
+            "expected_response": {
+                "success": true
+            }
+        }
+    ]
+}
