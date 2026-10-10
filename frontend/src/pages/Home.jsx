@@ -1,15 +1,15 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import ErrorPopup from '../components/ErrorPopup'
 import GenreFilter from '../components/GenreFilter'
-import LoginButton from '../components/LoginButton'
 import LogoutBanner from '../components/LogoutBanner'
 import MovieGrid from '../components/MovieGrid'
 import MovieDetails from '../components/MovieDetails'
+import Sidebar from '../components/Sidebar'
 import UserBadge from '../components/UserBadge'
-import { getGenres, getHealth, getMovies } from '../services/api'
+import { addMovieToList, getGenres, getHealth, getMovies, getMyList, removeMovieFromList } from '../services/api'
 import styles from './Home.module.css'
 
-export default function Home({ onLoginClick, onLogout, username }) {
+export default function Home({ onLoginClick, onLogout, onHomeClick, onMyListClick, username }) {
   const pageSize = 99
   const [error, setError] = useState('')
   const [movies, setMovies] = useState([])
@@ -20,6 +20,8 @@ export default function Home({ onLoginClick, onLogout, username }) {
   const [hasMoreMovies, setHasMoreMovies] = useState(true)
   const [isLogoutBannerOpen, setIsLogoutBannerOpen] = useState(false)
   const [selectedMovie, setSelectedMovie] = useState(null)
+  const [isAddingToList, setIsAddingToList] = useState(false)
+  const [myListMovieIds, setMyListMovieIds] = useState(new Set())
   const loadMoreRef = useRef(null)
 
   async function handleAuthAction() {
@@ -40,7 +42,49 @@ export default function Home({ onLoginClick, onLogout, username }) {
     }
   }
 
+  async function handleToggleList() {
+    if (!username) {
+      onLoginClick()
+      return false
+    }
+
+    setIsAddingToList(true)
+    try {
+      if (myListMovieIds.has(selectedMovie.tmdbId)) {
+        await removeMovieFromList(selectedMovie.tmdbId)
+        setMyListMovieIds((currentIds) => {
+          const nextIds = new Set(currentIds)
+          nextIds.delete(selectedMovie.tmdbId)
+          return nextIds
+        })
+        return false
+      }
+
+      await addMovieToList(selectedMovie.tmdbId)
+      setMyListMovieIds((currentIds) => new Set(currentIds).add(selectedMovie.tmdbId))
+      return true
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'Unable to update your list.')
+      throw requestError
+    } finally {
+      setIsAddingToList(false)
+    }
+  }
+
   useEffect(() => {
+    if (!username) {
+      setMyListMovieIds(new Set())
+      return
+    }
+
+    getMyList().then((list) => {
+      setMyListMovieIds(new Set(list.map((movie) => movie.tmdbId)))
+    }).catch((requestError) => {
+        setError(requestError instanceof Error ? requestError.message : 'Unable to load your list.')
+      })
+    }, [username])
+
+    useEffect(() => {
     getGenres().then((loadedGenres) => {
       setGenres(loadedGenres)
     }).catch((requestError) => {
@@ -120,11 +164,12 @@ export default function Home({ onLoginClick, onLogout, username }) {
         <UserBadge username={username} />
       </header>
 
-      <aside className={styles.sidebar} aria-label="Services">
-        <nav className={styles.services}>
-          <LoginButton isLoggedIn={Boolean(username)} onClick={handleAuthAction} />
-        </nav>
-      </aside>
+      <Sidebar
+        isLoggedIn={Boolean(username)}
+        onHomeClick={onHomeClick}
+        onMyListClick={onMyListClick}
+        onAuthClick={handleAuthAction}
+      />
 
       <main className={styles.content}>
         <section className={styles.intro}>
@@ -154,7 +199,13 @@ export default function Home({ onLoginClick, onLogout, username }) {
           />
         )}
         {selectedMovie && (
-          <MovieDetails movie={selectedMovie} onClose={() => setSelectedMovie(null)} />
+          <MovieDetails
+            movie={selectedMovie}
+            onClose={() => setSelectedMovie(null)}
+            onToggleList={handleToggleList}
+            isAddingToList={isAddingToList}
+            isInList={myListMovieIds.has(selectedMovie.tmdbId)}
+          />
         )}
       </main>
     </div>

@@ -5,6 +5,7 @@ const LOGOUT_ENDPOINT = '/movieAPI/logout'
 const SIGNUP_ENDPOINT = '/movieAPI/signup'
 const MOVIES_ENDPOINT = '/movieAPI/movies'
 const GENRES_ENDPOINT = '/movieAPI/genres'
+const MY_LIST_ENDPOINT = '/movieAPI/my-list'
 
 
 
@@ -83,6 +84,36 @@ export async function getMovies({ limit = 20, offset = 0, genreId } = {}) {
 
 export async function getGenres() {
   const response = await fetch(`${API_BASE_URL}${GENRES_ENDPOINT}`, {
+    headers: { Accept: 'application/json' },
+  })
+  return readResponse(response)
+}
+
+export async function getMyList() {
+  const response = await fetch(`${API_BASE_URL}${MY_LIST_ENDPOINT}`, {
+    credentials: 'include',
+    headers: { Accept: 'application/json' },
+  })
+  return readResponse(response)
+}
+
+export async function addMovieToList(tmdbId) {
+  const response = await fetch(`${API_BASE_URL}${MY_LIST_ENDPOINT}`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ tmdbId }),
+  })
+  return readResponse(response)
+}
+
+export async function removeMovieFromList(tmdbId) {
+  const response = await fetch(`${API_BASE_URL}${MY_LIST_ENDPOINT}/${tmdbId}`, {
+    method: 'DELETE',
+    credentials: 'include',
     headers: { Accept: 'application/json' },
   })
   return readResponse(response)
