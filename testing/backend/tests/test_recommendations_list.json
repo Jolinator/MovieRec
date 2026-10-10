@@ -47,7 +47,6 @@
             "body": {
                 "tmdbId": 27205
             },
-            "wait_seconds": 30,
             "expected_status": 201,
             "expected_response": {},
             "expected_response_subset": true,

@@ -21,6 +21,7 @@ class SoftDependecyManager:
         self.allowed_services: set[str] = {
             "movies-postgres",
             "auth-postgres",
+            "recommendations-postgres",
             "backend",
             "frontend",
             "prometheus",
@@ -30,6 +31,7 @@ class SoftDependecyManager:
         self.services: dict[str, Service] = {name: Service(name) for name in self.allowed_services}
         self.services["backend"].add_dependency(self.services["auth-postgres"])
         self.services["backend"].add_dependency(self.services["movies-postgres"])
+        self.services["backend"].add_dependency(self.services["recommendations-postgres"])
         self.services["frontend"].add_dependency(self.services["backend"])
         self.services["prometheus"].add_dependency(self.services["backend"])
         self.services["grafana"].add_dependency(self.services["prometheus"])
@@ -59,6 +61,7 @@ soft_dependecy_manager: SoftDependecyManager = SoftDependecyManager()
 DATABASE_STATUS_KEYS = {
     "auth-postgres": "authDBAvailable",
     "movies-postgres": "moviesDBAvailable",
+    "recommendations-postgres": "recommendationsDBAvailable",
 }
 
 class DockerManager:
@@ -182,6 +185,10 @@ class DockerManager:
         if "auth-postgres" in self.required_services:
             self.remove_auth()
             self.active_services.discard("auth-postgres")
+
+        if "recommendations-postgres" in self.required_services:
+            self.remove_recommendations()
+            self.active_services.discard("recommendations-postgres")
             
 
 
@@ -197,7 +204,7 @@ class DockerManager:
         self.active_services |= to_start
 
         requested_dbs = sorted(
-            self.required_services.intersection({"auth-postgres", "movies-postgres"})
+            self.required_services.intersection(DATABASE_STATUS_KEYS)
         )
         if "backend" in self.required_services:
             self.health_check_dbs(target=requested_dbs)
@@ -242,6 +249,13 @@ class DockerManager:
             capture_output=True,
             text=True,
         )
+
+    def remove_recommendations(self) -> CompletedProcess:
+        return run(
+            ["docker", "compose", "down", "--volumes", "recommendations-postgres"],
+            capture_output=True,
+            text=True,
+        )
         
 
     def stop_all_services(self, RemoveVolumes: bool = False) -> CompletedProcess:
@@ -259,5 +273,6 @@ class DockerManager:
     def reset_all(self) -> CompletedProcess:
         self.remove_movies()
         self.remove_auth()
+        self.remove_recommendations()
         self.stop_all_services()
         self.active_services = set()

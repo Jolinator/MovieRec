@@ -489,9 +489,10 @@ def main() -> int:
         ),
         encoding="utf-8",
     )
+    docker_manager.reset_all()
     return 0 if all(test.success for test in tests) else 1
 
 
 if __name__ == "__main__":
     sys.exit(main())
-    DockerManager.reset_all()
+    
