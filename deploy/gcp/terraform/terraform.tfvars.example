@@ -1,0 +1,4 @@
+project_id        = "movierec-511220"
+region            = "europe-west1"
+zone              = "europe-west1-b"
+public_registry   = true

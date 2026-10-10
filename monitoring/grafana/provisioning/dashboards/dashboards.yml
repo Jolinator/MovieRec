@@ -1,9 +1,9 @@
 apiVersion: 1
 
 providers:
-  - name: MovieHub
+  - name: MovieRec
     orgId: 1
-    folder: MovieHub
+    folder: MovieRec
     type: file
     disableDeletion: true
     editable: true

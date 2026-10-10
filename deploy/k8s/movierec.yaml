@@ -1,0 +1,402 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: movierec
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-tls-entrypoint
+  namespace: movierec
+data:
+  tls-entrypoint.sh: |
+    #!/bin/sh
+    set -eu
+    cp /run/secrets/postgres-tls/server.crt /tmp/server.crt
+    cp /run/secrets/postgres-tls/server.key /tmp/server.key
+    chown postgres:postgres /tmp/server.crt /tmp/server.key
+    chmod 600 /tmp/server.key
+    exec /usr/local/bin/docker-entrypoint.sh "$@"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: auth-postgres
+  namespace: movierec
+spec:
+  clusterIP: None
+  selector: { app: auth-postgres }
+  ports: [{ name: postgres, port: 5432 }]
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: auth-postgres
+  namespace: movierec
+spec:
+  serviceName: auth-postgres
+  replicas: 1
+  selector:
+    matchLabels: { app: auth-postgres }
+  template:
+    metadata:
+      labels: { app: auth-postgres }
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16
+          command: ["/usr/local/bin/tls-entrypoint.sh"]
+          args: ["postgres", "-c", "ssl=on", "-c", "ssl_cert_file=/tmp/server.crt", "-c", "ssl_key_file=/tmp/server.key"]
+          envFrom:
+            - secretRef: { name: auth-config }
+          ports: [{ name: postgres, containerPort: 5432 }]
+          readinessProbe:
+            exec: { command: ["sh", "-c", "pg_isready -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\""] }
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          volumeMounts:
+            - { name: data, mountPath: /var/lib/postgresql/data }
+            - { name: migrations, mountPath: /docker-entrypoint-initdb.d, readOnly: true }
+            - { name: tls, mountPath: /run/secrets/postgres-tls, readOnly: true }
+            - { name: entrypoint, mountPath: /usr/local/bin/tls-entrypoint.sh, subPath: tls-entrypoint.sh, readOnly: true }
+      volumes:
+        - name: migrations
+          configMap: { name: auth-migrations }
+        - name: tls
+          secret: { secretName: postgres-tls, defaultMode: 0440 }
+        - name: entrypoint
+          configMap: { name: postgres-tls-entrypoint, defaultMode: 0555 }
+  volumeClaimTemplates:
+    - metadata: { name: data }
+      spec:
+        accessModes: [ReadWriteOnce]
+        storageClassName: local-path
+        resources: { requests: { storage: 5Gi } }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: movies-postgres
+  namespace: movierec
+spec:
+  clusterIP: None
+  selector: { app: movies-postgres }
+  ports: [{ name: postgres, port: 5432 }]
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: movies-postgres
+  namespace: movierec
+spec:
+  serviceName: movies-postgres
+  replicas: 1
+  selector:
+    matchLabels: { app: movies-postgres }
+  template:
+    metadata:
+      labels: { app: movies-postgres }
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16
+          command: ["/usr/local/bin/tls-entrypoint.sh"]
+          args: ["postgres", "-c", "ssl=on", "-c", "ssl_cert_file=/tmp/server.crt", "-c", "ssl_key_file=/tmp/server.key"]
+          envFrom:
+            - secretRef: { name: movies-config }
+          ports: [{ name: postgres, containerPort: 5432 }]
+          readinessProbe:
+            exec: { command: ["sh", "-c", "pg_isready -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\""] }
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          volumeMounts:
+            - { name: data, mountPath: /var/lib/postgresql/data }
+            - { name: migrations, mountPath: /docker-entrypoint-initdb.d, readOnly: true }
+            - { name: tls, mountPath: /run/secrets/postgres-tls, readOnly: true }
+            - { name: entrypoint, mountPath: /usr/local/bin/tls-entrypoint.sh, subPath: tls-entrypoint.sh, readOnly: true }
+      volumes:
+        - name: migrations
+          configMap: { name: movies-migrations }
+        - name: tls
+          secret: { secretName: postgres-tls, defaultMode: 0440 }
+        - name: entrypoint
+          configMap: { name: postgres-tls-entrypoint, defaultMode: 0555 }
+  volumeClaimTemplates:
+    - metadata: { name: data }
+      spec:
+        accessModes: [ReadWriteOnce]
+        storageClassName: local-path
+        resources: { requests: { storage: 5Gi } }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: recommendations-postgres
+  namespace: movierec
+spec:
+  clusterIP: None
+  selector: { app: recommendations-postgres }
+  ports: [{ name: postgres, port: 5432 }]
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: recommendations-postgres
+  namespace: movierec
+spec:
+  serviceName: recommendations-postgres
+  replicas: 1
+  selector:
+    matchLabels: { app: recommendations-postgres }
+  template:
+    metadata:
+      labels: { app: recommendations-postgres }
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16
+          command: ["/usr/local/bin/tls-entrypoint.sh"]
+          args: ["postgres", "-c", "ssl=on", "-c", "ssl_cert_file=/tmp/server.crt", "-c", "ssl_key_file=/tmp/server.key"]
+          envFrom:
+            - secretRef: { name: recommendations-config }
+          ports: [{ name: postgres, containerPort: 5432 }]
+          readinessProbe:
+            exec: { command: ["sh", "-c", "pg_isready -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\""] }
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          volumeMounts:
+            - { name: data, mountPath: /var/lib/postgresql/data }
+            - { name: migrations, mountPath: /docker-entrypoint-initdb.d, readOnly: true }
+            - { name: tls, mountPath: /run/secrets/postgres-tls, readOnly: true }
+            - { name: entrypoint, mountPath: /usr/local/bin/tls-entrypoint.sh, subPath: tls-entrypoint.sh, readOnly: true }
+      volumes:
+        - name: migrations
+          configMap: { name: recommendations-migrations }
+        - name: tls
+          secret: { secretName: postgres-tls, defaultMode: 0440 }
+        - name: entrypoint
+          configMap: { name: postgres-tls-entrypoint, defaultMode: 0555 }
+  volumeClaimTemplates:
+    - metadata: { name: data }
+      spec:
+        accessModes: [ReadWriteOnce]
+        storageClassName: local-path
+        resources: { requests: { storage: 5Gi } }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: movierec
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: backend }
+  template:
+    metadata:
+      labels: { app: backend }
+    spec:
+      containers:
+        - name: backend
+          image: ${REGISTRY}/backend:${IMAGE_TAG}
+          ports: [{ name: http, containerPort: 8080 }]
+          envFrom:
+            - secretRef: { name: auth-config }
+            - secretRef: { name: movies-config }
+            - secretRef: { name: recommendations-config }
+            - secretRef: { name: tmdb-config }
+          env:
+            - { name: BACKEND_PORT, value: "8080" }
+            - { name: AUTH_DB_HOST, value: auth-postgres }
+            - { name: MOVIES_DB_HOST, value: movies-postgres }
+            - { name: RECOMMENDATIONS_DB_HOST, value: recommendations-postgres }
+            - { name: AUTH_DB_SSLMODE, value: require }
+            - { name: MOVIES_DB_SSLMODE, value: require }
+            - { name: RECOMMENDATIONS_DB_SSLMODE, value: require }
+            - { name: JWT_PRIVATE_KEY_PATH, value: /app/secrets/jwt-private.pem }
+            - { name: JWT_PUBLIC_KEY_PATH, value: /app/secrets/jwt-public.pem }
+          readinessProbe:
+            httpGet: { path: /movieAPI/health, port: http }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /movieAPI/health, port: http }
+            initialDelaySeconds: 20
+            periodSeconds: 20
+          volumeMounts:
+            - { name: jwt, mountPath: /app/secrets, readOnly: true }
+      volumes:
+        - name: jwt
+          secret: { secretName: jwt-keys, defaultMode: 0440 }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  namespace: movierec
+spec:
+  selector: { app: backend }
+  ports: [{ name: http, port: 8080, targetPort: http }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: movierec
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: frontend }
+  template:
+    metadata:
+      labels: { app: frontend }
+    spec:
+      containers:
+        - name: frontend
+          image: ${REGISTRY}/frontend:${IMAGE_TAG}
+          ports: [{ name: http, containerPort: 80 }]
+          readinessProbe:
+            httpGet: { path: /, port: http }
+            initialDelaySeconds: 3
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  namespace: movierec
+spec:
+  selector: { app: frontend }
+  ports: [{ name: http, port: 80, targetPort: http }]
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: movierec
+  namespace: movierec
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts: ["${PUBLIC_HOST}"]
+      secretName: movierec-web-tls
+  rules:
+    - host: "${PUBLIC_HOST}"
+      http:
+        paths:
+          - path: /movieAPI
+            pathType: Prefix
+            backend:
+              service: { name: backend, port: { number: 8080 } }
+          - path: /
+            pathType: Prefix
+            backend:
+              service: { name: frontend, port: { number: 80 } }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: movierec
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+    scrape_configs:
+      - job_name: movierec-api
+        metrics_path: /metrics
+        static_configs:
+          - targets: ["backend:8080"]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus
+  namespace: movierec
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: prometheus }
+  template:
+    metadata:
+      labels: { app: prometheus }
+    spec:
+      containers:
+        - name: prometheus
+          image: prom/prometheus:v3.5.0
+          args: ["--config.file=/etc/prometheus/prometheus.yml"]
+          ports: [{ name: http, containerPort: 9090 }]
+          volumeMounts:
+            - { name: config, mountPath: /etc/prometheus, readOnly: true }
+            - { name: data, mountPath: /prometheus }
+      volumes:
+        - name: config
+          configMap: { name: prometheus-config }
+        - name: data
+          persistentVolumeClaim: { claimName: prometheus-data }
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: prometheus-data
+  namespace: movierec
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: local-path
+  resources: { requests: { storage: 5Gi } }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+  namespace: movierec
+spec:
+  selector: { app: prometheus }
+  ports: [{ name: http, port: 9090, targetPort: http }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: movierec
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: grafana }
+  template:
+    metadata:
+      labels: { app: grafana }
+    spec:
+      containers:
+        - name: grafana
+          image: grafana/grafana:12.2.0
+          ports: [{ name: http, containerPort: 3000 }]
+          env:
+            - { name: GF_SECURITY_ADMIN_USER, value: admin }
+            - { name: GF_SECURITY_ADMIN_PASSWORD, valueFrom: { secretKeyRef: { name: grafana-config, key: admin-password } } }
+          volumeMounts:
+            - { name: data, mountPath: /var/lib/grafana }
+      volumes:
+        - name: data
+          persistentVolumeClaim: { claimName: grafana-data }
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: grafana-data
+  namespace: movierec
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: local-path
+  resources: { requests: { storage: 2Gi } }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana
+  namespace: movierec
+spec:
+  selector: { app: grafana }
+  ports: [{ name: http, port: 3000, targetPort: http }]
+---

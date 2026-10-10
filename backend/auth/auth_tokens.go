@@ -34,7 +34,7 @@ func SetupTokenIssuer() (*TokenIssuer, error) {
 		keyPath = filepath.Join("..", "secrets", "jwt-private.pem")
 	}
 
-	tokenIssuer, err := NewTokenIssuer(keyPath, "moviehub")
+	tokenIssuer, err := NewTokenIssuer(keyPath, "movierec")
 	if err != nil {
 		return nil, fmt.Errorf("initialize token issuer: %w", err)
 	}
@@ -48,7 +48,7 @@ func SetupTokenVerifier() (*TokenVerifier, error) {
 		keyPath = filepath.Join("..", "secrets", "jwt-public.pem")
 	}
 
-	tokenVerifier, err := NewTokenVerifier(keyPath, "moviehub")
+	tokenVerifier, err := NewTokenVerifier(keyPath, "movierec")
 	if err != nil {
 		return nil, fmt.Errorf("initialize token verifier: %w", err)
 	}

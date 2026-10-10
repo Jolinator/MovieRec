@@ -20,7 +20,10 @@ func LoadLocalEnvironment() error {
 			continue
 		}
 		if errors.Is(err, os.ErrNotExist) {
-			return fmt.Errorf("environment file %q not found", path)
+			// In container platforms, configuration is supplied through the
+			// process environment (for example, Kubernetes Secrets). Local
+			// Compose development can continue to load these files when present.
+			continue
 		}
 		return fmt.Errorf("check environment file %q: %w", path, err)
 	}
