@@ -37,6 +37,25 @@ services:
       timeout: 5s
       retries: 5
 
+  recommendations-postgres:
+    image: postgres:16
+    entrypoint: ["/usr/local/bin/tls-entrypoint.sh"]
+    command: ["postgres", "-c", "ssl=on", "-c", "ssl_cert_file=/tmp/server.crt", "-c", "ssl_key_file=/tmp/server.key"]
+    env_file:
+      - ./secrets/recommendations.env
+    ports:
+      - "${RECOMMENDATIONS_POSTGRES_PORT:-5436}:5432"
+    volumes:
+      - recommendations-postgres-data:/var/lib/postgresql/data
+      - ./secrets/tls:/run/secrets/postgres-tls:ro
+      - ./database/tls-entrypoint.sh:/usr/local/bin/tls-entrypoint.sh:ro
+      - ./database/migrations/recommendations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   backend:
     build:
       context: .
@@ -53,6 +72,7 @@ services:
     volumes:
       - ./secrets/auth.env:/app/secrets/auth.env:ro
       - ./secrets/movies.env:/app/secrets/movies.env:ro
+      - ./secrets/recommendations.env:/app/secrets/recommendations.env:ro
       - ./secrets/jwt-private.pem:/app/secrets/jwt-private.pem:ro
       - ./secrets/jwt-public.pem:/app/secrets/jwt-public.pem:ro
       - ./secrets/tmdb.env:/app/secrets/tmdb.env:ro
@@ -100,3 +120,4 @@ volumes:
   grafana-data:
   auth-postgres-data:
   movies-postgres-data:
+  recommendations-postgres-data:

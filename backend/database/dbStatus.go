@@ -9,17 +9,19 @@ import (
 )
 
 type DBStatus struct {
-	authDB   *pgxpool.Pool
-	moviesDB *pgxpool.Pool
+	authDB            *pgxpool.Pool
+	moviesDB          *pgxpool.Pool
+	recommendationsDB *pgxpool.Pool
 
-	mu                      sync.RWMutex
-	authDbAvailable         bool
+	mu                               sync.RWMutex
+	authDbAvailable                  bool
 	moviesDbAvailable       bool
-	importedMoviesAvailable bool
+	importedMoviesAvailable          bool
+	recommendationsAvailable bool
 }
 
-func NewDBStatus(authDB, moviesDB *pgxpool.Pool) *DBStatus {
-	return &DBStatus{authDB: authDB, moviesDB: moviesDB}
+func NewDBStatus(authDB, moviesDB, recommendationsDB *pgxpool.Pool) *DBStatus {
+	return &DBStatus{authDB: authDB, moviesDB: moviesDB, recommendationsDB: recommendationsDB}
 }
 
 func (s *DBStatus) Start(ctx context.Context, interval time.Duration) {
@@ -42,9 +44,9 @@ func (s *DBStatus) Start(ctx context.Context, interval time.Duration) {
 }
 
 func (s *DBStatus) check(ctx context.Context) {
-	var authErr, moviesErr error
+	var authErr, moviesErr, recommendationsErr error
 	var checks sync.WaitGroup
-	checks.Add(2)
+	checks.Add(3)
 	go func() {
 		defer checks.Done()
 		authErr = PingWithRetry(ctx, s.authDB, 2, 500*time.Millisecond)
@@ -53,11 +55,16 @@ func (s *DBStatus) check(ctx context.Context) {
 		defer checks.Done()
 		moviesErr = PingWithRetry(ctx, s.moviesDB, 2, 500*time.Millisecond)
 	}()
+	go func() {
+		defer checks.Done()
+		recommendationsErr = PingWithRetry(ctx, s.recommendationsDB, 2, 500*time.Millisecond)
+	}()
 	checks.Wait()
 
 	s.mu.Lock()
 	s.authDbAvailable = authErr == nil
 	s.moviesDbAvailable = moviesErr == nil
+	s.recommendationsAvailable = recommendationsErr == nil
 	s.mu.Unlock()
 }
 
@@ -65,6 +72,12 @@ func (s *DBStatus) SetImportedMoviesAvailable(available bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.importedMoviesAvailable = available
+}
+
+func (s *DBStatus) RecommendationsAvailable() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.recommendationsAvailable
 }
 
 func (s *DBStatus) AuthAvailable() bool {

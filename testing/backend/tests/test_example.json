@@ -13,7 +13,8 @@
                 "backendAvailable": true,
                 "importedMoviesAvailable": false,
                 "authDBAvailable": false,
-                "moviesDBAvailable": false
+                "moviesDBAvailable": false,
+                "recommendationsDBAvailable": false
             }
         },
         {
@@ -37,7 +38,8 @@
                 "backendAvailable": true,
                 "importedMoviesAvailable": false,
                 "authDBAvailable": false,
-                "moviesDBAvailable": false
+                "moviesDBAvailable": false,
+                "recommendationsDBAvailable": false
             }
         }
     ]

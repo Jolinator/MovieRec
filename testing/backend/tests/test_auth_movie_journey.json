@@ -14,7 +14,8 @@
                 "backendAvailable": true,
                 "importedMoviesAvailable": true,
                 "authDBAvailable": true,
-                "moviesDBAvailable": true
+                "moviesDBAvailable": true,
+                "recommendationsDBAvailable": false
             }
         },
         {
@@ -142,7 +143,8 @@
                 "backendAvailable": true,
                 "importedMoviesAvailable": true,
                 "authDBAvailable": true,
-                "moviesDBAvailable": true
+                "moviesDBAvailable": true,
+                "recommendationsDBAvailable": false
             },
             "expected_response_subset": true
         }

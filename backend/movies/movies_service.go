@@ -87,7 +87,7 @@ func (s *MovieService) List(ctx context.Context, pagination MoviePagination) ([]
 
 	response := make([]common.MovieResponse, 0, len(movies))
 	for _, movie := range movies {
-		response = append(response, movieResponse(movie))
+		response = append(response, MovieResponse(movie))
 	}
 	return response, nil
 }
@@ -106,7 +106,7 @@ func validateMoviePagination(limit, offset int) error {
 	return nil
 }
 
-func movieResponse(movie Movie) common.MovieResponse {
+func MovieResponse(movie Movie) common.MovieResponse {
 	var releaseDate *string
 	if movie.ReleaseDate != nil {
 		formattedReleaseDate := movie.ReleaseDate.Format(time.DateOnly)

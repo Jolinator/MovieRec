@@ -14,11 +14,12 @@ import (
 	"backend/database"
 	"backend/httpapi"
 	"backend/movies"
+	"backend/recommendations"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func setupServer(authDB *pgxpool.Pool, ctx context.Context, moviesDB *pgxpool.Pool, tokenIssuer *auth.TokenIssuer, dbStatus *database.DBStatus, port string) *http.Server {
+func setupServer(authDB *pgxpool.Pool, ctx context.Context, moviesDB, recommendationsDB *pgxpool.Pool, tokenIssuer *auth.TokenIssuer, tokenVerifier *auth.TokenVerifier, dbStatus *database.DBStatus, port string) *http.Server {
 
 	movieRepository := movies.NewMovieRepository(moviesDB, dbStatus)
 	go func() {
@@ -30,7 +31,9 @@ func setupServer(authDB *pgxpool.Pool, ctx context.Context, moviesDB *pgxpool.Po
 	}()
 	userService := auth.NewUserService(auth.NewUserRepository(authDB, dbStatus), tokenIssuer)
 	movieService := movies.NewMovieService(movieRepository)
-	server := httpapi.NewServer(dbStatus, userService, movieService)
+	listRepository := recommendations.NewListRepository(recommendationsDB, dbStatus)
+	listService := recommendations.NewListService(listRepository, movieRepository)
+	server := httpapi.NewServer(dbStatus, userService, movieService, listService, tokenVerifier)
 	mux := http.NewServeMux()
 	httpapi.RegisterEndpoints(mux, server)
 	handler := httpapi.RequestMetricsMiddleware(httpapi.CorsMiddleware(mux))
@@ -107,12 +110,23 @@ func main() {
 	}
 	defer moviesPool.Close()
 
-	dbStatus := database.NewDBStatus(authPool, moviesPool)
+	recommendationsPool, err := database.SetupPool(databaseContext, "RECOMMENDATIONS_")
+	if err != nil {
+		return
+	}
+	defer recommendationsPool.Close()
+
+	dbStatus := database.NewDBStatus(authPool, moviesPool, recommendationsPool)
 	go dbStatus.Start(databaseContext, 5*time.Second)
 
 	tokenIssuer, err := auth.SetupTokenIssuer()
 	if err != nil {
 		log.Printf("JWT startup failed: %v", err)
+		return
+	}
+	tokenVerifier, err := auth.SetupTokenVerifier()
+	if err != nil {
+		log.Printf("JWT verifier startup failed: %v", err)
 		return
 	}
 
@@ -121,7 +135,7 @@ func main() {
 		return
 	}
 
-	httpServer := setupServer(authPool, databaseContext, moviesPool, tokenIssuer, dbStatus, port)
+	httpServer := setupServer(authPool, databaseContext, moviesPool, recommendationsPool, tokenIssuer, tokenVerifier, dbStatus, port)
 
 	serverErrors := RunServer(authPool, httpServer)
 
