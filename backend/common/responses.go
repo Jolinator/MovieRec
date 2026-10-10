@@ -6,9 +6,11 @@ import (
 )
 
 type HealthResponse struct {
-	Message           string `json:"message"`
-	AuthDBAvailable   bool   `json:"authDBAvailable"`
-	MoviesDBAvailable bool   `json:"moviesDBAvailable"`
+	Message                   string `json:"message"`
+	BackendAvailable           bool   `json:"backendAvailable"`
+	ImportedMoviesAvailable    bool   `json:"importedMoviesAvailable"`
+	AuthDBAvailable           bool   `json:"authDBAvailable"`
+	MoviesDBAvailable         bool   `json:"moviesDBAvailable"`
 }
 
 type LoginResponse struct {

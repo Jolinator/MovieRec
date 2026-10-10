@@ -145,6 +145,10 @@ class DockerManager:
         if "auth-postgres" in self.required_services:
             self.remove_auth()
             self.active_services.discard("auth-postgres")
+            
+        if "backend" in self.required_services:
+            results.append(self.down_services("backend"))
+            self.active_services.discard("backend")
 
         
         to_stop = self.active_services - self.required_services
