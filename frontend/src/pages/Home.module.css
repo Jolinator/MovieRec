@@ -53,24 +53,6 @@
   margin-top: auto;
 }
 
-.chatButton {
-  width: 100%;
-  height: auto;
-  padding: 12px 16px;
-  border: 0;
-  border-radius: 8px;
-  background: #178f8f;
-  color: #fff;
-  cursor: pointer;
-  font: inherit;
-  font-weight: 700;
-  text-align: left;
-}
-
-.chatButton:hover {
-  background: #127575;
-}
-
 .content {
   width: min(100%, 1440px);
   margin: 0 auto;

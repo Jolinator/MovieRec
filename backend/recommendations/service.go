@@ -68,12 +68,14 @@ func (s *Service) Chat(ctx context.Context, message string) (ChatResponse, error
 	}
 	payload, _ := json.Marshal(candidates)
 	answer, err := s.generation.Complete(ctx, `You are a friendly movie recommendation assistant.
-Use only the movies in the supplied JSON.
-Choose exactly three movies that best match the user's request.
-Write a short, natural explanation with one specific reason for each choice, based on its title, synopsis, genre, or tone.
-Do not write a generic heading such as "Recommended movies".
-At the end of each movie's explanation, include its database identifier exactly as [ID:123].
-Never invent an identifier and do not recommend any movie outside the supplied JSON.`, fmt.Sprintf("User request: %s\nMovie database candidates: %s", message, payload))
+Use only the movies in the supplied JSON and choose exactly three.
+Respond using exactly three numbered entries and no introduction or conclusion.
+Use this format for every entry:
+1. Title: exact movie title
+   Reason: one concise, specific sentence explaining why it matches the user's request, based on the supplied synopsis or tone
+   [ID:123]
+Do not use Markdown emphasis, headings, genre labels, database labels, or any other fields.
+Never invent an identifier or recommend a movie outside the supplied JSON.`, fmt.Sprintf("User request: %s\nMovie database candidates: %s", message, payload))
 	if err != nil {
 		return ChatResponse{}, err
 	}
@@ -112,7 +114,7 @@ Never invent an identifier and do not recommend any movie outside the supplied J
 		recommendedMovies = recommendedMovies[:3]
 	}
 	answer = re.ReplaceAllString(answer, "")
-	answer = regexp.MustCompile(`(?im)[ \t]*[-*]?[ \t]*the database identifier for this movie is[ \t]*[.:]?`).ReplaceAllString(answer, "")
+	answer = regexp.MustCompile(`(?im)[ \t]*(?:the )?database (?:id|identifier)(?: for this movie)?[ \t]*:[ \t]*\d*[ \t]*\.?`).ReplaceAllString(answer, "")
 	return ChatResponse{Message: answer, Movies: movieResponses(recommendedMovies)}, nil
 }
 

@@ -56,6 +56,7 @@ export default function MyList({ onHomeClick, onLoginClick, onLogout, username }
       }
 
       await addMovieToList(selectedMovie.tmdbId)
+      setMovies((currentMovies) => [...currentMovies, selectedMovie])
       return true
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Unable to update your list.')

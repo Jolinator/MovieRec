@@ -175,13 +175,11 @@ export default function Home({ onLoginClick, onRequireLogin, onLogout, onHomeCli
       </header>
 
       <Sidebar
-          <button type="button" className={styles.chatButton} onClick={openRecommendations}>
-            Recommendation Chat
-          </button>
         isLoggedIn={Boolean(username)}
         onHomeClick={onHomeClick}
         onMyListClick={onMyListClick}
         onAuthClick={handleAuthAction}
+        onRecommendationClick={openRecommendations}
       />
 
       <main className={styles.content}>

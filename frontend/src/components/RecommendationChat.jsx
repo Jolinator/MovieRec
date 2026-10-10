@@ -7,7 +7,10 @@ function cleanReply(reply) {
   return reply
     .replace(/\*/g, '')
     .replace(/\[ID:\d+\]/g, '')
+    .replace(/(?:the )?database (?:id|identifier)(?: for this movie)?\s*:\s*\d*/gi, '')
     .replace(/\s+([.,])/g, '$1')
+    .replace(/[ \t]+\n/g, '\n')
+    .trim()
 }
 
 export default function RecommendationChat({ onClose }) {
