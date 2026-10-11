@@ -7,7 +7,7 @@ import MovieDetails from '../components/MovieDetails'
 import Sidebar from '../components/Sidebar'
 import RecommendationChat from '../components/RecommendationChat'
 import UserBadge from '../components/UserBadge'
-import { addMovieToList, getGenres, getHealth, getMovies, getMyList, getPersonalizedRecommendations, removeMovieFromList } from '../services/api'
+import { addMovieToList, getGenres, getMovies, getMyList, getPersonalizedRecommendations, removeMovieFromList } from '../services/api'
 import styles from './Home.module.css'
 
 export default function Home({ onLoginClick, onRequireLogin, onLogout, onHomeClick, onMyListClick, onSearchClick, username }) {
@@ -17,7 +17,10 @@ export default function Home({ onLoginClick, onRequireLogin, onLogout, onHomeCli
   const [genres, setGenres] = useState([])
   const [selectedGenreId, setSelectedGenreId] = useState(null)
   const [isLoadingMovies, setIsLoadingMovies] = useState(true)
+  const [moviesLoadFailed, setMoviesLoadFailed] = useState(false)
+  const [movieRetryCount, setMovieRetryCount] = useState(0)
   const [isLoadingMore, setIsLoadingMore] = useState(false)
+  const [loadMoreFailed, setLoadMoreFailed] = useState(false)
   const [hasMoreMovies, setHasMoreMovies] = useState(true)
   const [isLogoutBannerOpen, setIsLogoutBannerOpen] = useState(false)
   const [selectedMovie, setSelectedMovie] = useState(null)
@@ -121,31 +124,38 @@ export default function Home({ onLoginClick, onRequireLogin, onLogout, onHomeCli
     }
   }, [username])
 
-    useEffect(() => {
+  useEffect(() => {
+    let isCurrentRequest = true
     getGenres().then((loadedGenres) => {
-      setGenres(loadedGenres)
-    }).catch((requestError) => {
-      setError(requestError instanceof Error ? requestError.message : 'Unable to load genres.')
+      if (isCurrentRequest) setGenres(loadedGenres)
+    }).catch(() => {
+      // The genre filter is optional; keep movie browsing available without it.
+      if (isCurrentRequest) setGenres([])
     })
+    return () => {
+      isCurrentRequest = false
+    }
   }, [])
 
   useEffect(() => {
     let isCurrentRequest = true
     setIsLoadingMovies(true)
+    setMoviesLoadFailed(false)
+    setLoadMoreFailed(false)
     setMovies([])
     setHasMoreMovies(true)
 
-    Promise.all([getHealth(), getMovies({ limit: pageSize, genreId: selectedGenreId })]).then(([, loadedMovies]) => {
+    getMovies({ limit: pageSize, genreId: selectedGenreId }).then((loadedMovies) => {
       if (!isCurrentRequest) {
         return
       }
       setMovies(loadedMovies)
       setHasMoreMovies(loadedMovies.length === pageSize)
-    }).catch((requestError) => {
+    }).catch(() => {
       if (!isCurrentRequest) {
         return
       }
-      setError(requestError instanceof Error ? requestError.message : 'Unable to reach the backend.')
+      setMoviesLoadFailed(true)
     }).finally(() => {
       if (isCurrentRequest) {
         setIsLoadingMovies(false)
@@ -155,7 +165,7 @@ export default function Home({ onLoginClick, onRequireLogin, onLogout, onHomeCli
     return () => {
       isCurrentRequest = false
     }
-  }, [selectedGenreId])
+  }, [movieRetryCount, selectedGenreId])
 
   const loadMoreMovies = useCallback(async () => {
     if (isLoadingMovies || isLoadingMore || !hasMoreMovies) {
@@ -163,6 +173,7 @@ export default function Home({ onLoginClick, onRequireLogin, onLogout, onHomeCli
     }
 
     setIsLoadingMore(true)
+    setLoadMoreFailed(false)
     try {
       const loadedMovies = await getMovies({
         limit: pageSize,
@@ -171,8 +182,8 @@ export default function Home({ onLoginClick, onRequireLogin, onLogout, onHomeCli
       })
       setMovies((currentMovies) => [...currentMovies, ...loadedMovies])
       setHasMoreMovies(loadedMovies.length === pageSize)
-    } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : 'Unable to load more movies.')
+    } catch {
+      setLoadMoreFailed(true)
     } finally {
       setIsLoadingMore(false)
     }
@@ -238,11 +249,26 @@ export default function Home({ onLoginClick, onRequireLogin, onLogout, onHomeCli
 
         {isLoadingMovies ? (
           <p>Loading movies...</p>
+        ) : moviesLoadFailed ? (
+          <div className={styles.movieLoadError} role="status">
+            <p>Movies are temporarily unavailable. Check your connection and try again.</p>
+            <button
+              type="button"
+              onClick={() => setMovieRetryCount((count) => count + 1)}
+            >
+              Try again
+            </button>
+          </div>
         ) : (
           <>
             <MovieGrid movies={movies} onSelect={setSelectedMovie} />
             <div ref={loadMoreRef} aria-hidden="true" />
             {isLoadingMore && <p>Loading more movies...</p>}
+            {loadMoreFailed && (
+              <p className={styles.movieLoadError} role="status">
+                Could not load more movies. <button type="button" onClick={loadMoreMovies}>Try again</button>
+              </p>
+            )}
           </>
         )}
         {error && <ErrorPopup message={error} onClose={() => setError('')} />}

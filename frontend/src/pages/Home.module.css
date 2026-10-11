@@ -83,3 +83,20 @@
   letter-spacing: .12em;
   text-transform: uppercase;
 }
+
+.movieLoadError {
+  color: var(--muted);
+  text-align: center;
+}
+
+.movieLoadError button {
+  margin-left: 8px;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--mauve);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+}

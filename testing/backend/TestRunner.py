@@ -10,7 +10,7 @@ from urllib.parse import urljoin
 
 import requests
 
-from DockerManager import DockerManager
+from DockerManager import DATABASE_STATUS_KEYS, DockerManager
 
 
 TESTS_DIR = Path(__file__).resolve().parent / "tests"
@@ -298,6 +298,7 @@ class BackendTest:
     setup_error: str | None = None
     docker_duration: float = 0.0
     duration: float = 0.0
+    defiled_dbs: list[str] = field(default_factory=list)
 
     @classmethod
     def from_file(cls, path: Path, docker_manager: DockerManager) -> "BackendTest":
@@ -305,28 +306,40 @@ class BackendTest:
             config: dict[str, Any] = json.load(test_file)
 
         services = config.get("services")
+        defiled_dbs = config.get("defiled_dbs", [])
         requests_config = config.get("requests")
-        wait_for_recommendations = config.get("wait_for_recommendations", False)
         if not isinstance(services, list) or not all(
             isinstance(service, str) for service in services
         ):
             raise ValueError(f"{path.name} must define a list of service names.")
+        if not isinstance(defiled_dbs, list) or not all(
+            isinstance(database, str) and database in DATABASE_STATUS_KEYS
+            for database in defiled_dbs
+        ):
+            raise ValueError(
+                f"{path.name} must define 'defiled_dbs' as a list of supported database service names."
+            )
+        if not set(defiled_dbs).issubset(services):
+            raise ValueError(
+                f"{path.name} can only defile databases listed in 'services'."
+            )
         if (
             not isinstance(requests_config, list)
             or not requests_config
             or not all(isinstance(request, dict) for request in requests_config)
         ):
             raise ValueError(f"{path.name} must define at least one request.")
-        if not isinstance(wait_for_recommendations, bool):
-            raise ValueError("'wait_for_recommendations' must be a boolean.")
-
         requests_to_run = [
             TestRequest.from_config(request_config)
             for request_config in requests_config
         ]
-        test = cls(path, services, requests_to_run, docker_manager)
-        test.wait_for_recommendations = wait_for_recommendations
-        return test
+        return cls(
+            path,
+            services,
+            requests_to_run,
+            docker_manager,
+            defiled_dbs=defiled_dbs,
+        )
 
     @property
     def success(self) -> bool:
@@ -350,10 +363,13 @@ class BackendTest:
             for result in results:
                 logger.info("Docker command:%s", result.args)
             logger.info("Services are ready for %s", self.path.stem)
-            if getattr(self, "wait_for_recommendations", False):
-                logger.info("Waiting for recommendation service readiness")
-                self.docker_manager.wait_for_recommendations()
-                logger.info("Recommendation service is ready")
+            for database in self.defiled_dbs:
+                if database == "auth-postgres":
+                    self.docker_manager.defile_auth()
+                elif database == "movies-postgres":
+                    self.docker_manager.defile_movies()
+                elif database == "recommendations-postgres":
+                    self.docker_manager.defile_recommendations()
             test_started_at = time.perf_counter()
             with requests.Session() as session:
                 for request in self.requests:

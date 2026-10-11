@@ -12,6 +12,7 @@ type HealthResponse struct {
 	AuthDBAvailable            bool   `json:"authDBAvailable"`
 	MoviesDBAvailable          bool   `json:"moviesDBAvailable"`
 	RecommendationsDBAvailable bool   `json:"recommendationsDBAvailable"`
+	RecommendationsReady       bool   `json:"recommendationsReady"`
 }
 
 type RecommendationReadyResponse struct {

@@ -30,6 +30,19 @@ resource "google_compute_address" "movierec" {
   depends_on = [google_project_service.required]
 }
 
+locals {
+  # Use the shared local ports file, or the committed GCP example in a clean checkout.
+  ports_env_contents = try(
+    file("${path.module}/../../../secrets/ports.env"),
+    file("${path.module}/../secrets-examples/ports.env.example"),
+  )
+  ports_env = {
+    for line in split("\n", trimspace(local.ports_env_contents)) :
+    trimspace(split("=", line)[0]) => tonumber(trimspace(split("=", line)[1]))
+    if length(split("=", line)) == 2
+  }
+}
+
 resource "google_service_account" "node" {
   account_id   = "${var.name}-node"
   display_name = "MovieRec Kubernetes VM"
@@ -41,7 +54,7 @@ resource "google_compute_firewall" "web" {
   network = google_compute_network.movierec.name
   allow {
     protocol = "tcp"
-    ports    = ["443"]
+    ports    = [tostring(local.ports_env["GCP_HTTPS_PORT"])]
   }
   source_ranges = ["0.0.0.0/0"]
   target_tags   = ["${var.name}-node"]
@@ -52,7 +65,7 @@ resource "google_compute_firewall" "admin" {
   network = google_compute_network.movierec.name
   allow {
     protocol = "tcp"
-    ports    = ["22"]
+    ports    = [tostring(local.ports_env["GCP_SSH_PORT"])]
   }
   source_ranges = ["35.235.240.0/20"]
   target_tags   = ["${var.name}-node"]

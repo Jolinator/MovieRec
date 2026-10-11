@@ -2,9 +2,13 @@
     "services": [
         "backend",
         "auth-postgres",
-        "movies-postgres"
+        "movies-postgres",
+        "llama-embedding",
+        "llama-generation"
     ],
-    "wait_for_recommendations": true,
+    "defiled_dbs": [
+        "auth-postgres"
+    ],
     "requests": [
         {
             "method": "POST",

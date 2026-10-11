@@ -16,7 +16,8 @@
                 "importedMoviesAvailable": true,
                 "authDBAvailable": true,
                 "moviesDBAvailable": true,
-                "recommendationsDBAvailable": false
+                "recommendationsDBAvailable": false,
+                "recommendationsReady": false
             }
         },
         {

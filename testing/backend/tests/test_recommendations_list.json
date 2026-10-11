@@ -5,6 +5,10 @@
         "movies-postgres",
         "recommendations-postgres"
     ],
+    "defiled_dbs": [
+        "auth-postgres",
+        "recommendations-postgres"
+    ],
     "requests": [
         {
             "method": "POST",

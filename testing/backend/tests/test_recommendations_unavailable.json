@@ -1,0 +1,59 @@
+{
+    "services": [
+        "backend",
+        "auth-postgres",
+        "movies-postgres"
+    ],
+    "defiled_dbs": [
+        "auth-postgres"
+    ],
+    "requests": [
+        {
+            "method": "POST",
+            "url": "/movieAPI/signup",
+            "body": {
+                "userName": "recommendations-db-unavailable-user",
+                "password": "StrongPassword123!"
+            },
+            "expected_status": 201,
+            "expected_response": {
+                "success": true
+            },
+            "expected_response_subset": true
+        },
+        {
+            "method": "POST",
+            "url": "/movieAPI/login",
+            "body": {
+                "userName": "recommendations-db-unavailable-user",
+                "password": "StrongPassword123!"
+            },
+            "expected_status": 200,
+            "expected_response": {
+                "loggedIn": true
+            },
+            "expected_response_subset": true,
+            "expected_cookies": {
+                "access_token": true
+            }
+        },
+        {
+            "method": "GET",
+            "url": "/movieAPI/recommendations",
+            "expected_status": 503,
+            "expected_response": "recommendations database unavailable\n"
+        },
+        {
+            "method": "GET",
+            "url": "/movieAPI/health",
+            "expected_status": 200,
+            "expected_response": {
+                "backendAvailable": true,
+                "authDBAvailable": true,
+                "moviesDBAvailable": true,
+                "recommendationsDBAvailable": false
+            },
+            "expected_response_subset": true
+        }
+    ]
+}

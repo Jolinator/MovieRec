@@ -138,13 +138,24 @@ func redirectToMovieAPI(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) healthHandler(w http.ResponseWriter, r *http.Request) {
+	s.dbStatus.Scan(r.Context())
+
 	auth_available := s.dbStatus.AuthAvailable()
 	movies_db_available := s.dbStatus.MoviesAvailable()
 	recommendations_available := s.dbStatus.RecommendationsAvailable()
 	imported_movies_available := s.dbStatus.ImportedMoviesAvailable()
 	backend_available := true
+	recommendations_ready := s.recommendationService.Ready()
 
-	response := common.HealthResponse{Message: "API is healthy!", BackendAvailable: backend_available, ImportedMoviesAvailable: imported_movies_available, AuthDBAvailable: auth_available, MoviesDBAvailable: movies_db_available, RecommendationsDBAvailable: recommendations_available}
+	response := common.HealthResponse{
+		Message:                    "API is healthy!",
+		BackendAvailable:           backend_available,
+		ImportedMoviesAvailable:    imported_movies_available,
+		AuthDBAvailable:            auth_available,
+		MoviesDBAvailable:          movies_db_available,
+		RecommendationsDBAvailable: recommendations_available,
+		RecommendationsReady:       recommendations_ready,
+	}
 	common.WriteJSON(w, response)
 }
 

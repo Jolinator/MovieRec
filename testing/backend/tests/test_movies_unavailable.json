@@ -1,0 +1,31 @@
+{
+    "services": [
+        "backend",
+        "auth-postgres"
+    ],
+    "requests": [
+        {
+            "method": "GET",
+            "url": "/movieAPI/movies?limit=1",
+            "expected_status": 503,
+            "expected_response": "movies database unavailable\n"
+        },
+        {
+            "method": "GET",
+            "url": "/movieAPI/genres",
+            "expected_status": 503,
+            "expected_response": "movies database unavailable\n"
+        },
+        {
+            "method": "GET",
+            "url": "/movieAPI/health",
+            "expected_status": 200,
+            "expected_response": {
+                "backendAvailable": true,
+                "authDBAvailable": true,
+                "moviesDBAvailable": false
+            },
+            "expected_response_subset": true
+        }
+    ]
+}

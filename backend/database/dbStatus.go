@@ -13,6 +13,7 @@ type DBStatus struct {
 	moviesDB          *pgxpool.Pool
 	recommendationsDB *pgxpool.Pool
 
+	scanMu                   sync.Mutex
 	mu                       sync.RWMutex
 	authDbAvailable          bool
 	moviesDbAvailable        bool
@@ -29,7 +30,7 @@ func (s *DBStatus) Start(ctx context.Context, interval time.Duration) {
 		interval = 5 * time.Second
 	}
 
-	s.check(ctx)
+	s.Scan(ctx)
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
@@ -38,34 +39,49 @@ func (s *DBStatus) Start(ctx context.Context, interval time.Duration) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			s.check(ctx)
+			s.Scan(ctx)
 		}
 	}
 }
 
-func (s *DBStatus) check(ctx context.Context) {
+func (s *DBStatus) Scan(ctx context.Context) {
+	s.scanMu.Lock()
+	defer s.scanMu.Unlock()
+	if ctx.Err() != nil {
+		return
+	}
+
 	var authErr, moviesErr, recommendationsErr error
 	var checks sync.WaitGroup
 	checks.Add(3)
 	go func() {
 		defer checks.Done()
-		authErr = PingWithRetry(ctx, s.authDB, 2, 500*time.Millisecond)
+		authErr = s.ping(ctx, s.authDB)
 	}()
 	go func() {
 		defer checks.Done()
-		moviesErr = PingWithRetry(ctx, s.moviesDB, 2, 500*time.Millisecond)
+		moviesErr = s.ping(ctx, s.moviesDB)
 	}()
 	go func() {
 		defer checks.Done()
-		recommendationsErr = PingWithRetry(ctx, s.recommendationsDB, 2, 500*time.Millisecond)
+		recommendationsErr = s.ping(ctx, s.recommendationsDB)
 	}()
 	checks.Wait()
+	if ctx.Err() != nil {
+		return
+	}
 
 	s.mu.Lock()
 	s.authDbAvailable = authErr == nil
 	s.moviesDbAvailable = moviesErr == nil
 	s.recommendationsAvailable = recommendationsErr == nil
 	s.mu.Unlock()
+}
+
+func (s *DBStatus) ping(ctx context.Context, pool *pgxpool.Pool) error {
+	pingContext, cancel := context.WithTimeout(ctx, time.Second)
+	defer cancel()
+	return pool.Ping(pingContext)
 }
 
 func (s *DBStatus) SetImportedMoviesAvailable(available bool) {
