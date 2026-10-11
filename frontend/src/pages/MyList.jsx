@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import ErrorPopup from '../components/ErrorPopup'
+import LogoutBanner from '../components/LogoutBanner'
 import MovieDetails from '../components/MovieDetails'
 import MovieGrid from '../components/MovieGrid'
 import Sidebar from '../components/Sidebar'
@@ -7,7 +8,7 @@ import UserBadge from '../components/UserBadge'
 import { addMovieToList, getMyList, removeMovieFromList } from '../services/api'
 import styles from './Home.module.css'
 
-export default function MyList({ onHomeClick, onLoginClick, onLogout, username }) {
+export default function MyList({ onHomeClick, onLoginClick, onLogout, onSearchClick, username }) {
   const [movies, setMovies] = useState([])
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(true)
@@ -79,6 +80,7 @@ export default function MyList({ onHomeClick, onLoginClick, onLogout, username }
         isLoggedIn={Boolean(username)}
         onHomeClick={onHomeClick}
         onMyListClick={() => {}}
+        onSearchClick={onSearchClick}
         onAuthClick={() => {
           if (username) {
             setIsLogoutBannerOpen(true)
@@ -96,6 +98,12 @@ export default function MyList({ onHomeClick, onLoginClick, onLogout, username }
 
         {isLoading ? <p>Loading your list...</p> : <MovieGrid movies={movies} onSelect={setSelectedMovie} />}
         {error && <ErrorPopup message={error} onClose={() => setError('')} />}
+        {isLogoutBannerOpen && (
+          <LogoutBanner
+            onCancel={() => setIsLogoutBannerOpen(false)}
+            onConfirm={confirmLogout}
+          />
+        )}
         {selectedMovie && (
           <MovieDetails
             movie={selectedMovie}

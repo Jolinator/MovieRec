@@ -2,7 +2,7 @@ import React from 'react'
 import LoginButton from './LoginButton'
 import styles from './Sidebar.module.css'
 
-export default function Sidebar({ isLoggedIn, onAuthClick, onHomeClick, onMyListClick, onRecommendationClick }) {
+export default function Sidebar({ isLoggedIn, onAuthClick, onHomeClick, onMyListClick, onRecommendationClick, onSearchClick }) {
   return (
     <aside className={styles.sidebar} aria-label="Services">
       <nav className={styles.services}>
@@ -16,6 +16,11 @@ export default function Sidebar({ isLoggedIn, onAuthClick, onHomeClick, onMyList
           {onRecommendationClick && (
             <button type="button" className={styles.item} onClick={onRecommendationClick}>
               Recommendation Chat
+            </button>
+          )}
+          {onSearchClick && (
+            <button type="button" className={styles.item} onClick={onSearchClick}>
+              Search Users
             </button>
           )}
         </div>

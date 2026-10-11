@@ -23,6 +23,10 @@ func NewListRepository(db *pgxpool.Pool, dbStatus *database.DBStatus) *ListRepos
 }
 
 func (r *ListRepository) List(ctx context.Context, userID uuid.UUID) ([]int, error) {
+	return r.ListByUserID(ctx, userID)
+}
+
+func (r *ListRepository) ListByUserID(ctx context.Context, userID uuid.UUID) ([]int, error) {
 	if !r.dbStatus.RecommendationsAvailable() {
 		return nil, common.ErrRecommendationsDatabaseUnavailable
 	}

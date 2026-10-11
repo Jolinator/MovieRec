@@ -15,6 +15,22 @@ type UserService struct {
 	tokenIssuer *TokenIssuer
 }
 
+func (s *UserService) SearchUsers(ctx context.Context, query string, limit int) ([]User, error) {
+	query = strings.TrimSpace(query)
+	if query == "" {
+		return []User{}, nil
+	}
+	if limit < 1 {
+		return nil, fmt.Errorf("user search limit must be positive")
+	}
+
+	users, err := s.repository.SearchByUsername(ctx, query, limit)
+	if err != nil {
+		return nil, fmt.Errorf("search users: %w", err)
+	}
+	return users, nil
+}
+
 func NewUserService(repository *UserRepository, tokenIssuer *TokenIssuer) *UserService {
 	return &UserService{repository: repository, tokenIssuer: tokenIssuer}
 }

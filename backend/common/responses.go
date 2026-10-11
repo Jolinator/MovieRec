@@ -28,6 +28,11 @@ type SignUpResponse struct {
 	UserID  string `json:"userId,omitempty"`
 }
 
+type UserResponse struct {
+	ID       string `json:"id"`
+	Username string `json:"username"`
+}
+
 type MovieResponse struct {
 	TMDBID        int     `json:"tmdbId"`
 	Title         string  `json:"title"`

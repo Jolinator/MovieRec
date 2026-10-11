@@ -4,7 +4,14 @@ import styles from './MovieDetails.module.css'
 
 const IMAGE_BASE_URL = 'https://image.tmdb.org/t/p/w780'
 
-export default function MovieDetails({ movie, onClose, onToggleList, isAddingToList, isInList }) {
+export default function MovieDetails({
+  movie,
+  onClose,
+  onToggleList,
+  isAddingToList = false,
+  isInList = false,
+  showListActions = true,
+}) {
   const [confirmationType, setConfirmationType] = useState('')
 
   useEffect(() => {
@@ -53,16 +60,18 @@ export default function MovieDetails({ movie, onClose, onToggleList, isAddingToL
               Release date: {movie.releaseDate || 'Unknown'}
             </p>
             <p className={styles.synopsis}>{movie.synopsis || 'No synopsis available.'}</p>
-            <button
-              type="button"
-              className={styles.addToList}
-              onClick={handleAddToList}
-              disabled={isAddingToList}
-              aria-label={isInList ? `Remove ${movie.title} from My List` : `Add ${movie.title} to My List`}
-              title={isInList ? 'Remove from My List' : 'Add to My List'}
-            >
-              {isInList ? '−' : '+'}
-            </button>
+            {showListActions && onToggleList && (
+              <button
+                type="button"
+                className={styles.addToList}
+                onClick={handleAddToList}
+                disabled={isAddingToList}
+                aria-label={isInList ? `Remove ${movie.title} from My List` : `Add ${movie.title} to My List`}
+                title={isInList ? 'Remove from My List' : 'Add to My List'}
+              >
+                {isInList ? '−' : '+'}
+              </button>
+            )}
           </div>
         </section>
       </div>

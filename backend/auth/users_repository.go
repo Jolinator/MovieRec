@@ -90,6 +90,38 @@ func (r *UserRepository) FindByUsername(ctx context.Context, username string) (U
 	return credentials, nil
 }
 
+func (r *UserRepository) SearchByUsername(ctx context.Context, query string, limit int) ([]User, error) {
+	if !r.dbStatus.AuthAvailable() {
+		return nil, common.ErrAuthDatabaseUnavailable
+	}
+
+	rows, err := r.db.Query(ctx, `
+		SELECT id, username, created_at
+		FROM users
+		WHERE username ILIKE '%' || $1 || '%'
+		ORDER BY username
+		LIMIT $2
+	`, query, limit)
+	if err != nil {
+		return nil, fmt.Errorf("%w: search users: %v", common.ErrUserPersistence, err)
+	}
+	defer rows.Close()
+
+	users := make([]User, 0)
+	for rows.Next() {
+		var user User
+		if err := rows.Scan(&user.ID, &user.Username, &user.CreatedAt); err != nil {
+			return nil, fmt.Errorf("%w: scan searched user: %v", common.ErrUserPersistence, err)
+		}
+		users = append(users, user)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("%w: iterate searched users: %v", common.ErrUserPersistence, err)
+	}
+
+	return users, nil
+}
+
 func isUniqueViolation(err error) bool {
 	var pgError *pgconn.PgError
 	return errors.As(err, &pgError) && pgError.Code == "23505"

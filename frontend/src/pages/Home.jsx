@@ -10,7 +10,7 @@ import UserBadge from '../components/UserBadge'
 import { addMovieToList, getGenres, getHealth, getMovies, getMyList, removeMovieFromList } from '../services/api'
 import styles from './Home.module.css'
 
-export default function Home({ onLoginClick, onRequireLogin, onLogout, onHomeClick, onMyListClick, username }) {
+export default function Home({ onLoginClick, onRequireLogin, onLogout, onHomeClick, onMyListClick, onSearchClick, username }) {
   const pageSize = 99
   const [error, setError] = useState('')
   const [movies, setMovies] = useState([])
@@ -178,6 +178,7 @@ export default function Home({ onLoginClick, onRequireLogin, onLogout, onHomeCli
         isLoggedIn={Boolean(username)}
         onHomeClick={onHomeClick}
         onMyListClick={onMyListClick}
+        onSearchClick={onSearchClick}
         onAuthClick={handleAuthAction}
         onRecommendationClick={openRecommendations}
       />

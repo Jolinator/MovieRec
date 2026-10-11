@@ -49,3 +49,14 @@ func writeLoginError(w http.ResponseWriter, err error) {
 		http.Error(w, "could not log in", http.StatusInternalServerError)
 	}
 }
+
+func writeUserSearchError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, common.ErrAuthDatabaseUnavailable):
+		http.Error(w, common.ErrAuthDatabaseUnavailable.Error(), http.StatusServiceUnavailable)
+	case errors.Is(err, common.ErrUserPersistence):
+		http.Error(w, common.ErrUserPersistence.Error(), http.StatusServiceUnavailable)
+	default:
+		http.Error(w, "could not search users", http.StatusInternalServerError)
+	}
+}
