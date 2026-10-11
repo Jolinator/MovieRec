@@ -1,7 +1,7 @@
 {
-  "uid": "moviehub-api",
-  "title": "MovieHub API",
-  "tags": ["moviehub", "api"],
+  "uid": "movierec-api",
+  "title": "MovieRec API",
+  "tags": ["movierec", "api"],
   "timezone": "browser",
   "schemaVersion": 39,
   "version": 1,

@@ -37,14 +37,24 @@ ehthumbs.db
 Thumbs.db
 
 #SPECIFIC PROJECT#
+/TODO.md
 
-secrets/
+
+# Local secrets and cluster credentials
+/secrets/
+/kubeconfig
 *.env
-.env.example
+
+# Python and generated reports
 __pycache__/
 testing/backend/reports/
 
-package-lock.json
+# Terraform local state and variables
+**/.terraform/
+*.tfstate
+*.tfstate.*
+/deploy/gcp/terraform/terraform.tfvars
+crash.log
 
 # Frontend dependencies and build output
 frontend/node_modules/
