@@ -123,3 +123,11 @@ func MovieResponse(movie Movie) common.MovieResponse {
 		BackdropPath:  movie.BackdropPath,
 	}
 }
+
+func MovieResponses(input []Movie) []common.MovieResponse {
+	response := make([]common.MovieResponse, 0, len(input))
+	for _, movie := range input {
+		response = append(response, MovieResponse(movie))
+	}
+	return response
+}

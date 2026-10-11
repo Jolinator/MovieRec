@@ -303,3 +303,94 @@ func (r *MovieRepository) SearchSimilar(ctx context.Context, vector []float32, l
 	}
 	return result, rows.Err()
 }
+
+func (r *MovieRepository) RecommendationProfile(ctx context.Context, tmdbIDs []int) ([]float32, error) {
+	if !r.db_status.MoviesAvailable() {
+		return nil, common.ErrMoviesDatabaseUnavailable
+	}
+	if len(tmdbIDs) == 0 {
+		return nil, nil
+	}
+	rows, err := r.db.Query(ctx, `
+		SELECT synopsis_embedding::text
+		FROM movies
+		WHERE tmdb_id = ANY($1) AND synopsis_embedding IS NOT NULL`, tmdbIDs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var profile []float32
+	count := 0
+	for rows.Next() {
+		var literal string
+		if err := rows.Scan(&literal); err != nil {
+			return nil, err
+		}
+		vector, err := parseVectorLiteral(literal)
+		if err != nil {
+			return nil, err
+		}
+		if profile == nil {
+			profile = make([]float32, len(vector))
+		}
+		if len(profile) != len(vector) {
+			return nil, fmt.Errorf("inconsistent embedding dimensions")
+		}
+		for i, value := range vector {
+			profile[i] += value
+		}
+		count++
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if count == 0 {
+		return nil, nil
+	}
+	for i := range profile {
+		profile[i] /= float32(count)
+	}
+	return profile, nil
+}
+
+func (r *MovieRepository) SearchSimilarExcluding(ctx context.Context, vector []float32, excluded []int, limit int) ([]Movie, error) {
+	if !r.db_status.MoviesAvailable() {
+		return nil, common.ErrMoviesDatabaseUnavailable
+	}
+	rows, err := r.db.Query(ctx, `
+		SELECT tmdb_id, title, release_date, average_rating, poster_path, synopsis, backdrop_path
+		FROM movies
+		WHERE synopsis_embedding IS NOT NULL AND NOT (tmdb_id = ANY($2))
+		ORDER BY synopsis_embedding <=> $1::vector LIMIT $3`,
+		vectorLiteral(vector), excluded, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	result := make([]Movie, 0, limit)
+	for rows.Next() {
+		var movie Movie
+		if err := rows.Scan(&movie.TMDBID, &movie.Title, &movie.ReleaseDate, &movie.AverageRating, &movie.PosterPath, &movie.Synopsis, &movie.BackdropPath); err != nil {
+			return nil, err
+		}
+		result = append(result, movie)
+	}
+	return result, rows.Err()
+}
+
+func parseVectorLiteral(literal string) ([]float32, error) {
+	literal = strings.Trim(strings.TrimSpace(literal), "[]")
+	if literal == "" {
+		return []float32{}, nil
+	}
+	parts := strings.Split(literal, ",")
+	vector := make([]float32, len(parts))
+	for i, part := range parts {
+		var value float32
+		if _, err := fmt.Sscanf(strings.TrimSpace(part), "%f", &value); err != nil {
+			return nil, fmt.Errorf("parse embedding value: %w", err)
+		}
+		vector[i] = value
+	}
+	return vector, nil
+}

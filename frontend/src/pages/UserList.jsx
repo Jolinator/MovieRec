@@ -4,6 +4,7 @@ import LogoutBanner from '../components/LogoutBanner'
 import MovieDetails from '../components/MovieDetails'
 import MovieGrid from '../components/MovieGrid'
 import Sidebar from '../components/Sidebar'
+import RecommendationChat from '../components/RecommendationChat'
 import UserBadge from '../components/UserBadge'
 import {
   addMovieToList,
@@ -21,6 +22,7 @@ export default function UserList({ user, onHomeClick, onMyListClick, onSearchCli
   const [selectedMovie, setSelectedMovie] = useState(null)
   const [myListMovieIds, setMyListMovieIds] = useState(() => new Set())
   const [isUpdatingList, setIsUpdatingList] = useState(false)
+  const [isChatOpen, setIsChatOpen] = useState(false)
 
   useEffect(() => {
     let isCurrentRequest = true
@@ -91,6 +93,7 @@ export default function UserList({ user, onHomeClick, onMyListClick, onSearchCli
         onHomeClick={onHomeClick}
         onMyListClick={onMyListClick}
         onSearchClick={onSearchClick}
+        onRecommendationClick={() => setIsChatOpen(true)}
         onAuthClick={() => username ? setIsLogoutBannerOpen(true) : onLoginClick()}
       />
       <main className={styles.content}>
@@ -114,6 +117,7 @@ export default function UserList({ user, onHomeClick, onMyListClick, onSearchCli
             showListActions={Boolean(username)}
           />
         )}
+        {isChatOpen && <RecommendationChat onClose={() => setIsChatOpen(false)} />}
       </main>
     </div>
   )

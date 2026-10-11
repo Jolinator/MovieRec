@@ -48,8 +48,10 @@ func RegisterEndpoints(mux *http.ServeMux, server *Server) {
 	mux.Handle("DELETE /movieAPI/my-list/{tmdbId}", AuthenticationMiddleware(server.tokenVerifier)(http.HandlerFunc(server.removeFromListHandler)))
 	mux.HandleFunc("POST /movieAPI/login", server.loginHandler)
 	mux.HandleFunc("POST /movieAPI/logout", server.logoutHandler)
+	mux.Handle("GET /movieAPI/session", AuthenticationMiddleware(server.tokenVerifier)(http.HandlerFunc(server.sessionHandler)))
 	mux.HandleFunc("POST /movieAPI/signup", server.signUpHandler)
 	mux.Handle("POST /movieAPI/recommendations/chat", AuthenticationMiddleware(server.tokenVerifier)(http.HandlerFunc(server.recommendationChatHandler)))
+	mux.Handle("GET /movieAPI/recommendations", AuthenticationMiddleware(server.tokenVerifier)(http.HandlerFunc(server.personalizedRecommendationsHandler)))
 	mux.HandleFunc("GET /movieAPI/recommendations/ready", server.recommendationReadyHandler)
 	mux.HandleFunc("/", redirectToMovieAPI)
 }
@@ -63,6 +65,7 @@ func (s *Server) recommendationChatHandler(w http.ResponseWriter, r *http.Reques
 	if !ok {
 		return
 	}
+
 	response, err := s.recommendationService.Chat(r.Context(), request.Message)
 	if err != nil {
 		if errors.Is(err, common.ErrRecommendationsUnavailable) ||
@@ -72,6 +75,25 @@ func (s *Server) recommendationChatHandler(w http.ResponseWriter, r *http.Reques
 			return
 		}
 		http.Error(w, "could not generate recommendations", http.StatusBadGateway)
+		return
+	}
+	common.WriteJSON(w, response)
+}
+
+func (s *Server) personalizedRecommendationsHandler(w http.ResponseWriter, r *http.Request) {
+	userID, ok := auth.UserIDFromContext(r.Context())
+	if !ok {
+		http.Error(w, common.ErrInvalidToken.Error(), http.StatusUnauthorized)
+		return
+	}
+	response, err := s.recommendationService.Recommendations(r.Context(), userID)
+	if err != nil {
+		if errors.Is(err, common.ErrRecommendationsDatabaseUnavailable) ||
+			errors.Is(err, common.ErrMoviesDatabaseUnavailable) {
+			http.Error(w, err.Error(), http.StatusServiceUnavailable)
+			return
+		}
+		http.Error(w, "could not load recommendations", http.StatusInternalServerError)
 		return
 	}
 	common.WriteJSON(w, response)
@@ -140,10 +162,40 @@ func (s *Server) loginHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	auth.SetAccessTokenCookie(w, token)
+	s.recommendationService.EnsureFresh(r.Context(), user.ID)
 	common.WriteJSON(w, common.LoginResponse{LoggedIn: true, UserID: user.ID.String()})
 }
 
+func (s *Server) sessionHandler(w http.ResponseWriter, r *http.Request) {
+	userID, ok := auth.UserIDFromContext(r.Context())
+	if !ok {
+		http.Error(w, "authentication required", http.StatusUnauthorized)
+		return
+	}
+	user, err := s.userService.FindByID(r.Context(), userID)
+	if err != nil {
+		if errors.Is(err, common.ErrUserNotFound) {
+			http.Error(w, "authentication required", http.StatusUnauthorized)
+			return
+		}
+		http.Error(w, "could not load session", http.StatusInternalServerError)
+		return
+	}
+	common.WriteJSON(w, common.SessionResponse{
+		LoggedIn: true,
+		UserID:   user.ID.String(),
+		Username: user.Username,
+	})
+}
+
 func (s *Server) logoutHandler(w http.ResponseWriter, r *http.Request) {
+	if userID, ok := auth.UserIDFromContext(r.Context()); ok {
+		s.recommendationService.RequestRefresh(r.Context(), userID)
+	} else if cookie, err := r.Cookie("access_token"); err == nil {
+		if userID, err := s.tokenVerifier.Verify(cookie.Value); err == nil {
+			s.recommendationService.RequestRefresh(r.Context(), userID)
+		}
+	}
 	auth.ClearAccessTokenCookie(w)
 	common.WriteJSON(w, map[string]bool{"success": true})
 }

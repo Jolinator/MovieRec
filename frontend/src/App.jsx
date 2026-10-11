@@ -1,16 +1,39 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import Home from './pages/Home'
 import Login from './pages/Login'
 import MyList from './pages/MyList'
 import UserList from './pages/UserList'
 import UserSearch from './pages/UserSearch'
-import { logout } from './services/api'
+import { getSession, logout } from './services/api'
 
 export default function App() {
   const [page, setPage] = useState('home')
   const [username, setUsername] = useState('')
   const [loginNotice, setLoginNotice] = useState('')
   const [selectedUser, setSelectedUser] = useState(null)
+  const [isSessionLoading, setIsSessionLoading] = useState(true)
+
+  useEffect(() => {
+    let isCurrent = true
+    getSession().then((session) => {
+      if (isCurrent && session?.loggedIn === true) {
+        setUsername(session.username)
+      }
+    }).catch(() => {
+      // An unauthenticated session is the normal initial state.
+    }).finally(() => {
+      if (isCurrent) {
+        setIsSessionLoading(false)
+      }
+    })
+    return () => {
+      isCurrent = false
+    }
+  }, [])
+
+  if (isSessionLoading) {
+    return null
+  }
 
   if (page === 'login') {
     return (

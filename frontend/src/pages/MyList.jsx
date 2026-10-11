@@ -3,6 +3,7 @@ import ErrorPopup from '../components/ErrorPopup'
 import LogoutBanner from '../components/LogoutBanner'
 import MovieDetails from '../components/MovieDetails'
 import MovieGrid from '../components/MovieGrid'
+import RecommendationChat from '../components/RecommendationChat'
 import Sidebar from '../components/Sidebar'
 import UserBadge from '../components/UserBadge'
 import { addMovieToList, getMyList, removeMovieFromList } from '../services/api'
@@ -15,6 +16,11 @@ export default function MyList({ onHomeClick, onLoginClick, onLogout, onSearchCl
   const [isLogoutBannerOpen, setIsLogoutBannerOpen] = useState(false)
   const [selectedMovie, setSelectedMovie] = useState(null)
   const [isAddingToList, setIsAddingToList] = useState(false)
+  const [isChatOpen, setIsChatOpen] = useState(false)
+
+  function openRecommendations() {
+    setIsChatOpen(true)
+  }
 
   useEffect(() => {
     let isCurrentRequest = true
@@ -81,6 +87,7 @@ export default function MyList({ onHomeClick, onLoginClick, onLogout, onSearchCl
         onHomeClick={onHomeClick}
         onMyListClick={() => {}}
         onSearchClick={onSearchClick}
+        onRecommendationClick={openRecommendations}
         onAuthClick={() => {
           if (username) {
             setIsLogoutBannerOpen(true)
@@ -113,6 +120,7 @@ export default function MyList({ onHomeClick, onLoginClick, onLogout, onSearchCl
             isInList={movies.some((movie) => movie.tmdbId === selectedMovie.tmdbId)}
           />
         )}
+        {isChatOpen && <RecommendationChat onClose={() => setIsChatOpen(false)} />}
       </main>
     </div>
   )

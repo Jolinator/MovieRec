@@ -18,6 +18,22 @@ type RecommendationReadyResponse struct {
 	Ready bool `json:"ready"`
 }
 
+type ChatResponse struct {
+	Message string          `json:"message"`
+	Movies  []MovieResponse `json:"movies"`
+}
+
+type PersonalizedRecommendationsResponse struct {
+	Status string          `json:"status"`
+	Movies []MovieResponse `json:"movies"`
+}
+
+type SessionResponse struct {
+	LoggedIn bool   `json:"loggedIn"`
+	UserID   string `json:"userId,omitempty"`
+	Username string `json:"username,omitempty"`
+}
+
 type LoginResponse struct {
 	LoggedIn bool   `json:"loggedIn"`
 	UserID   string `json:"userId,omitempty"`

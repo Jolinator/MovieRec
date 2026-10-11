@@ -2,19 +2,25 @@ import React, { useState } from 'react'
 import ErrorPopup from '../components/ErrorPopup'
 import LogoutBanner from '../components/LogoutBanner'
 import Sidebar from '../components/Sidebar'
+import RecommendationChat from '../components/RecommendationChat'
 import UserBadge from '../components/UserBadge'
 import UserSearchBar from '../components/UserSearchBar'
 import UserSearchResult from '../components/UserSearchResult'
 import { searchUsers } from '../services/api'
 import styles from './Home.module.css'
 
-export default function UserSearch({ onHomeClick, onMyListClick, onSearchClick, onLoginClick, onLogout, onUserSelect, username }) {
+export default function UserSearch({ onHomeClick, onMyListClick, onSearchClick, onLoginClick, onLogout, onUserSelect, onRecommendationClick, username }) {
   const [query, setQuery] = useState('')
   const [users, setUsers] = useState([])
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [isLogoutBannerOpen, setIsLogoutBannerOpen] = useState(false)
   const [hasSearched, setHasSearched] = useState(false)
+  const [isChatOpen, setIsChatOpen] = useState(false)
+
+  function openRecommendations() {
+    setIsChatOpen(true)
+  }
 
   async function handleSearch(event) {
     event.preventDefault()
@@ -51,6 +57,7 @@ export default function UserSearch({ onHomeClick, onMyListClick, onSearchClick, 
         onHomeClick={onHomeClick}
         onMyListClick={onMyListClick}
         onSearchClick={onSearchClick}
+        onRecommendationClick={openRecommendations}
         onAuthClick={() => username ? setIsLogoutBannerOpen(true) : onLoginClick()}
       />
       <main className={styles.content}>
@@ -73,6 +80,7 @@ export default function UserSearch({ onHomeClick, onMyListClick, onSearchClick, 
         {isLogoutBannerOpen && (
           <LogoutBanner onCancel={() => setIsLogoutBannerOpen(false)} onConfirm={confirmLogout} />
         )}
+        {isChatOpen && <RecommendationChat onClose={() => setIsChatOpen(false)} />}
       </main>
     </div>
   )

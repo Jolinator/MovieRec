@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"backend/common"
+	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -68,6 +69,10 @@ func (s *UserService) Authenticate(ctx context.Context, username, password strin
 	}
 
 	return credentials.User, token, nil
+}
+
+func (s *UserService) FindByID(ctx context.Context, userID uuid.UUID) (User, error) {
+	return s.repository.FindByID(ctx, userID)
 }
 
 func hashPassword(password string) (string, error) {

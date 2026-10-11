@@ -4,25 +4,31 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
 	"backend/common"
 	"backend/movies"
+	"github.com/google/uuid"
 )
 
 type Service struct {
 	repository *movies.MovieRepository
 	embedding  *EmbeddingClient
 	generation *GenerationClient
+	lists      *ListRepository
+	cache      *RecommendationCacheRepository
+	jobs       sync.Map
 	ready      atomic.Bool
 }
 
-func NewService(repository *movies.MovieRepository) *Service {
-	return &Service{repository: repository, embedding: NewEmbeddingClient(), generation: NewGenerationClient()}
+func NewService(repository *movies.MovieRepository, lists *ListRepository, cache *RecommendationCacheRepository) *Service {
+	return &Service{repository: repository, embedding: NewEmbeddingClient(), generation: NewGenerationClient(), lists: lists, cache: cache}
 }
 func (s *Service) Initialize(ctx context.Context) error {
 	if err := s.repository.EmbedSynopses(ctx, s.embedding); err != nil {
@@ -55,17 +61,97 @@ func (s *Service) InitializeWithRetry(ctx context.Context, attempts int, delay t
 	return fmt.Errorf("embedding initialization failed after %d attempts: %w", attempts, lastErr)
 }
 func (s *Service) Ready() bool { return s.ready.Load() }
-func (s *Service) Chat(ctx context.Context, message string) (ChatResponse, error) {
+
+func (s *Service) RefreshForUser(ctx context.Context, userID uuid.UUID) {
+	if _, loaded := s.jobs.LoadOrStore(userID, struct{}{}); loaded {
+		return
+	}
+	defer s.jobs.Delete(userID)
+	ids, err := s.lists.ListByUserID(ctx, userID)
+	if err != nil {
+		log.Printf("background recommendations: load list for %s: %v", userID, err)
+		_ = s.cache.Save(ctx, userID, "failed", nil)
+		return
+	}
+	if len(ids) == 0 {
+		_ = s.cache.Save(ctx, userID, "empty", nil)
+		return
+	}
+	profile, err := s.repository.RecommendationProfile(ctx, ids)
+	if err != nil {
+		log.Printf("background recommendations: build profile for %s: %v", userID, err)
+		_ = s.cache.Save(ctx, userID, "failed", nil)
+		return
+	}
+	if len(profile) == 0 {
+		_ = s.cache.Save(ctx, userID, "empty", nil)
+		return
+	}
+	candidates, err := s.repository.SearchSimilarExcluding(ctx, profile, ids, 3)
+	if err != nil {
+		log.Printf("background recommendations: search for %s: %v", userID, err)
+		_ = s.cache.Save(ctx, userID, "failed", nil)
+		return
+	}
+	resultIDs := make([]int, 0, len(candidates))
+	for _, movie := range candidates {
+		resultIDs = append(resultIDs, movie.TMDBID)
+	}
+	status := "ready"
+	if len(resultIDs) == 0 {
+		status = "empty"
+	}
+	if err := s.cache.Save(ctx, userID, status, resultIDs); err != nil {
+		log.Printf("background recommendations: save for %s: %v", userID, err)
+	}
+}
+
+func (s *Service) RequestRefresh(ctx context.Context, userID uuid.UUID) {
+	if err := s.cache.Request(ctx, userID); err != nil {
+		log.Printf("background recommendations: request refresh for %s: %v", userID, err)
+		return
+	}
+	go s.RefreshForUser(context.Background(), userID)
+}
+
+func (s *Service) EnsureFresh(ctx context.Context, userID uuid.UUID) {
+	cache, err := s.cache.Get(ctx, userID)
+	if err != nil {
+		log.Printf("background recommendations: inspect cache for %s: %v", userID, err)
+		return
+	}
+	if cache.Status == "missing" ||
+		(cache.RequestedAt != nil && (cache.GeneratedAt == nil || cache.GeneratedAt.Before(*cache.RequestedAt))) {
+		s.RequestRefresh(ctx, userID)
+	}
+}
+
+func (s *Service) Recommendations(ctx context.Context, userID uuid.UUID) (common.PersonalizedRecommendationsResponse, error) {
+	cache, err := s.cache.Get(ctx, userID)
+	if err != nil {
+		return common.PersonalizedRecommendationsResponse{}, err
+	}
+	if cache.Status == "missing" || (cache.RequestedAt != nil && (cache.GeneratedAt == nil || cache.GeneratedAt.Before(*cache.RequestedAt))) {
+		s.RequestRefresh(context.Background(), userID)
+		return common.PersonalizedRecommendationsResponse{Status: "preparing"}, nil
+	}
+	movies, err := s.cache.LoadMovies(ctx, userID, s.repository)
+	if err != nil {
+		return common.PersonalizedRecommendationsResponse{}, err
+	}
+	return common.PersonalizedRecommendationsResponse{Status: cache.Status, Movies: movies}, nil
+}
+func (s *Service) Chat(ctx context.Context, message string) (common.ChatResponse, error) {
 	if !s.Ready() {
-		return ChatResponse{}, common.ErrRecommendationsUnavailable
+		return common.ChatResponse{}, common.ErrRecommendationsUnavailable
 	}
 	vector, err := s.embedding.Embed(ctx, message)
 	if err != nil {
-		return ChatResponse{}, err
+		return common.ChatResponse{}, err
 	}
 	candidates, err := s.repository.SearchSimilar(ctx, vector, 8)
 	if err != nil {
-		return ChatResponse{}, err
+		return common.ChatResponse{}, err
 	}
 	payload, _ := json.Marshal(candidates)
 	answer, err := s.generation.Complete(ctx, `You are a friendly movie recommendation assistant.
@@ -78,10 +164,10 @@ Use this format for every entry:
 Do not use Markdown emphasis, headings, genre labels, database labels, or any other fields.
 Never invent an identifier or recommend a movie outside the supplied JSON.`, fmt.Sprintf("User request: %s\nMovie database candidates: %s", message, payload))
 	if err != nil {
-		return ChatResponse{}, err
+		return common.ChatResponse{}, err
 	}
 	recommendedMovies, normalizedAnswer := normalizeRecommendations(answer, candidates)
-	return ChatResponse{Message: normalizedAnswer, Movies: movieResponses(recommendedMovies)}, nil
+	return common.ChatResponse{Message: normalizedAnswer, Movies: movies.MovieResponses(recommendedMovies)}, nil
 }
 
 type parsedRecommendation struct {
@@ -194,26 +280,4 @@ func containsMovie(movies []movies.Movie, tmdbID int) bool {
 		}
 	}
 	return false
-}
-
-func movieResponses(input []movies.Movie) []common.MovieResponse {
-	response := make([]common.MovieResponse, 0, len(input))
-	for _, movie := range input {
-		var releaseDate *string
-		if movie.ReleaseDate != nil {
-			formatted := movie.ReleaseDate.Format("2006-01-02")
-			releaseDate = &formatted
-		}
-		response = append(response, common.MovieResponse{
-			TMDBID: movie.TMDBID, Title: movie.Title, ReleaseDate: releaseDate,
-			AverageRating: movie.AverageRating, PosterPath: movie.PosterPath,
-			Synopsis: movie.Synopsis, BackdropPath: movie.BackdropPath,
-		})
-	}
-	return response
-}
-
-type ChatResponse struct {
-	Message string                 `json:"message"`
-	Movies  []common.MovieResponse `json:"movies"`
 }

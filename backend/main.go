@@ -22,7 +22,9 @@ import (
 func setupServer(authDB *pgxpool.Pool, ctx context.Context, moviesDB, recommendationsDB *pgxpool.Pool, tokenIssuer *auth.TokenIssuer, tokenVerifier *auth.TokenVerifier, dbStatus *database.DBStatus, port string) *http.Server {
 
 	movieRepository := movies.NewMovieRepository(moviesDB, dbStatus)
-	recommendationService := recommendations.NewService(movieRepository)
+	listRepository := recommendations.NewListRepository(recommendationsDB, dbStatus)
+	cacheRepository := recommendations.NewRecommendationCacheRepository(recommendationsDB, dbStatus)
+	recommendationService := recommendations.NewService(movieRepository, listRepository, cacheRepository)
 	go func() {
 		if err := movies.ImportPopularMoviesWithRetry(ctx, movieRepository, 10, 2*time.Second); err != nil {
 			log.Printf("movie import failed: %v", err)
@@ -35,7 +37,6 @@ func setupServer(authDB *pgxpool.Pool, ctx context.Context, moviesDB, recommenda
 	}()
 	userService := auth.NewUserService(auth.NewUserRepository(authDB, dbStatus), tokenIssuer)
 	movieService := movies.NewMovieService(movieRepository)
-	listRepository := recommendations.NewListRepository(recommendationsDB, dbStatus)
 	listService := recommendations.NewListService(listRepository, movieRepository)
 	server := httpapi.NewServer(dbStatus, userService, movieService, listService, tokenVerifier, recommendationService)
 	mux := http.NewServeMux()

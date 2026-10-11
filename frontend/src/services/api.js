@@ -1,6 +1,7 @@
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL.replace(/\/$/, '')
 const HEALTH_ENDPOINT = '/movieAPI/health'
 const LOGIN_ENDPOINT = '/movieAPI/login'
+const SESSION_ENDPOINT = '/movieAPI/session'
 const LOGOUT_ENDPOINT = '/movieAPI/logout'
 const SIGNUP_ENDPOINT = '/movieAPI/signup'
 const MOVIES_ENDPOINT = '/movieAPI/movies'
@@ -8,6 +9,7 @@ const GENRES_ENDPOINT = '/movieAPI/genres'
 const MY_LIST_ENDPOINT = '/movieAPI/my-list'
 const USERS_ENDPOINT = '/movieAPI/users'
 const RECOMMENDATIONS_ENDPOINT = '/movieAPI/recommendations/chat'
+const PERSONALIZED_RECOMMENDATIONS_ENDPOINT = '/movieAPI/recommendations'
 
 
 
@@ -44,6 +46,14 @@ export async function login({ username, password }) {
     body: JSON.stringify({ userName: username, password: password }),
   })
 
+  return readResponse(response)
+}
+
+export async function getSession() {
+  const response = await fetch(`${API_BASE_URL}${SESSION_ENDPOINT}`, {
+    credentials: 'include',
+    headers: { Accept: 'application/json' },
+  })
   return readResponse(response)
 }
 
@@ -143,6 +153,14 @@ export async function chatRecommendations(message) {
     method: 'POST', credentials: 'include',
     headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
     body: JSON.stringify({ message }),
+  })
+  return readResponse(response)
+}
+
+export async function getPersonalizedRecommendations() {
+  const response = await fetch(`${API_BASE_URL}${PERSONALIZED_RECOMMENDATIONS_ENDPOINT}`, {
+    credentials: 'include',
+    headers: { Accept: 'application/json' },
   })
   return readResponse(response)
 }

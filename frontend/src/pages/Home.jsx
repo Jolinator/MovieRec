@@ -7,7 +7,7 @@ import MovieDetails from '../components/MovieDetails'
 import Sidebar from '../components/Sidebar'
 import RecommendationChat from '../components/RecommendationChat'
 import UserBadge from '../components/UserBadge'
-import { addMovieToList, getGenres, getHealth, getMovies, getMyList, removeMovieFromList } from '../services/api'
+import { addMovieToList, getGenres, getHealth, getMovies, getMyList, getPersonalizedRecommendations, removeMovieFromList } from '../services/api'
 import styles from './Home.module.css'
 
 export default function Home({ onLoginClick, onRequireLogin, onLogout, onHomeClick, onMyListClick, onSearchClick, username }) {
@@ -24,6 +24,8 @@ export default function Home({ onLoginClick, onRequireLogin, onLogout, onHomeCli
   const [isAddingToList, setIsAddingToList] = useState(false)
   const [myListMovieIds, setMyListMovieIds] = useState(new Set())
   const [isChatOpen, setIsChatOpen] = useState(false)
+  const [personalizedRecommendations, setPersonalizedRecommendations] = useState([])
+  const [recommendationStatus, setRecommendationStatus] = useState('idle')
   const loadMoreRef = useRef(null)
 
   function openRecommendations() {
@@ -92,7 +94,32 @@ export default function Home({ onLoginClick, onRequireLogin, onLogout, onHomeCli
     }).catch((requestError) => {
         setError(requestError instanceof Error ? requestError.message : 'Unable to load your list.')
       })
-    }, [username])
+  }, [username])
+
+  useEffect(() => {
+    let isCurrentRequest = true
+    if (!username) {
+      setPersonalizedRecommendations([])
+      setRecommendationStatus('idle')
+      return () => {
+        isCurrentRequest = false
+      }
+    }
+    setRecommendationStatus('loading')
+    getPersonalizedRecommendations().then((response) => {
+      if (!isCurrentRequest) return
+      setPersonalizedRecommendations(response.movies ?? [])
+      setRecommendationStatus(response.status ?? 'empty')
+    }).catch((requestError) => {
+      if (isCurrentRequest) {
+        setRecommendationStatus('error')
+        setError(requestError instanceof Error ? requestError.message : 'Unable to load recommendations.')
+      }
+    })
+    return () => {
+      isCurrentRequest = false
+    }
+  }, [username])
 
     useEffect(() => {
     getGenres().then((loadedGenres) => {
@@ -184,6 +211,21 @@ export default function Home({ onLoginClick, onRequireLogin, onLogout, onHomeCli
       />
 
       <main className={styles.content}>
+        {username && (
+          <section className={styles.intro} aria-label="Recommendations">
+            <p className={styles.eyebrow}>For you</p>
+            <h2>Recommendations</h2>
+            {recommendationStatus === 'loading' || recommendationStatus === 'preparing' ? (
+              <p>Recommendations are being prepared...</p>
+            ) : recommendationStatus === 'empty' ? (
+              <p>Add movies to My List to receive personalized recommendations.</p>
+            ) : recommendationStatus === 'ready' ? (
+              <MovieGrid movies={personalizedRecommendations} onSelect={setSelectedMovie} />
+            ) : recommendationStatus === 'error' ? (
+              <p>Recommendations are currently unavailable.</p>
+            ) : null}
+          </section>
+        )}
         <section className={styles.intro}>
           <p className={styles.eyebrow}>Discover your next favourite</p>
           <h2>Popular movies</h2>

@@ -37,6 +37,33 @@
         },
         {
             "method": "GET",
+            "url": "/movieAPI/session",
+            "expected_status": 200,
+            "expected_response": {
+                "loggedIn": true,
+                "username": "recommendations-integration-user"
+            },
+            "expected_response_subset": true,
+            "required_response_fields": [
+                "userId",
+                "username"
+            ]
+        },
+        {
+            "method": "GET",
+            "url": "/movieAPI/recommendations",
+            "expected_status": 200,
+            "expected_response": {
+                "status": "empty"
+            },
+            "expected_response_subset": true,
+            "required_response_fields": [
+                "status",
+                "movies"
+            ]
+        },
+        {
+            "method": "GET",
             "url": "/movieAPI/users?search=integration-user",
             "expected_status": 200,
             "expected_response": [],
@@ -87,6 +114,30 @@
             "expected_response": {
                 "success": true
             }
+        },
+        {
+            "method": "POST",
+            "url": "/movieAPI/logout",
+            "expected_status": 200,
+            "expected_response": {
+                "success": true
+            },
+            "expected_response_subset": true,
+            "expected_cookies": {
+                "access_token": false
+            }
+        },
+        {
+            "method": "GET",
+            "url": "/movieAPI/session",
+            "expected_status": 401,
+            "expected_response": "authentication required\n"
+        },
+        {
+            "method": "GET",
+            "url": "/movieAPI/recommendations",
+            "expected_status": 401,
+            "expected_response": "authentication required\n"
         }
     ]
 }
