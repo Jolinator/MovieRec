@@ -31,10 +31,10 @@ resource "google_compute_address" "movierec" {
 }
 
 locals {
-  # Use the shared local ports file, or the committed GCP example in a clean checkout.
+  # Use deployment-specific ports, or the committed example in a clean checkout.
   ports_env_contents = try(
-    file("${path.module}/../../../secrets/ports.env"),
-    file("${path.module}/../secrets-examples/ports.env.example"),
+    file("${path.module}/../../ports.env"),
+    file("${path.module}/../../ports.env.example"),
   )
   ports_env = {
     for line in split("\n", trimspace(local.ports_env_contents)) :
