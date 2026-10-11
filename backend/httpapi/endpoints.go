@@ -47,7 +47,12 @@ func RegisterEndpoints(mux *http.ServeMux, server *Server) {
 	mux.HandleFunc("POST /movieAPI/logout", server.logoutHandler)
 	mux.HandleFunc("POST /movieAPI/signup", server.signUpHandler)
 	mux.Handle("POST /movieAPI/recommendations/chat", AuthenticationMiddleware(server.tokenVerifier)(http.HandlerFunc(server.recommendationChatHandler)))
+	mux.HandleFunc("GET /movieAPI/recommendations/ready", server.recommendationReadyHandler)
 	mux.HandleFunc("/", redirectToMovieAPI)
+}
+
+func (s *Server) recommendationReadyHandler(w http.ResponseWriter, r *http.Request) {
+	common.WriteJSON(w, common.RecommendationReadyResponse{Ready: s.recommendationService.Ready()})
 }
 
 func (s *Server) recommendationChatHandler(w http.ResponseWriter, r *http.Request) {

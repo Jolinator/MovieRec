@@ -78,6 +78,8 @@ def response_matches(actual: Any, expected: Any, subset: bool = False) -> bool:
 def response_has_fields(actual: Any, fields: list[str]) -> bool:
     if not fields:
         return True
+    if isinstance(actual, dict):
+        return all(field in actual for field in fields)
     if not isinstance(actual, list) or not actual:
         return False
     return all(
@@ -101,6 +103,7 @@ class TestRequest:
     required_response_fields: list[str] = field(default_factory=list)
     expected_response_non_empty: bool = False
     expected_cookies: dict[str, bool] = field(default_factory=dict)
+    timeout: float = 10
     body: Any = None
     output: TestOutput | None = None
     error: str | None = None
@@ -115,6 +118,7 @@ class TestRequest:
         required_response_fields = config.get("required_response_fields", [])
         expected_response_non_empty = config.get("expected_response_non_empty", False)
         expected_cookies = config.get("expected_cookies") or {}
+        timeout = config.get("timeout", 10)
 
         if not isinstance(method, str) or not method:
             raise ValueError("Each request needs a non-empty 'method'.")
@@ -137,6 +141,8 @@ class TestRequest:
             for name, present in expected_cookies.items()
         ):
             raise ValueError("'expected_cookies' must map cookie names to booleans.")
+        if not isinstance(timeout, (int, float)) or timeout <= 0:
+            raise ValueError("'timeout' must be a positive number.")
 
         return cls(
             method=method,
@@ -147,6 +153,7 @@ class TestRequest:
             required_response_fields=required_response_fields,
             expected_response_non_empty=expected_response_non_empty,
             expected_cookies=expected_cookies,
+            timeout=float(timeout),
             body=config.get("body"),
             expected_output=TestOutput(expected_status, expected_body),
         )
@@ -168,7 +175,7 @@ class TestRequest:
                 headers=self.headers,
                 cookies=request_cookies,
                 json=self.body,
-                timeout=10,
+                timeout=self.timeout,
             )
         except requests.RequestException as error:
             self.error = str(error)
@@ -299,6 +306,7 @@ class BackendTest:
 
         services = config.get("services")
         requests_config = config.get("requests")
+        wait_for_recommendations = config.get("wait_for_recommendations", False)
         if not isinstance(services, list) or not all(
             isinstance(service, str) for service in services
         ):
@@ -309,12 +317,16 @@ class BackendTest:
             or not all(isinstance(request, dict) for request in requests_config)
         ):
             raise ValueError(f"{path.name} must define at least one request.")
+        if not isinstance(wait_for_recommendations, bool):
+            raise ValueError("'wait_for_recommendations' must be a boolean.")
 
         requests_to_run = [
             TestRequest.from_config(request_config)
             for request_config in requests_config
         ]
-        return cls(path, services, requests_to_run, docker_manager)
+        test = cls(path, services, requests_to_run, docker_manager)
+        test.wait_for_recommendations = wait_for_recommendations
+        return test
 
     @property
     def success(self) -> bool:
@@ -338,6 +350,10 @@ class BackendTest:
             for result in results:
                 logger.info("Docker command:%s", result.args)
             logger.info("Services are ready for %s", self.path.stem)
+            if getattr(self, "wait_for_recommendations", False):
+                logger.info("Waiting for recommendation service readiness")
+                self.docker_manager.wait_for_recommendations()
+                logger.info("Recommendation service is ready")
             test_started_at = time.perf_counter()
             with requests.Session() as session:
                 for request in self.requests:

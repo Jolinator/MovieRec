@@ -7,17 +7,17 @@ export default function Sidebar({ isLoggedIn, onAuthClick, onHomeClick, onMyList
     <aside className={styles.sidebar} aria-label="Services">
       <nav className={styles.services}>
         <div className={styles.navigation}>
-          {onRecommendationClick && (
-            <button type="button" className={styles.item} onClick={onRecommendationClick}>
-              Recommendation Chat
-            </button>
-          )}
           <button type="button" className={styles.item} onClick={onHomeClick}>
             Home
           </button>
           <button type="button" className={styles.item} onClick={onMyListClick}>
             My List
           </button>
+          {onRecommendationClick && (
+            <button type="button" className={styles.item} onClick={onRecommendationClick}>
+              Recommendation Chat
+            </button>
+          )}
         </div>
         <LoginButton isLoggedIn={isLoggedIn} onClick={onAuthClick} />
       </nav>

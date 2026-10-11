@@ -109,6 +109,25 @@ class DockerManager:
                 raise self._health_check_timeout(health, targets, check_imports, timeout)
             time.sleep(min(1, remaining))
 
+    def wait_for_recommendations(self, timeout: float = 300) -> None:
+        deadline = time.monotonic() + timeout
+        url = f"{self.backend_url}/movieAPI/recommendations/ready"
+        while True:
+            try:
+                response = requests.get(url, timeout=2)
+                response.raise_for_status()
+                if response.json().get("ready") is True:
+                    return
+            except (requests.RequestException, ValueError):
+                pass
+
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise TimeoutError(
+                    f"Recommendation service did not become ready within {timeout:g}s"
+                )
+            time.sleep(min(1, remaining))
+
     @staticmethod
     def _validate_health_check(target: list[str] | None, timeout: float) -> list[str]:
         targets = list(DATABASE_STATUS_KEYS) if target is None else target

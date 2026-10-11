@@ -1,0 +1,54 @@
+{
+    "services": [
+        "backend",
+        "auth-postgres",
+        "movies-postgres"
+    ],
+    "wait_for_recommendations": true,
+    "requests": [
+        {
+            "method": "POST",
+            "url": "/movieAPI/signup",
+            "body": {
+                "userName": "recommendations-chat-integration-user",
+                "password": "StrongPassword123!"
+            },
+            "expected_status": 201,
+            "expected_response": {
+                "success": true
+            },
+            "expected_response_subset": true
+        },
+        {
+            "method": "POST",
+            "url": "/movieAPI/login",
+            "body": {
+                "userName": "recommendations-chat-integration-user",
+                "password": "StrongPassword123!"
+            },
+            "expected_status": 200,
+            "expected_response": {
+                "loggedIn": true
+            },
+            "expected_response_subset": true,
+            "expected_cookies": {
+                "access_token": true
+            }
+        },
+        {
+            "method": "POST",
+            "url": "/movieAPI/recommendations/chat",
+            "timeout": 60,
+            "body": {
+                "message": "a science fiction action movie"
+            },
+            "expected_status": 200,
+            "expected_response": {},
+            "expected_response_non_empty": true,
+            "required_response_fields": [
+                "message",
+                "movies"
+            ]
+        }
+    ]
+}

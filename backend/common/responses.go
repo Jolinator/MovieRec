@@ -14,6 +14,10 @@ type HealthResponse struct {
 	RecommendationsDBAvailable bool   `json:"recommendationsDBAvailable"`
 }
 
+type RecommendationReadyResponse struct {
+	Ready bool `json:"ready"`
+}
+
 type LoginResponse struct {
 	LoggedIn bool   `json:"loggedIn"`
 	UserID   string `json:"userId,omitempty"`
