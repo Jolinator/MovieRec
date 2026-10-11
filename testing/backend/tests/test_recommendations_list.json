@@ -37,6 +37,23 @@
         },
         {
             "method": "GET",
+            "url": "/movieAPI/users?search=integration-user",
+            "expected_status": 200,
+            "expected_response": [],
+            "expected_response_non_empty": true,
+            "required_response_fields": [
+            "id",
+            "username"
+            ]
+        },
+        {
+            "method": "GET",
+            "url": "/movieAPI/users/not-a-uuid/list",
+            "expected_status": 400,
+            "expected_response": "userId must be a valid UUID\n"
+        },
+        {
+            "method": "GET",
             "url": "/movieAPI/my-list",
             "expected_status": 200,
             "expected_response": []

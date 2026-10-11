@@ -17,7 +17,11 @@ func NewListService(repository *ListRepository, movieRepo *movies.MovieRepositor
 }
 
 func (s *ListService) List(ctx context.Context, userID uuid.UUID) ([]common.MovieResponse, error) {
-	movieIDs, err := s.repository.List(ctx, userID)
+	return s.ListForUser(ctx, userID)
+}
+
+func (s *ListService) ListForUser(ctx context.Context, userID uuid.UUID) ([]common.MovieResponse, error) {
+	movieIDs, err := s.repository.ListByUserID(ctx, userID)
 	if err != nil {
 		return nil, err
 	}

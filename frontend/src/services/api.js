@@ -6,6 +6,7 @@ const SIGNUP_ENDPOINT = '/movieAPI/signup'
 const MOVIES_ENDPOINT = '/movieAPI/movies'
 const GENRES_ENDPOINT = '/movieAPI/genres'
 const MY_LIST_ENDPOINT = '/movieAPI/my-list'
+const USERS_ENDPOINT = '/movieAPI/users'
 
 
 
@@ -113,6 +114,23 @@ export async function addMovieToList(tmdbId) {
 export async function removeMovieFromList(tmdbId) {
   const response = await fetch(`${API_BASE_URL}${MY_LIST_ENDPOINT}/${tmdbId}`, {
     method: 'DELETE',
+    credentials: 'include',
+    headers: { Accept: 'application/json' },
+  })
+  return readResponse(response)
+}
+
+export async function searchUsers(query) {
+  const params = new URLSearchParams({ search: query })
+  const response = await fetch(`${API_BASE_URL}${USERS_ENDPOINT}?${params}`, {
+    credentials: 'include',
+    headers: { Accept: 'application/json' },
+  })
+  return readResponse(response)
+}
+
+export async function getUserList(userId) {
+  const response = await fetch(`${API_BASE_URL}${USERS_ENDPOINT}/${encodeURIComponent(userId)}/list`, {
     credentials: 'include',
     headers: { Accept: 'application/json' },
   })

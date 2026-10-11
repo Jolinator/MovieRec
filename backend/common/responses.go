@@ -6,11 +6,11 @@ import (
 )
 
 type HealthResponse struct {
-	Message                            string `json:"message"`
+	Message                    string `json:"message"`
 	BackendAvailable           bool   `json:"backendAvailable"`
 	ImportedMoviesAvailable    bool   `json:"importedMoviesAvailable"`
-	AuthDBAvailable                    bool   `json:"authDBAvailable"`
-	MoviesDBAvailable                  bool   `json:"moviesDBAvailable"`
+	AuthDBAvailable            bool   `json:"authDBAvailable"`
+	MoviesDBAvailable          bool   `json:"moviesDBAvailable"`
 	RecommendationsDBAvailable bool   `json:"recommendationsDBAvailable"`
 }
 
@@ -22,6 +22,11 @@ type LoginResponse struct {
 type SignUpResponse struct {
 	Success bool   `json:"success"`
 	UserID  string `json:"userId,omitempty"`
+}
+
+type UserResponse struct {
+	ID       string `json:"id"`
+	Username string `json:"username"`
 }
 
 type MovieResponse struct {

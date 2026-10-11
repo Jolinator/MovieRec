@@ -11,6 +11,7 @@ import (
 	"backend/database"
 	"backend/movies"
 	"backend/recommendations"
+	"github.com/google/uuid"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
@@ -32,6 +33,8 @@ func RegisterEndpoints(mux *http.ServeMux, server *Server) {
 	mux.HandleFunc("GET /movieAPI/health", server.healthHandler)
 	mux.HandleFunc("GET /movieAPI/movies", server.moviesHandler)
 	mux.HandleFunc("GET /movieAPI/genres", server.genresHandler)
+	mux.Handle("GET /movieAPI/users", AuthenticationMiddleware(server.tokenVerifier)(http.HandlerFunc(server.usersHandler)))
+	mux.Handle("GET /movieAPI/users/{userId}/list", AuthenticationMiddleware(server.tokenVerifier)(http.HandlerFunc(server.userListHandler)))
 	mux.Handle("GET /movieAPI/my-list", AuthenticationMiddleware(server.tokenVerifier)(http.HandlerFunc(server.listHandler)))
 	mux.Handle("POST /movieAPI/my-list", AuthenticationMiddleware(server.tokenVerifier)(http.HandlerFunc(server.addToListHandler)))
 	mux.Handle("DELETE /movieAPI/my-list/{tmdbId}", AuthenticationMiddleware(server.tokenVerifier)(http.HandlerFunc(server.removeFromListHandler)))
@@ -158,6 +161,40 @@ func (s *Server) genresHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	common.WriteJSON(w, genres)
+}
+
+func (s *Server) usersHandler(w http.ResponseWriter, r *http.Request) {
+	const maxUserSearchResults = 20
+
+	users, err := s.userService.SearchUsers(r.Context(), r.URL.Query().Get("search"), maxUserSearchResults)
+	if err != nil {
+		writeUserSearchError(w, err)
+		return
+	}
+
+	response := make([]common.UserResponse, 0, len(users))
+	for _, user := range users {
+		response = append(response, common.UserResponse{
+			ID:       user.ID.String(),
+			Username: user.Username,
+		})
+	}
+	common.WriteJSON(w, response)
+}
+
+func (s *Server) userListHandler(w http.ResponseWriter, r *http.Request) {
+	userID, err := uuid.Parse(r.PathValue("userId"))
+	if err != nil {
+		http.Error(w, "userId must be a valid UUID", http.StatusBadRequest)
+		return
+	}
+
+	movies, err := s.listService.ListForUser(r.Context(), userID)
+	if err != nil {
+		writeMovieListError(w, err)
+		return
+	}
+	common.WriteJSON(w, movies)
 }
 
 func (s *Server) listHandler(w http.ResponseWriter, r *http.Request) {
