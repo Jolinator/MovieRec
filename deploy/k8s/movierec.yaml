@@ -276,26 +276,6 @@ spec:
     metadata:
       labels: { app: backend }
     spec:
-      initContainers:
-        - name: wait-for-postgres
-          image: postgres:16
-          command:
-            - /bin/sh
-            - -c
-            - >-
-              until pg_isready -q -h auth-postgres -p 5432
-              && pg_isready -q -h movies-postgres -p 5432
-              && pg_isready -q -h recommendations-postgres -p 5432;
-              do echo 'Waiting for PostgreSQL services'; sleep 5; done
-        - name: wait-for-inference
-          image: curlimages/curl:8.12.1
-          command:
-            - /bin/sh
-            - -c
-            - >-
-              until curl --fail --silent http://llama-embedding:8080/health >/dev/null
-              && curl --fail --silent http://llama-generation:8080/health >/dev/null;
-              do echo 'Waiting for inference servers to load models'; sleep 5; done
       containers:
         - name: backend
           image: ${REGISTRY}/backend:${IMAGE_TAG}

@@ -10,7 +10,7 @@ services:
     volumes:
       - auth-postgres-data:/var/lib/postgresql/data
       - ./secrets/tls:/run/secrets/postgres-tls:ro
-      - ./database/tls-entrypoint.sh:/usr/local/bin/tls-entrypoint.sh:ro
+      - ./scripts/postgres-tls-entrypoint.sh:/usr/local/bin/tls-entrypoint.sh:ro
       - ./database/migrations/auth:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
@@ -29,7 +29,7 @@ services:
     volumes:
       - movies-postgres-data:/var/lib/postgresql/data
       - ./secrets/tls:/run/secrets/postgres-tls:ro
-      - ./database/tls-entrypoint.sh:/usr/local/bin/tls-entrypoint.sh:ro
+      - ./scripts/postgres-tls-entrypoint.sh:/usr/local/bin/tls-entrypoint.sh:ro
       - ./database/migrations/movies:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
@@ -48,7 +48,7 @@ services:
     volumes:
       - recommendations-postgres-data:/var/lib/postgresql/data
       - ./secrets/tls:/run/secrets/postgres-tls:ro
-      - ./database/tls-entrypoint.sh:/usr/local/bin/tls-entrypoint.sh:ro
+      - ./scripts/postgres-tls-entrypoint.sh:/usr/local/bin/tls-entrypoint.sh:ro
       - ./database/migrations/recommendations:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
