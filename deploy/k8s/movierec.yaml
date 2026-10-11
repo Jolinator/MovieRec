@@ -99,7 +99,7 @@ spec:
     spec:
       containers:
         - name: postgres
-          image: postgres:16
+          image: pgvector/pgvector:pg16
           command: ["/usr/local/bin/tls-entrypoint.sh"]
           args: ["postgres", "-c", "ssl=on", "-c", "ssl_cert_file=/tmp/server.crt", "-c", "ssl_key_file=/tmp/server.key"]
           envFrom:
@@ -186,6 +186,86 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
+  name: llama-embedding
+  namespace: movierec
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: llama-embedding }
+  template:
+    metadata:
+      labels: { app: llama-embedding }
+    spec:
+      containers:
+        - name: llama-server
+          image: ghcr.io/ggml-org/llama.cpp:server-v0.4.1
+          args: ["--host", "0.0.0.0", "--port", "8080", "--model", "/models/embedding.gguf", "--embedding", "--metrics", "--log-verbosity", "2"]
+          ports: [{ name: http, containerPort: 8080 }]
+          startupProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 10
+            failureThreshold: 60
+          readinessProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 5
+          volumeMounts:
+            - { name: models, mountPath: /models, readOnly: true }
+      volumes:
+        - name: models
+          persistentVolumeClaim: { claimName: model-data }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: llama-embedding
+  namespace: movierec
+spec:
+  selector: { app: llama-embedding }
+  ports: [{ name: http, port: 8080, targetPort: http }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: llama-generation
+  namespace: movierec
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: llama-generation }
+  template:
+    metadata:
+      labels: { app: llama-generation }
+    spec:
+      containers:
+        - name: llama-server
+          image: ghcr.io/ggml-org/llama.cpp:server-v0.4.1
+          args: ["--host", "0.0.0.0", "--port", "8080", "--model", "/models/qwen.gguf", "--ctx-size", "4096", "--metrics", "--log-verbosity", "2"]
+          ports: [{ name: http, containerPort: 8080 }]
+          startupProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 10
+            failureThreshold: 60
+          readinessProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 5
+          volumeMounts:
+            - { name: models, mountPath: /models, readOnly: true }
+      volumes:
+        - name: models
+          persistentVolumeClaim: { claimName: model-data }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: llama-generation
+  namespace: movierec
+spec:
+  selector: { app: llama-generation }
+  ports: [{ name: http, port: 8080, targetPort: http }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
   name: backend
   namespace: movierec
 spec:
@@ -196,6 +276,26 @@ spec:
     metadata:
       labels: { app: backend }
     spec:
+      initContainers:
+        - name: wait-for-postgres
+          image: postgres:16
+          command:
+            - /bin/sh
+            - -c
+            - >-
+              until pg_isready -q -h auth-postgres -p 5432
+              && pg_isready -q -h movies-postgres -p 5432
+              && pg_isready -q -h recommendations-postgres -p 5432;
+              do echo 'Waiting for PostgreSQL services'; sleep 5; done
+        - name: wait-for-inference
+          image: curlimages/curl:8.12.1
+          command:
+            - /bin/sh
+            - -c
+            - >-
+              until curl --fail --silent http://llama-embedding:8080/health >/dev/null
+              && curl --fail --silent http://llama-generation:8080/health >/dev/null;
+              do echo 'Waiting for inference servers to load models'; sleep 5; done
       containers:
         - name: backend
           image: ${REGISTRY}/backend:${IMAGE_TAG}
@@ -210,6 +310,10 @@ spec:
             - { name: AUTH_DB_HOST, value: auth-postgres }
             - { name: MOVIES_DB_HOST, value: movies-postgres }
             - { name: RECOMMENDATIONS_DB_HOST, value: recommendations-postgres }
+            - { name: EMBEDDING_URL, value: http://llama-embedding:8080 }
+            - { name: EMBEDDING_MODEL, value: bge-small-en-v1.5-q8_0 }
+            - { name: GENERATION_URL, value: http://llama-generation:8080 }
+            - { name: GENERATION_MODEL, value: Qwen3-0.6B-Q4_K_M }
             - { name: AUTH_DB_SSLMODE, value: require }
             - { name: MOVIES_DB_SSLMODE, value: require }
             - { name: RECOMMENDATIONS_DB_SSLMODE, value: require }
@@ -293,21 +397,6 @@ spec:
             pathType: Prefix
             backend:
               service: { name: frontend, port: { number: 80 } }
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: prometheus-config
-  namespace: movierec
-data:
-  prometheus.yml: |
-    global:
-      scrape_interval: 15s
-    scrape_configs:
-      - job_name: movierec-api
-        metrics_path: /metrics
-        static_configs:
-          - targets: ["backend:8080"]
 ---
 apiVersion: apps/v1
 kind: Deployment

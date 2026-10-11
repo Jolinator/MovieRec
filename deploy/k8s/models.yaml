@@ -1,0 +1,45 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: model-data
+  namespace: movierec
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: model-downloader
+  namespace: movierec
+spec:
+  backoffLimit: 3
+  activeDeadlineSeconds: 1800
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: download-models
+          image: curlimages/curl:8.12.1
+          securityContext: { runAsUser: 0, runAsGroup: 0 }
+          command: ["/bin/sh", "/scripts/download-models.sh"]
+          env:
+            - name: EMBEDDING_MODEL_URL
+              value: https://huggingface.co/CompendiumLabs/bge-small-en-v1.5-gguf/resolve/main/bge-small-en-v1.5-q8_0.gguf
+            - name: EMBEDDING_MODEL_SHA256
+              value: ec38e8da142596baa913124ae50550de284b6916bf59577ef2f0cb9660c2f514
+            - name: GENERATION_MODEL_URL
+              value: https://huggingface.co/lm-kit/qwen-3-0.6b-instruct-gguf/resolve/main/Qwen3-0.6B-Q4_K_M.gguf
+            - name: GENERATION_MODEL_SHA256
+              value: 2b1a7ed56061ad1275847412f61e8e009ada37ef865dccc25747dcc76eea9811
+          volumeMounts:
+            - { name: models, mountPath: /models }
+            - { name: downloader-script, mountPath: /scripts, readOnly: true }
+      volumes:
+        - name: models
+          persistentVolumeClaim: { claimName: model-data }
+        - name: downloader-script
+          configMap: { name: model-downloader-script, defaultMode: 0555 }

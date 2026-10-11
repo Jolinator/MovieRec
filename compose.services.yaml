@@ -102,7 +102,7 @@ services:
 
   llama-embedding:
     image: ghcr.io/ggml-org/llama.cpp:server-v0.4.1
-    command: ["--host", "0.0.0.0", "--port", "8080", "--model", "/models/embedding.gguf", "--embedding", "--log-verbosity", "2"]
+    command: ["--host", "0.0.0.0", "--port", "8080", "--model", "/models/embedding.gguf", "--embedding", "--metrics", "--log-verbosity", "2"]
     depends_on:
       model-downloader:
         condition: service_completed_successfully
@@ -111,7 +111,7 @@ services:
 
   llama-generation:
     image: ghcr.io/ggml-org/llama.cpp:server-v0.4.1
-    command: ["--host", "0.0.0.0", "--port", "8080", "--model", "/models/qwen.gguf", "--ctx-size", "4096", "--log-verbosity", "2"]
+    command: ["--host", "0.0.0.0", "--port", "8080", "--model", "/models/qwen.gguf", "--ctx-size", "4096", "--metrics", "--log-verbosity", "2"]
     depends_on:
       model-downloader:
         condition: service_completed_successfully
