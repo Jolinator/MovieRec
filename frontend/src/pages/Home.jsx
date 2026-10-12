@@ -57,26 +57,30 @@ export default function Home({ onLoginClick, onRequireLogin, onLogout, onHomeCli
     }
   }
 
-  async function handleToggleList() {
+  async function handleToggleList(movie = selectedMovie) {
     if (!username) {
       onLoginClick()
       return false
     }
 
+    if (!movie) {
+      return false
+    }
+
     setIsAddingToList(true)
     try {
-      if (myListMovieIds.has(selectedMovie.tmdbId)) {
-        await removeMovieFromList(selectedMovie.tmdbId)
+      if (myListMovieIds.has(movie.tmdbId)) {
+        await removeMovieFromList(movie.tmdbId)
         setMyListMovieIds((currentIds) => {
           const nextIds = new Set(currentIds)
-          nextIds.delete(selectedMovie.tmdbId)
+          nextIds.delete(movie.tmdbId)
           return nextIds
         })
         return false
       }
 
-      await addMovieToList(selectedMovie.tmdbId)
-      setMyListMovieIds((currentIds) => new Set(currentIds).add(selectedMovie.tmdbId))
+      await addMovieToList(movie.tmdbId)
+      setMyListMovieIds((currentIds) => new Set(currentIds).add(movie.tmdbId))
       return true
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Unable to update your list.')
@@ -287,7 +291,14 @@ export default function Home({ onLoginClick, onRequireLogin, onLogout, onHomeCli
             isInList={myListMovieIds.has(selectedMovie.tmdbId)}
           />
         )}
-        {isChatOpen && <RecommendationChat onClose={() => setIsChatOpen(false)} />}
+        {isChatOpen && (
+          <RecommendationChat
+            onClose={() => setIsChatOpen(false)}
+            onToggleList={(movie) => handleToggleList(movie)}
+            isAddingToList={isAddingToList}
+            myListMovieIds={myListMovieIds}
+          />
+        )}
       </main>
     </div>
   )

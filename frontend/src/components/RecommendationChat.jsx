@@ -13,7 +13,12 @@ function cleanReply(reply) {
     .trim()
 }
 
-export default function RecommendationChat({ onClose }) {
+export default function RecommendationChat({
+  onClose,
+  onToggleList,
+  isAddingToList,
+  myListMovieIds,
+}) {
   const [message, setMessage] = useState('')
   const [reply, setReply] = useState('')
   const [loading, setLoading] = useState(false)
@@ -52,6 +57,14 @@ export default function RecommendationChat({ onClose }) {
     {reply && <div className={styles.reply}>{cleanReply(reply)}</div>}
     {error && <div className={styles.error}>{error}</div>}
     <form onSubmit={submit}><textarea value={message} onChange={(event) => setMessage(event.target.value)} placeholder="e.g. a clever sci-fi thriller" maxLength={1000} required /><button type="submit" disabled={loading}>{loading ? 'Thinking…' : 'Recommend'}</button></form>
-    {selectedMovie && <MovieDetails movie={selectedMovie} onClose={() => setSelectedMovie(null)} />}
+    {selectedMovie && (
+      <MovieDetails
+        movie={selectedMovie}
+        onClose={() => setSelectedMovie(null)}
+        onToggleList={() => onToggleList(selectedMovie)}
+        isAddingToList={isAddingToList}
+        isInList={myListMovieIds.has(selectedMovie.tmdbId)}
+      />
+    )}
   </section>
 }
