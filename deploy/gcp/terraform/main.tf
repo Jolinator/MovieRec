@@ -41,6 +41,29 @@ locals {
     trimspace(split("=", line)[0]) => tonumber(trimspace(split("=", line)[1]))
     if length(split("=", line)) == 2
   }
+  app_machine_type      = var.machine_type != null ? var.machine_type : var.app_machine_type
+  database_machine_type = var.machine_type != null ? var.machine_type : var.database_machine_type
+  model_machine_type    = var.machine_type != null ? var.machine_type : var.model_machine_type
+}
+
+resource "google_compute_router" "movierec" {
+  name    = "${var.name}-router"
+  region  = var.region
+  network = google_compute_network.movierec.id
+}
+
+# Worker VMs have no public addresses. NAT lets them install packages and pull
+# upstream images/models while keeping their interfaces private.
+resource "google_compute_router_nat" "movierec" {
+  name                               = "${var.name}-nat"
+  router                             = google_compute_router.movierec.name
+  region                             = var.region
+  nat_ip_allocate_option             = "AUTO_ONLY"
+  source_subnetwork_ip_ranges_to_nat = "LIST_OF_SUBNETWORKS"
+  subnetwork {
+    name                    = google_compute_subnetwork.movierec.id
+    source_ip_ranges_to_nat = ["ALL_IP_RANGES"]
+  }
 }
 
 resource "google_service_account" "node" {
@@ -57,7 +80,7 @@ resource "google_compute_firewall" "web" {
     ports    = [tostring(local.ports_env["GCP_HTTPS_PORT"])]
   }
   source_ranges = ["0.0.0.0/0"]
-  target_tags   = ["${var.name}-node"]
+  target_tags   = ["${var.name}-app"]
 }
 
 resource "google_compute_firewall" "admin" {
@@ -67,7 +90,41 @@ resource "google_compute_firewall" "admin" {
     protocol = "tcp"
     ports    = [tostring(local.ports_env["GCP_SSH_PORT"])]
   }
+  # IAP TCP forwarding source range. SSH is not exposed to the public internet.
   source_ranges = ["35.235.240.0/20"]
+  target_tags   = ["${var.name}-node"]
+}
+
+resource "google_compute_firewall" "k3s_api" {
+  name    = "${var.name}-k3s-api"
+  network = google_compute_network.movierec.name
+  allow {
+    protocol = "tcp"
+    ports    = ["6443"]
+  }
+  source_ranges = ["10.20.0.0/24"]
+  target_tags   = ["${var.name}-app"]
+}
+
+resource "google_compute_firewall" "k3s_flannel" {
+  name    = "${var.name}-k3s-flannel"
+  network = google_compute_network.movierec.name
+  allow {
+    protocol = "udp"
+    ports    = ["8472"]
+  }
+  source_ranges = ["10.20.0.0/24"]
+  target_tags   = ["${var.name}-node"]
+}
+
+resource "google_compute_firewall" "k3s_kubelet" {
+  name    = "${var.name}-k3s-kubelet"
+  network = google_compute_network.movierec.name
+  allow {
+    protocol = "tcp"
+    ports    = ["10250"]
+  }
+  source_ranges = ["10.20.0.0/24"]
   target_tags   = ["${var.name}-node"]
 }
 
@@ -81,7 +138,7 @@ resource "google_artifact_registry_repository" "images" {
 
 # K3s on a self-managed VM does not automatically use Artifact Registry's
 # credential helper. Public read access lets containerd pull images without
-# storing a long-lived key on the node. Never put secrets in these images.
+# storing a long-lived key on the nodes. Never put secrets in these images.
 resource "google_artifact_registry_repository_iam_member" "public_reader" {
   for_each   = var.public_registry ? toset(["allUsers"]) : toset([])
   project    = var.project_id
@@ -91,11 +148,32 @@ resource "google_artifact_registry_repository_iam_member" "public_reader" {
   member     = each.value
 }
 
-resource "google_compute_instance" "node" {
-  name         = "${var.name}-k8s"
-  machine_type = var.machine_type
+resource "google_compute_disk" "app_data" {
+  name = "${var.name}-app-data"
+  type = "pd-balanced"
+  zone = var.zone
+  size = var.app_data_disk_gb
+}
+
+resource "google_compute_disk" "database_data" {
+  name = "${var.name}-database-data"
+  type = "pd-balanced"
+  zone = var.zone
+  size = var.database_data_disk_gb
+}
+
+resource "google_compute_disk" "model_data" {
+  name = "${var.name}-model-data"
+  type = "pd-balanced"
+  zone = var.zone
+  size = var.model_data_disk_gb
+}
+
+resource "google_compute_instance" "app" {
+  name         = "${var.name}-app"
+  machine_type = local.app_machine_type
   zone         = var.zone
-  tags         = ["${var.name}-node"]
+  tags         = ["${var.name}-node", "${var.name}-app"]
 
   boot_disk {
     initialize_params {
@@ -103,6 +181,11 @@ resource "google_compute_instance" "node" {
       size  = 50
       type  = "pd-balanced"
     }
+  }
+
+  attached_disk {
+    source      = google_compute_disk.app_data.id
+    device_name = "${var.name}-app-data"
   }
 
   network_interface {
@@ -118,9 +201,122 @@ resource "google_compute_instance" "node" {
   }
 
   metadata = {
-    k3s_tls_san = google_compute_address.movierec.address
+    movierec_role    = "app"
+    node_name        = "${var.name}-app"
+    node_label       = "movierec.io/role=app"
+    data_disk_device = "/dev/disk/by-id/google-${var.name}-app-data"
+    gpu_enabled      = "false"
+    k3s_tls_san      = google_compute_address.movierec.address
   }
   metadata_startup_script = file("${path.module}/../../../scripts/gcp/k3s-startup.sh")
 
-  depends_on = [google_project_service.required]
+  depends_on = [
+    google_compute_router_nat.movierec,
+    google_project_service.required,
+  ]
+}
+
+resource "google_compute_instance" "database" {
+  name         = "${var.name}-database"
+  machine_type = local.database_machine_type
+  zone         = var.zone
+  tags         = ["${var.name}-node", "${var.name}-database"]
+
+  boot_disk {
+    initialize_params {
+      image = "ubuntu-os-cloud/ubuntu-2404-lts-amd64"
+      size  = 30
+      type  = "pd-balanced"
+    }
+  }
+
+  attached_disk {
+    source      = google_compute_disk.database_data.id
+    device_name = "${var.name}-database-data"
+  }
+
+  network_interface {
+    subnetwork = google_compute_subnetwork.movierec.id
+  }
+
+  service_account {
+    email  = google_service_account.node.email
+    scopes = ["cloud-platform"]
+  }
+
+  metadata = {
+    movierec_role    = "database"
+    node_name        = "${var.name}-database"
+    node_label       = "movierec.io/role=database"
+    data_disk_device = "/dev/disk/by-id/google-${var.name}-database-data"
+    gpu_enabled      = "false"
+  }
+  metadata_startup_script = file("${path.module}/../../../scripts/gcp/k3s-startup.sh")
+
+  depends_on = [
+    google_compute_router_nat.movierec,
+    google_project_service.required,
+  ]
+}
+
+resource "google_compute_instance" "model" {
+  name         = "${var.name}-model"
+  machine_type = local.model_machine_type
+  zone         = var.zone
+  tags         = ["${var.name}-node", "${var.name}-model"]
+
+  boot_disk {
+    initialize_params {
+      image = "ubuntu-os-cloud/ubuntu-2404-lts-amd64"
+      size  = 30
+      type  = "pd-balanced"
+    }
+  }
+
+  attached_disk {
+    source      = google_compute_disk.model_data.id
+    device_name = "${var.name}-model-data"
+  }
+
+  dynamic "guest_accelerator" {
+    for_each = var.model_gpu_enabled ? [1] : []
+    content {
+      type  = var.model_gpu_type
+      count = var.model_gpu_count
+    }
+  }
+
+  scheduling {
+    on_host_maintenance = var.model_gpu_enabled ? "TERMINATE" : "MIGRATE"
+  }
+
+  lifecycle {
+    precondition {
+      condition     = !var.model_gpu_enabled || can(regex("^g2-", local.model_machine_type))
+      error_message = "model_gpu_enabled requires a G2 machine type such as g2-standard-4."
+    }
+  }
+
+  network_interface {
+    subnetwork = google_compute_subnetwork.movierec.id
+  }
+
+  service_account {
+    email  = google_service_account.node.email
+    scopes = ["cloud-platform"]
+  }
+
+  metadata = {
+    movierec_role    = "model"
+    node_name        = "${var.name}-model"
+    node_label       = "movierec.io/role=model"
+    data_disk_device = "/dev/disk/by-id/google-${var.name}-model-data"
+    gpu_enabled      = tostring(var.model_gpu_enabled)
+  }
+  metadata_startup_script = file("${path.module}/../../../scripts/gcp/k3s-startup.sh")
+
+  depends_on = [
+    google_compute_router_nat.movierec,
+    google_project_service.required,
+  ]
 }

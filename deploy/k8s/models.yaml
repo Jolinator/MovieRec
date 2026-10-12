@@ -20,6 +20,8 @@ spec:
   activeDeadlineSeconds: 1800
   template:
     spec:
+      nodeSelector:
+        movierec.io/role: model
       restartPolicy: OnFailure
       containers:
         - name: download-models
