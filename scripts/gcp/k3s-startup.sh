@@ -8,8 +8,8 @@ metadata() {
 }
 
 export DEBIAN_FRONTEND=noninteractive
-apt-get update
-apt-get install -y ca-certificates curl e2fsprogs
+apt-get -o DPkg::Lock::Timeout=300 update
+apt-get -o DPkg::Lock::Timeout=300 install -y ca-certificates curl e2fsprogs
 
 ROLE="$(metadata movierec_role)"
 NODE_NAME="$(metadata node_name)"
@@ -55,13 +55,14 @@ cat > /usr/local/sbin/movierec-join-k3s-agent <<'JOIN'
 #!/bin/bash
 set -euo pipefail
 
-if [[ "${1:-}" == "" || "${2:-}" == "" || "${3:-}" == "" ]]; then
-  echo "usage: movierec-join-k3s-agent SERVER_URL NODE_NAME NODE_LABEL" >&2
+if [[ "${1:-}" == "" || "${2:-}" == "" || "${3:-}" == "" || "${4:-}" == "" ]]; then
+  echo "usage: movierec-join-k3s-agent SERVER_URL NODE_NAME NODE_LABEL K3S_VERSION" >&2
   exit 2
 fi
 SERVER_URL="$1"
 NODE_NAME="$2"
 NODE_LABEL="$3"
+K3S_VERSION="$4"
 if [[ -f /etc/systemd/system/k3s-agent.service ]] || systemctl list-unit-files k3s-agent.service 2>/dev/null | grep -q '^k3s-agent.service'; then
   systemctl start k3s-agent
   exit 0
@@ -76,7 +77,7 @@ fi
 # Do not enable xtrace around the token-bearing installer invocation.
 export K3S_TOKEN
 curl -sfL https://get.k3s.io | \
-  INSTALL_K3S_CHANNEL=stable \
+  INSTALL_K3S_VERSION="${K3S_VERSION}" \
   K3S_URL="${SERVER_URL}" \
   K3S_TOKEN="${K3S_TOKEN}" \
   INSTALL_K3S_EXEC="agent --node-name ${NODE_NAME} --node-label ${NODE_LABEL}" \

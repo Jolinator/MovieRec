@@ -1,0 +1,24 @@
+---
+# Installs the NVIDIA device plugin. Run make gpu-runtime first.
+- name: Set up GPU scheduling
+  hosts: app
+  become: true
+  gather_facts: false
+  environment:
+    KUBECONFIG: "{{ kubeconfig_path }}"
+  tasks:
+    - name: Require a GPU-enabled Terraform deployment
+      ansible.builtin.assert:
+        that: terraform_gpu_enabled | bool
+        fail_msg: Set model_gpu_enabled = true in terraform.tfvars and run make infra-apply first.
+
+    - name: Apply the NVIDIA device plugin
+      ansible.builtin.command: "{{ kubectl }} apply -f -"
+      args:
+        stdin: "{{ lookup('file', manifests_dir ~ '/nvidia-device-plugin.yaml') }}"
+      register: gpu_plugin_apply
+      changed_when: "'created' in gpu_plugin_apply.stdout or 'configured' in gpu_plugin_apply.stdout"
+
+    - name: Wait for the device plugin
+      ansible.builtin.command: "{{ kubectl }} -n kube-system rollout status daemonset/nvidia-device-plugin-daemonset --timeout=10m"
+      changed_when: false

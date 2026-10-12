@@ -2,13 +2,13 @@
 set -euo pipefail
 
 CUSTOMIZE_FILE="${HOME}/.customize_environment"
-MARKER="# BEGIN MovieRec Cloud Shell tools"
+MARKER="# BEGIN MovieRec Cloud Shell tools v2"
 BLOCK_FILE="$(mktemp)"
 trap 'rm -f -- "${BLOCK_FILE}"' EXIT
 
 cat > "${BLOCK_FILE}" <<'EOF'
 
-# BEGIN MovieRec Cloud Shell tools
+# BEGIN MovieRec Cloud Shell tools v2
 set -e
 
 if ! command -v micro >/dev/null 2>&1 || ! command -v terraform >/dev/null 2>&1; then
@@ -31,10 +31,16 @@ if ! command -v micro >/dev/null 2>&1 || ! command -v terraform >/dev/null 2>&1;
   apt-get install -y micro terraform
 fi
 
+if ! command -v ansible-playbook >/dev/null 2>&1; then
+  apt-get update
+  apt-get install -y ansible
+fi
+
 terraform version
 micro --version
-echo "Cloud Shell setup complete: Micro and Terraform are installed."
-# END MovieRec Cloud Shell tools
+ansible --version | head -n 1
+echo "Cloud Shell setup complete: Micro, Terraform and Ansible are installed."
+# END MovieRec Cloud Shell tools v2
 EOF
 
 if [[ ! -f "${CUSTOMIZE_FILE}" ]]; then
@@ -47,5 +53,5 @@ fi
 chmod +x "${CUSTOMIZE_FILE}"
 
 printf 'Persistent setup saved to %s\n' "${CUSTOMIZE_FILE}"
-printf 'Installing Micro and Terraform in this Cloud Shell session...\n'
+printf 'Installing Micro, Terraform and Ansible in this Cloud Shell session...\n'
 sudo bash "${BLOCK_FILE}"

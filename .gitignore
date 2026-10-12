@@ -38,13 +38,17 @@ Thumbs.db
 
 #SPECIFIC PROJECT#
 /TODO.md
+/README.md
 
 
-# Local secrets and cluster credentials
+# Local secrets
 /secrets/
 /deploy/gcp/secrets/
-/kubeconfig
 *.env
+
+# Ansible
+.ansible/
+*.retry
 
 # Python and generated reports
 __pycache__/

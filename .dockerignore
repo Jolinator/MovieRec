@@ -10,7 +10,6 @@ backend/tmp
 *.env
 secrets/
 deploy/gcp/secrets/
-kubeconfig
 *.tfstate
 *.tfstate.*
 *.tfvars

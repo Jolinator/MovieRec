@@ -1,0 +1,11 @@
+---
+# Full CPU deployment after make infra-apply and make secrets-init.
+# Pass -e image_tag=TAG (see make deploy).
+- name: Run cluster
+  import_playbook: playbooks/cluster.yml
+- name: Run config
+  import_playbook: playbooks/config.yml
+- name: Run models
+  import_playbook: playbooks/models.yml
+- name: Run deploy
+  import_playbook: playbooks/deploy.yml

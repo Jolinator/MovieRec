@@ -1,18 +1,16 @@
 SHELL := /usr/bin/env bash
 .SHELLFLAGS := -eu -o pipefail -c
 
-ROOT_DIR := $(abspath .)
 TF_DIR := deploy/gcp/terraform
 GCP_SCRIPTS := scripts/gcp
-KUBECONFIG ?= $(ROOT_DIR)/kubeconfig
 IMAGE_TAG ?=
 PUBLIC_HOST ?=
 GPU_LLAMA_IMAGE ?= ghcr.io/ggml-org/llama.cpp:server-cuda-v0.4.1
-
-export KUBECONFIG
+ANSIBLE_DIR := deploy/ansible
+ANSIBLE_PLAY := cd $(ANSIBLE_DIR) && ansible-playbook
 
 .PHONY: help cloud-shell-setup infra-config infra-init infra-fmt infra-validate infra-plan infra-apply \
-        cluster-bootstrap secrets-init build-push connect k8s-config models deploy gpu-runtime gpu-setup deploy-gpu start stop destroy
+        ssh-access cluster-bootstrap secrets-init build-push k8s-config models deploy gpu-runtime gpu-setup deploy-gpu start stop destroy
 
 help:
 	@printf '%s\n' \
@@ -22,21 +20,20 @@ help:
 	  '  make infra-init                   Initialize Terraform' \
 	  '  make infra-plan                   Validate and review the three-VM plan' \
 	  '  make infra-apply                  Create/start three VMs and cloud resources (billed while running)' \
-	  '  make cluster-bootstrap             Join running database/model VMs to the app K3s server' \
+	  '  make cluster-bootstrap             Ansible: join running database/model VMs to the app K3s server' \
 	  '  make secrets-init                 Prepare ignored cloud secret files and cryptographic keys' \
 	  '  make build-push [IMAGE_TAG=tag]   Build/push images (does not start or stop VMs)' \
-	  '  make connect                      Download kubeconfig and open the app IAP tunnel' \
-	  '  make k8s-config                   Create/update Kubernetes ConfigMaps and Secrets' \
-	  '  make models                       Download and verify the model files on the model VM' \
-	  '  make deploy IMAGE_TAG=tag         Apply manifests and wait for rollouts' \
+	  '  make k8s-config                   Ansible: create/update Kubernetes ConfigMaps and Secrets' \
+	  '  make models                       Ansible: download and verify the model files on the model VM' \
+	  '  make deploy IMAGE_TAG=tag         Ansible: apply the Kustomize manifests and wait for rollouts' \
 	  '  make gpu-runtime                  Install NVIDIA drivers/runtime on the model VM (opt-in)' \
-	  '  make gpu-setup                    Install the Kubernetes GPU device plugin (opt-in)' \
-	  '  make deploy-gpu IMAGE_TAG=tag     Apply the CUDA generation model overlay (opt-in)' \
+	  '  make gpu-setup                    Ansible: install the Kubernetes GPU device plugin (opt-in)' \
+	  '  make deploy-gpu IMAGE_TAG=tag     Ansible: apply the CUDA generation model overlay (opt-in)' \
 	  '  make start                        Start all three existing VMs' \
 	  '  make stop                         Stop VMs; disks/IP/registry remain' \
 	  '  make destroy CONFIRM_DESTROY=1    Destroy Terraform resources and attached disks' \
 	  '' \
-	  'Keep the IAP tunnel from make connect open while running k8s-config, models, deploy, or GPU setup.'
+	  'Ansible targets run kubectl on the app VM over IAP SSH; no local kubeconfig or tunnel is needed.'
 
 cloud-shell-setup:
 	bash $(GCP_SCRIPTS)/setup-cloud-shell.sh
@@ -60,8 +57,12 @@ infra-apply: infra-validate
 	@printf '%s\n' 'Warning: this creates and starts three cloud VMs plus disks, NAT, a public IP, and Artifact Registry resources; charges begin while VMs run and retained resources can still incur charges after make stop.'
 	terraform -chdir=$(TF_DIR) apply
 
-cluster-bootstrap:
-	bash $(GCP_SCRIPTS)/cluster-bootstrap.sh
+ssh-access:
+	gcloud compute ssh "$$(terraform -chdir=$(TF_DIR) output -raw app_instance_name)" \
+	  --zone="$$(terraform -chdir=$(TF_DIR) output -raw zone)" --tunnel-through-iap --quiet --command=true
+
+cluster-bootstrap: ssh-access
+	$(ANSIBLE_PLAY) playbooks/cluster.yml
 
 secrets-init:
 	bash $(GCP_SCRIPTS)/init-secrets.sh
@@ -69,30 +70,25 @@ secrets-init:
 build-push:
 	bash $(GCP_SCRIPTS)/build-and-push.sh "$(IMAGE_TAG)"
 
-connect:
-	bash $(GCP_SCRIPTS)/connect-k3s.sh
+k8s-config: ssh-access
+	$(ANSIBLE_PLAY) playbooks/config.yml -e public_host="$(PUBLIC_HOST)"
 
-k8s-config:
-	PUBLIC_HOST="$(PUBLIC_HOST)" bash $(GCP_SCRIPTS)/configure-k8s.sh
+models: ssh-access
+	$(ANSIBLE_PLAY) playbooks/models.yml
 
-models:
-	kubectl apply -f deploy/k8s/models.yaml
-	kubectl -n movierec wait --for=condition=complete job/model-downloader --timeout=35m
-
-deploy:
+deploy: ssh-access
 	@test -n "$(IMAGE_TAG)" || { printf '%s\n' 'Set IMAGE_TAG, for example: make deploy IMAGE_TAG=20261012'; exit 2; }
-	PUBLIC_HOST="$(PUBLIC_HOST)" bash $(GCP_SCRIPTS)/apply-k8s.sh "$(IMAGE_TAG)"
+	$(ANSIBLE_PLAY) playbooks/deploy.yml -e image_tag="$(IMAGE_TAG)" -e public_host="$(PUBLIC_HOST)"
 
 gpu-runtime:
 	bash $(GCP_SCRIPTS)/install-gpu-runtime.sh
 
-gpu-setup:
-	kubectl apply -f deploy/k8s/nvidia-device-plugin.yaml
-	kubectl -n kube-system rollout status daemonset/nvidia-device-plugin-daemonset --timeout=10m
+gpu-setup: ssh-access
+	$(ANSIBLE_PLAY) playbooks/gpu-setup.yml
 
-deploy-gpu:
+deploy-gpu: ssh-access
 	@test -n "$(IMAGE_TAG)" || { printf '%s\n' 'Set IMAGE_TAG, for example: make deploy-gpu IMAGE_TAG=20261012'; exit 2; }
-	PUBLIC_HOST="$(PUBLIC_HOST)" GPU_LLAMA_IMAGE="$(GPU_LLAMA_IMAGE)" MODEL_GPU_ENABLED=true bash $(GCP_SCRIPTS)/apply-k8s.sh "$(IMAGE_TAG)"
+	$(ANSIBLE_PLAY) playbooks/deploy.yml -e image_tag="$(IMAGE_TAG)" -e public_host="$(PUBLIC_HOST)" -e gpu_overlay=true -e gpu_llama_image="$(GPU_LLAMA_IMAGE)"
 
 start:
 	ZONE="$$(terraform -chdir=$(TF_DIR) output -raw zone)"; \

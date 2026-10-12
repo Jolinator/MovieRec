@@ -1,0 +1,94 @@
+---
+# Joins the database and model VMs to the K3s server running on the app VM.
+- name: Wait for the K3s server and read its join credentials
+  hosts: app
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Wait for K3s and its node token
+      ansible.builtin.shell: systemctl is-active --quiet k3s && test -s /var/lib/rancher/k3s/server/node-token  # noqa: command-instead-of-module
+      register: k3s_ready
+      until: k3s_ready.rc == 0
+      retries: 60
+      delay: 10
+      changed_when: false
+
+    - name: Read the node token
+      ansible.builtin.slurp:
+        src: /var/lib/rancher/k3s/server/node-token
+      register: k3s_token_file
+      no_log: true
+
+    - name: Read the K3s server version
+      ansible.builtin.shell: |
+        set -o pipefail
+        /usr/local/bin/k3s --version | awk 'NR==1 {print $3}'
+      args:
+        executable: /bin/bash
+      register: k3s_version_output
+      changed_when: false
+
+    - name: Share the join data with the workers
+      ansible.builtin.set_fact:
+        k3s_join_token: "{{ k3s_token_file.content | b64decode | trim }}"
+        k3s_server_version: "{{ k3s_version_output.stdout | trim }}"
+      no_log: true
+
+- name: Join the worker VMs
+  hosts: database:model
+  become: true
+  gather_facts: false
+  vars:
+    server: "{{ hostvars[groups['app'][0]] }}"
+  tasks:
+    - name: Wait for the startup script to prepare the VM
+      ansible.builtin.wait_for:
+        path: /usr/local/sbin/movierec-join-k3s-agent
+        timeout: 600
+
+    - name: Check for an existing K3s agent
+      ansible.builtin.stat:
+        path: /etc/systemd/system/k3s-agent.service
+      register: k3s_agent_unit
+
+    # The agent must not be newer than the server, so it installs the server's
+    # exact version. The token goes through stdin only, never an argument.
+    - name: Install and start the K3s agent
+      ansible.builtin.command:
+        argv:
+          - /usr/local/sbin/movierec-join-k3s-agent
+          - "https://{{ app_private_ip }}:6443"
+          - "{{ inventory_hostname }}"
+          - "{{ node_label }}"
+          - "{{ server.k3s_server_version }}"
+        stdin: "{{ server.k3s_join_token }}"
+      when: not k3s_agent_unit.stat.exists
+      changed_when: true
+      no_log: true
+
+    - name: Make sure the K3s agent is running
+      ansible.builtin.systemd:
+        name: k3s-agent
+        state: started
+        enabled: true
+
+- name: Verify the cluster
+  hosts: app
+  become: true
+  gather_facts: false
+  environment:
+    KUBECONFIG: "{{ kubeconfig_path }}"
+  tasks:
+    - name: Wait for every node to be Ready
+      ansible.builtin.command: "{{ kubectl }} wait --for=condition=Ready node/{{ item }} --timeout=300s"
+      loop: "{{ groups['all'] }}"
+      changed_when: false
+
+    - name: Show the nodes
+      ansible.builtin.command: "{{ kubectl }} get nodes --show-labels"
+      register: cluster_nodes
+      changed_when: false
+
+    - name: Print the nodes
+      ansible.builtin.debug:
+        var: cluster_nodes.stdout_lines
