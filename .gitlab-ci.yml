@@ -38,7 +38,4 @@ docker_images:
     BACKEND_IMAGE: "$CI_REGISTRY/$CI_PROJECT_PATH/backend:$CI_COMMIT_SHA"
     FRONTEND_IMAGE: "$CI_REGISTRY/$CI_PROJECT_PATH/frontend:$CI_COMMIT_SHA"
   script:
-    - echo "CI_REGISTRY=${CI_REGISTRY:-unset}"
-    - echo "CI_REGISTRY_IMAGE=${CI_REGISTRY_IMAGE:-unset}"
-    - echo "CI_PROJECT_PATH=${CI_PROJECT_PATH:-unset}"
     - ./ci-cd/build-images.sh
