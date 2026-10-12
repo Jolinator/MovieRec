@@ -11,11 +11,15 @@ from urllib.parse import urljoin
 
 import requests
 
-from DockerManager import DATABASE_STATUS_KEYS, DockerManager
+try:
+    from testing.backend.DockerTests.DockerManager import DATABASE_STATUS_KEYS, DockerManager
+except ModuleNotFoundError:
+    from DockerManager import DATABASE_STATUS_KEYS, DockerManager
 
 
-TESTS_DIR = Path(__file__).resolve().parent / "tests"
-REPORTS_DIR = Path(__file__).resolve().parent / "reports"
+BACKEND_TESTING_DIR = Path(__file__).resolve().parents[1]
+TESTS_DIR = BACKEND_TESTING_DIR / "tests"
+REPORTS_DIR = BACKEND_TESTING_DIR / "reports"
 
 
 class ReportLogHandler(logging.Handler):

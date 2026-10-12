@@ -44,7 +44,7 @@ DATABASE_SCAN_NAMES = {
 
 class DockerManager:
     def __init__(self, reset_all = True):
-        project_root = Path(__file__).resolve().parents[2]
+        project_root = Path(__file__).resolve().parents[3]
         load_dotenv(project_root / "secrets" / "ports.env")
         backend_port = os.getenv("BACKEND_PORT")
         if not backend_port:

@@ -32,7 +32,7 @@ backend_tests:
     BACKEND_HOST: docker
   before_script:
     - apk add --no-cache python3 py3-pip
-    - pip install --break-system-packages -r testing/backend/requirements.txt
+    - pip install --break-system-packages -r testing/backend/DockerTests/requirements.txt
     - ./ci-cd/prepare-backend-integration.sh
     - until docker info >/dev/null 2>&1; do sleep 1; done
   script:

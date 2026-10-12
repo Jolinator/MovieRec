@@ -5,10 +5,11 @@ The pipeline currently performs validation and image builds only:
 - `backend_validation` checks Go formatting and runs `go vet`.
 - `frontend_validation` installs the locked npm dependencies and runs the production build.
 - `backend_tests` runs the integration scenarios from
-  `testing/backend/TestRunner.py`, which starts the required Compose services
-  and writes a test report. The job uses Docker-in-Docker, installs the Python
-  dependencies from `testing/backend/requirements.txt`, and prepares
-  throwaway Compose secrets from `secrets-example/`.
+  `testing/backend/DockerTests/TestRunner.py`, which starts the required
+  Compose services and writes a test report. The job uses Docker-in-Docker,
+  installs Python dependencies from
+  `testing/backend/DockerTests/requirements.txt`, and prepares throwaway
+  Compose secrets from `secrets-example/`.
 - `docker_images` builds one image per backend service (`gateway`, `auth`,
   `movies`, `recommendations`, all from `backend/Dockerfile` with a `SERVICE`
   build argument) and the frontend image, tagged with the commit SHA.
