@@ -6,7 +6,7 @@ COPY backend/go.mod backend/go.sum ./
 RUN go mod download
 
 COPY backend/ ./
-RUN CGO_ENABLED=0 GOOS=linux go build -o /out/backend .
+RUN CGO_ENABLED=0 GOOS=linux go build -o /out/backend ./cmd/backend
 
 FROM gcr.io/distroless/static-debian12
 
