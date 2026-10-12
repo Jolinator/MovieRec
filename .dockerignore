@@ -9,6 +9,7 @@ backend/tmp
 .env
 *.env
 secrets/
+deploy/gcp/secrets/
 kubeconfig
 *.tfstate
 *.tfstate.*

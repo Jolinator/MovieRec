@@ -120,7 +120,7 @@ resource "google_compute_instance" "node" {
   metadata = {
     k3s_tls_san = google_compute_address.movierec.address
   }
-  metadata_startup_script = file("${path.module}/../../../scripts/k3s-startup.sh")
+  metadata_startup_script = file("${path.module}/../../../scripts/gcp/k3s-startup.sh")
 
   depends_on = [google_project_service.required]
 }
