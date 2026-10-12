@@ -35,7 +35,7 @@ func NewUserRepository(db *pgxpool.Pool, dbStatus *database.DBStatus) *UserRepos
 }
 
 func (r *UserRepository) Create(ctx context.Context, username, passwordHash string) (User, error) {
-	if !r.dbStatus.AuthAvailable() {
+	if !r.dbStatus.Available() {
 		return User{}, fmt.Errorf("%w: auth database is unavailable", common.ErrAuthDatabaseUnavailable)
 	}
 
@@ -63,7 +63,7 @@ func (r *UserRepository) Create(ctx context.Context, username, passwordHash stri
 }
 
 func (r *UserRepository) FindByUsername(ctx context.Context, username string) (UserCredentials, error) {
-	if !r.dbStatus.AuthAvailable() {
+	if !r.dbStatus.Available() {
 		return UserCredentials{}, fmt.Errorf("%w: auth database is unavailable", common.ErrAuthDatabaseUnavailable)
 	}
 
@@ -91,7 +91,7 @@ func (r *UserRepository) FindByUsername(ctx context.Context, username string) (U
 }
 
 func (r *UserRepository) FindByID(ctx context.Context, userID uuid.UUID) (User, error) {
-	if !r.dbStatus.AuthAvailable() {
+	if !r.dbStatus.Available() {
 		return User{}, fmt.Errorf("%w: auth database is unavailable", common.ErrAuthDatabaseUnavailable)
 	}
 
@@ -111,7 +111,7 @@ func (r *UserRepository) FindByID(ctx context.Context, userID uuid.UUID) (User, 
 }
 
 func (r *UserRepository) SearchByUsername(ctx context.Context, query string, limit int) ([]User, error) {
-	if !r.dbStatus.AuthAvailable() {
+	if !r.dbStatus.Available() {
 		return nil, common.ErrAuthDatabaseUnavailable
 	}
 

@@ -30,7 +30,7 @@ type recommendationCache struct {
 }
 
 func (r *RecommendationCacheRepository) Request(ctx context.Context, userID uuid.UUID) error {
-	if !r.dbStatus.RecommendationsDbAvailable() {
+	if !r.dbStatus.Available() {
 		return common.ErrRecommendationsDatabaseUnavailable
 	}
 	_, err := r.db.Exec(ctx, `
@@ -42,7 +42,7 @@ func (r *RecommendationCacheRepository) Request(ctx context.Context, userID uuid
 }
 
 func (r *RecommendationCacheRepository) Get(ctx context.Context, userID uuid.UUID) (recommendationCache, error) {
-	if !r.dbStatus.RecommendationsDbAvailable() {
+	if !r.dbStatus.Available() {
 		return recommendationCache{}, common.ErrRecommendationsDatabaseUnavailable
 	}
 	var cache recommendationCache
@@ -74,7 +74,7 @@ func (r *RecommendationCacheRepository) Get(ctx context.Context, userID uuid.UUI
 }
 
 func (r *RecommendationCacheRepository) Save(ctx context.Context, userID uuid.UUID, status string, movieIDs []int) error {
-	if !r.dbStatus.RecommendationsDbAvailable() {
+	if !r.dbStatus.Available() {
 		return common.ErrRecommendationsDatabaseUnavailable
 	}
 	tx, err := r.db.Begin(ctx)

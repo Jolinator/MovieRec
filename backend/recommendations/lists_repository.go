@@ -27,7 +27,7 @@ func (r *ListRepository) List(ctx context.Context, userID uuid.UUID) ([]int, err
 }
 
 func (r *ListRepository) ListByUserID(ctx context.Context, userID uuid.UUID) ([]int, error) {
-	if !r.dbStatus.RecommendationsDbAvailable() {
+	if !r.dbStatus.Available() {
 		return nil, common.ErrRecommendationsDatabaseUnavailable
 	}
 
@@ -58,7 +58,7 @@ func (r *ListRepository) ListByUserID(ctx context.Context, userID uuid.UUID) ([]
 }
 
 func (r *ListRepository) Add(ctx context.Context, userID uuid.UUID, tmdbID int) error {
-	if !r.dbStatus.RecommendationsDbAvailable() {
+	if !r.dbStatus.Available() {
 		return common.ErrRecommendationsDatabaseUnavailable
 	}
 
@@ -95,7 +95,7 @@ func (r *ListRepository) Add(ctx context.Context, userID uuid.UUID, tmdbID int) 
 }
 
 func (r *ListRepository) Remove(ctx context.Context, userID uuid.UUID, tmdbID int) error {
-	if !r.dbStatus.RecommendationsDbAvailable() {
+	if !r.dbStatus.Available() {
 		return common.ErrRecommendationsDatabaseUnavailable
 	}
 

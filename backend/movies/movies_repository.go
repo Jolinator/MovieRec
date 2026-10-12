@@ -76,7 +76,7 @@ func NewMovieRepository(db *pgxpool.Pool, dbStatus *database.DBStatus) *MovieRep
 }
 
 func (r *MovieRepository) Upsert(ctx context.Context, movie Movie) error {
-	if !r.db_status.MoviesAvailable() {
+	if !r.db_status.Available() {
 		return common.ErrMoviesDatabaseUnavailable
 	}
 
@@ -136,7 +136,7 @@ func (r *MovieRepository) Upsert(ctx context.Context, movie Movie) error {
 }
 
 func (r *MovieRepository) List(ctx context.Context, limit, offset int, genreID *int) ([]Movie, error) {
-	if !r.db_status.MoviesAvailable() {
+	if !r.db_status.Available() {
 		return []Movie{}, common.ErrMoviesDatabaseUnavailable
 	}
 
@@ -183,7 +183,7 @@ func (r *MovieRepository) List(ctx context.Context, limit, offset int, genreID *
 }
 
 func (r *MovieRepository) FindByTMDBID(ctx context.Context, tmdbID int) (Movie, error) {
-	if !r.db_status.MoviesAvailable() {
+	if !r.db_status.Available() {
 		return Movie{}, common.ErrMoviesDatabaseUnavailable
 	}
 
@@ -216,7 +216,7 @@ type Genre struct {
 }
 
 func (r *MovieRepository) ListGenres(ctx context.Context) ([]Genre, error) {
-	if !r.db_status.MoviesAvailable() {
+	if !r.db_status.Available() {
 		return []Genre{}, common.ErrMoviesDatabaseUnavailable
 	}
 
@@ -241,7 +241,7 @@ func (r *MovieRepository) ListGenres(ctx context.Context) ([]Genre, error) {
 }
 
 func (r *MovieRepository) EmbedSynopses(ctx context.Context, embedder Embedder) error {
-	if !r.db_status.MoviesAvailable() {
+	if !r.db_status.Available() {
 		return common.ErrMoviesDatabaseUnavailable
 	}
 	rows, err := r.db.Query(ctx, `SELECT id, synopsis FROM movies WHERE synopsis <> '' AND synopsis_embedding IS NULL`)
@@ -285,7 +285,7 @@ func vectorLiteral(vector []float32) string {
 }
 
 func (r *MovieRepository) SearchSimilar(ctx context.Context, vector []float32, limit int) ([]Movie, error) {
-	if !r.db_status.MoviesAvailable() {
+	if !r.db_status.Available() {
 		return nil, common.ErrMoviesDatabaseUnavailable
 	}
 	rows, err := r.db.Query(ctx, `SELECT tmdb_id, title, release_date, average_rating, poster_path, synopsis, backdrop_path FROM movies WHERE synopsis_embedding IS NOT NULL ORDER BY synopsis_embedding <=> $1::vector LIMIT $2`, vectorLiteral(vector), limit)
@@ -305,7 +305,7 @@ func (r *MovieRepository) SearchSimilar(ctx context.Context, vector []float32, l
 }
 
 func (r *MovieRepository) RecommendationProfile(ctx context.Context, tmdbIDs []int) ([]float32, error) {
-	if !r.db_status.MoviesAvailable() {
+	if !r.db_status.Available() {
 		return nil, common.ErrMoviesDatabaseUnavailable
 	}
 	if len(tmdbIDs) == 0 {
@@ -354,7 +354,7 @@ func (r *MovieRepository) RecommendationProfile(ctx context.Context, tmdbIDs []i
 }
 
 func (r *MovieRepository) SearchSimilarExcluding(ctx context.Context, vector []float32, excluded []int, limit int) ([]Movie, error) {
-	if !r.db_status.MoviesAvailable() {
+	if !r.db_status.Available() {
 		return nil, common.ErrMoviesDatabaseUnavailable
 	}
 	rows, err := r.db.Query(ctx, `

@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -19,26 +20,27 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func setupServer(authDB *pgxpool.Pool, ctx context.Context, moviesDB, recommendationsDB *pgxpool.Pool, tokenIssuer *auth.TokenIssuer, tokenVerifier *auth.TokenVerifier, dbStatus *database.DBStatus, port string) *http.Server {
+func setupServer(authDB *pgxpool.Pool, ctx context.Context, moviesDB, recommendationsDB *pgxpool.Pool, tokenIssuer *auth.TokenIssuer, tokenVerifier *auth.TokenVerifier, dbStatuses database.Statuses, port string) *http.Server {
 
-	movieRepository := movies.NewMovieRepository(moviesDB, dbStatus)
-	listRepository := recommendations.NewListRepository(recommendationsDB, dbStatus)
-	cacheRepository := recommendations.NewRecommendationCacheRepository(recommendationsDB, dbStatus)
+	movieRepository := movies.NewMovieRepository(moviesDB, dbStatuses[database.MoviesDatabase])
+	listRepository := recommendations.NewListRepository(recommendationsDB, dbStatuses[database.RecommendationsDatabase])
+	cacheRepository := recommendations.NewRecommendationCacheRepository(recommendationsDB, dbStatuses[database.RecommendationsDatabase])
 	recommendationService := recommendations.NewService(movieRepository, listRepository, cacheRepository)
+	var importedMovies atomic.Bool
 	go func() {
 		if err := movies.ImportPopularMoviesWithRetry(ctx, movieRepository, 10, 2*time.Second); err != nil {
 			log.Printf("movie import failed: %v", err)
 			return
 		}
-		dbStatus.SetImportedMoviesAvailable(true)
+		importedMovies.Store(true)
 		if err := recommendationService.InitializeWithRetry(ctx, 30, 2*time.Second); err != nil {
 			log.Printf("recommendation models unavailable: %v", err)
 		}
 	}()
-	userService := auth.NewUserService(auth.NewUserRepository(authDB, dbStatus), tokenIssuer)
+	userService := auth.NewUserService(auth.NewUserRepository(authDB, dbStatuses[database.AuthDatabase]), tokenIssuer)
 	movieService := movies.NewMovieService(movieRepository)
 	listService := recommendations.NewListService(listRepository, movieRepository)
-	server := httpapi.NewServer(dbStatus, userService, movieService, listService, tokenVerifier, recommendationService)
+	server := httpapi.NewServer(dbStatuses, &importedMovies, userService, movieService, listService, tokenVerifier, recommendationService)
 	mux := http.NewServeMux()
 	httpapi.RegisterEndpoints(mux, server)
 	handler := httpapi.RequestMetricsMiddleware(httpapi.CorsMiddleware(mux))
@@ -121,8 +123,14 @@ func main() {
 	}
 	defer recommendationsPool.Close()
 
-	dbStatus := database.NewDBStatus(authPool, moviesPool, recommendationsPool)
-	go dbStatus.Start(databaseContext, 5*time.Second)
+	dbStatuses := database.Statuses{
+		database.AuthDatabase:            database.NewDBStatus(authPool),
+		database.MoviesDatabase:          database.NewDBStatus(moviesPool),
+		database.RecommendationsDatabase: database.NewDBStatus(recommendationsPool),
+	}
+	for _, status := range dbStatuses {
+		go status.Start(databaseContext, 5*time.Second)
+	}
 
 	tokenIssuer, err := auth.SetupTokenIssuer()
 	if err != nil {
@@ -140,7 +148,7 @@ func main() {
 		return
 	}
 
-	httpServer := setupServer(authPool, databaseContext, moviesPool, recommendationsPool, tokenIssuer, tokenVerifier, dbStatus, port)
+	httpServer := setupServer(authPool, databaseContext, moviesPool, recommendationsPool, tokenIssuer, tokenVerifier, dbStatuses, port)
 
 	serverErrors := RunServer(authPool, httpServer)
 

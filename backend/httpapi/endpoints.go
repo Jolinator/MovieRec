@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync/atomic"
 
 	"backend/auth"
 	"backend/common"
@@ -16,7 +17,8 @@ import (
 )
 
 type Server struct {
-	dbStatus              *database.DBStatus
+	dbStatuses            database.Statuses
+	importedMovies        *atomic.Bool
 	userService           *auth.UserService
 	movieService          *movies.MovieService
 	listService           *recommendations.ListService
@@ -24,9 +26,10 @@ type Server struct {
 	recommendationService *recommendations.Service
 }
 
-func NewServer(dbStatus *database.DBStatus, userService *auth.UserService, movieService *movies.MovieService, listService *recommendations.ListService, tokenVerifier *auth.TokenVerifier, recommendationService *recommendations.Service) *Server {
+func NewServer(dbStatuses database.Statuses, importedMovies *atomic.Bool, userService *auth.UserService, movieService *movies.MovieService, listService *recommendations.ListService, tokenVerifier *auth.TokenVerifier, recommendationService *recommendations.Service) *Server {
 	return &Server{
-		dbStatus:              dbStatus,
+		dbStatuses:            dbStatuses,
+		importedMovies:        importedMovies,
 		userService:           userService,
 		movieService:          movieService,
 		listService:           listService,
@@ -144,26 +147,19 @@ func (s *Server) healthHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if scanRequested {
-		s.dbStatus.Scan(r.Context(), databases...)
+		s.dbStatuses.Scan(r.Context(), databases...)
 	} else {
-		s.dbStatus.HealthScan(r.Context())
+		s.dbStatuses.Refresh(r.Context())
 	}
-
-	auth_available := s.dbStatus.AuthAvailable()
-	movies_db_available := s.dbStatus.MoviesAvailable()
-	recommendations_available := s.dbStatus.RecommendationsDbAvailable()
-	imported_movies_available := s.dbStatus.ImportedMoviesAvailable()
-	backend_available := true
-	recommendations_ready := s.recommendationService.Ready()
 
 	response := common.HealthResponse{
 		Message:                    "API is healthy!",
-		BackendAvailable:           backend_available,
-		ImportedMoviesAvailable:    imported_movies_available,
-		AuthDBAvailable:            auth_available,
-		MoviesDBAvailable:          movies_db_available,
-		RecommendationsDBAvailable: recommendations_available,
-		RecommendationsReady:       recommendations_ready,
+		BackendAvailable:           true,
+		ImportedMoviesAvailable:    s.importedMovies.Load(),
+		AuthDBAvailable:            s.dbStatuses[database.AuthDatabase].Available(),
+		MoviesDBAvailable:          s.dbStatuses[database.MoviesDatabase].Available(),
+		RecommendationsDBAvailable: s.dbStatuses[database.RecommendationsDatabase].Available(),
+		RecommendationsReady:       s.recommendationService.Ready(),
 	}
 	common.WriteJSON(w, response)
 }
