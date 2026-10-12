@@ -1,5 +1,7 @@
 #!/usr/bin/env sh
 set -eu
 
-cd "$(dirname "$0")/../backend"
-go test ./...
+ROOT_DIR=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
+
+cd "$ROOT_DIR"
+python3 testing/backend/TestRunner.py

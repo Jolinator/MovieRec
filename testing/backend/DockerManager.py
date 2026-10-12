@@ -47,7 +47,8 @@ class DockerManager:
         if not backend_port:
             raise ValueError("BACKEND_PORT is not set in secrets/ports.env")
 
-        self.backend_url = f"http://localhost:{backend_port}"
+        backend_host = os.getenv("BACKEND_HOST", "localhost")
+        self.backend_url = f"http://{backend_host}:{backend_port}"
         self.allowed_services: set[str] = allowed_services
         self.required_services: set[str] = set()
         self.active_services: set[str] = set()
