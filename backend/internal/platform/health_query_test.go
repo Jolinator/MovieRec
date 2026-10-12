@@ -49,7 +49,7 @@ func TestParseHealthScanQuery(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			request := httptest.NewRequest("GET", test.url, nil)
-			databases, requested, err := parseHealthScanQuery(request)
+			databases, requested, err := ParseHealthScanQuery(request)
 
 			if requested != test.wantRequested {
 				t.Fatalf("requested = %t, want %t", requested, test.wantRequested)

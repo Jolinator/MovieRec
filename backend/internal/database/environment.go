@@ -9,8 +9,14 @@ import (
 	"github.com/joho/godotenv"
 )
 
+// LoadLocalEnvironment loads every service's local environment files, for the single-process backend.
 func LoadLocalEnvironment() error {
-	for _, name := range []string{"auth.env", "movies.env", "recommendations.env", "tmdb.env", "ports.env"} {
+	return LoadEnvironmentFiles("auth.env", "movies.env", "recommendations.env", "tmdb.env", "ports.env")
+}
+
+// LoadEnvironmentFiles loads the named files from the local secrets directory, skipping missing ones.
+func LoadEnvironmentFiles(names ...string) error {
+	for _, name := range names {
 		path := filepath.Join("..", "secrets", name)
 		_, err := os.Stat(path)
 		if err == nil {

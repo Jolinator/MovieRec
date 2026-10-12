@@ -8,7 +8,8 @@ import (
 	"backend/internal/database"
 )
 
-func parseHealthScanQuery(r *http.Request) ([]database.Database, bool, error) {
+// ParseHealthScanQuery reads the optional "scan" parameter naming the databases to ping on demand.
+func ParseHealthScanQuery(r *http.Request) ([]database.Database, bool, error) {
 	scan, requested := r.URL.Query()["scan"]
 	if !requested {
 		return nil, false, nil

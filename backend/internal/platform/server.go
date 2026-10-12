@@ -49,12 +49,17 @@ func HandleErrors(serverErrors chan error, databaseContext context.Context, http
 	}
 }
 
+// Env returns the named environment variable, or fallback when it is unset or empty.
+func Env(name, fallback string) string {
+	if value := os.Getenv(name); value != "" {
+		return value
+	}
+	return fallback
+}
+
 // PortFromEnv returns the validated port in the named variable, or "" if it is invalid.
 func PortFromEnv(name, fallback string) string {
-	port := os.Getenv(name)
-	if port == "" {
-		port = fallback
-	}
+	port := Env(name, fallback)
 	portNumber, err := strconv.ParseUint(port, 10, 16)
 	if err != nil || portNumber == 0 {
 		log.Printf("invalid %s %q", name, port)

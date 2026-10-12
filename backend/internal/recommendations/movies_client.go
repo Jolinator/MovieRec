@@ -22,7 +22,7 @@ type MoviesClient struct {
 }
 
 func NewMoviesClient() *MoviesClient {
-	defaultURL := "http://localhost:" + env("INTERNAL_PORT", "8081")
+	defaultURL := "http://localhost:" + env("MOVIES_INTERNAL_PORT", env("INTERNAL_PORT", "8081"))
 	return &MoviesClient{
 		baseURL: strings.TrimRight(env("MOVIES_INTERNAL_URL", defaultURL), "/"),
 		client:  &http.Client{Timeout: 10 * time.Second},
