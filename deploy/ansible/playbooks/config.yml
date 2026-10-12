@@ -1,0 +1,245 @@
+---
+# Creates the namespace, ConfigMaps and Secrets the manifests depend on.
+# Secret values come from the ignored deploy/gcp/secrets directory (make secrets-init).
+- name: Check the local secret files
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    required_files:
+      - auth.env
+      - movies.env
+      - recommendations.env
+      - tmdb.env
+      - tls/server.crt
+      - tls/server.key
+      - jwt-private.pem
+      - jwt-public.pem
+  tasks:
+    - name: Find the secret files
+      ansible.builtin.stat:
+        path: "{{ secrets_dir }}/{{ item }}"
+      loop: "{{ required_files }}"
+      register: secret_files
+
+    - name: Require every secret file
+      ansible.builtin.assert:
+        that: item.stat.exists and item.stat.size > 0
+        fail_msg: "Missing {{ item.item }} in {{ secrets_dir }}; run make secrets-init and review the files."
+      loop: "{{ secret_files.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: Require the placeholders to be replaced
+      ansible.builtin.assert:
+        that: "'REPLACE_' not in lookup('file', secrets_dir ~ '/' ~ item ~ '.env')"
+        fail_msg: "Replace the placeholder values in {{ secrets_dir }}/{{ item }}.env."
+      loop: [auth, movies, recommendations, tmdb]
+      no_log: true
+
+- name: Configure the cluster
+  hosts: app
+  become: true
+  gather_facts: false
+  vars_prompt:
+    - name: grafana_admin_password
+      prompt: "Grafana admin password (leave empty to keep the existing one)"
+      private: true
+      default: ""
+  vars:
+    web_host: "{{ public_host if public_host else public_ip ~ '.nip.io' }}"
+    web_host_is_ip: "{{ web_host is match('^([0-9]{1,3}\\.){3}[0-9]{1,3}$') }}"
+    web_san: "{{ ('IP:' if web_host_is_ip else 'DNS:') ~ web_host }}"
+    web_san_check: "{{ ('IP Address:' if web_host_is_ip else 'DNS:') ~ web_host }}"
+    kubectl_apply: "{{ kubectl }} apply -f -"
+    config_maps:
+      - { name: auth-migrations, source: "{{ remote_dir }}/database/migrations/auth" }
+      - { name: movies-migrations, source: "{{ remote_dir }}/database/migrations/movies" }
+      - { name: recommendations-migrations, source: "{{ remote_dir }}/database/migrations/recommendations" }
+      - { name: postgres-tls-entrypoint, source: "tls-entrypoint.sh={{ remote_dir }}/scripts/postgres-tls-entrypoint.sh" }
+      - { name: model-downloader-script, source: "download-models.sh={{ remote_dir }}/scripts/download-models.sh" }
+      - { name: prometheus-config, source: "prometheus.yml={{ remote_dir }}/monitoring/prometheus/prometheus.yml" }
+  environment:
+    KUBECONFIG: "{{ kubeconfig_path }}"
+  tasks:
+    - name: Check the public host
+      ansible.builtin.assert:
+        that: web_host is match('^[A-Za-z0-9.-]+$')
+        fail_msg: "Invalid public host; use a DNS name or IPv4 address: {{ web_host }}"
+
+    - name: Check that every role has a node
+      ansible.builtin.shell: |
+        set -o pipefail
+        {{ kubectl }} get nodes -l movierec.io/role={{ item }} --no-headers | grep . >/dev/null
+      args:
+        executable: /bin/bash
+      loop: [app, database, model]
+      changed_when: false
+
+    - name: Create the namespace
+      ansible.builtin.shell: |
+        set -o pipefail
+        {{ kubectl }} create namespace {{ k8s_namespace }} --dry-run=client -o yaml | {{ kubectl_apply }}
+      args:
+        executable: /bin/bash
+      register: namespace_result
+      changed_when: "'created' in namespace_result.stdout"
+
+    - name: Create the directories for the ConfigMap files
+      ansible.builtin.file:
+        path: "{{ remote_dir }}/{{ item }}"
+        state: directory
+        mode: "0755"
+      loop: [database/migrations, scripts, monitoring/prometheus]
+
+    - name: Copy the files the ConfigMaps are built from
+      ansible.builtin.copy:
+        src: "{{ repo_root }}/{{ item.src }}"
+        dest: "{{ remote_dir }}/{{ item.dest }}"
+        mode: preserve
+      loop:
+        - { src: database/migrations/, dest: database/migrations/ }
+        - { src: scripts/postgres-tls-entrypoint.sh, dest: scripts/postgres-tls-entrypoint.sh }
+        - { src: scripts/download-models.sh, dest: scripts/download-models.sh }
+        - { src: monitoring/prometheus/prometheus.yml, dest: monitoring/prometheus/prometheus.yml }
+
+    - name: Apply the ConfigMaps
+      ansible.builtin.shell: |
+        set -o pipefail
+        {{ kubectl }} create configmap {{ item.name }} --namespace {{ k8s_namespace }} \
+          --from-file={{ item.source }} --dry-run=client -o yaml | {{ kubectl_apply }}
+      args:
+        executable: /bin/bash
+      loop: "{{ config_maps }}"
+      loop_control:
+        label: "{{ item.name }}"
+      changed_when: false
+
+    - name: Create a private scratch directory for the secret files
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: movierec-secrets-
+      register: secret_scratch
+
+    - name: Apply the Secrets
+      block:
+        - name: Upload the secret files
+          ansible.builtin.copy:
+            src: "{{ secrets_dir }}/{{ item }}"
+            dest: "{{ secret_scratch.path }}/{{ item | basename }}"
+            mode: "0600"
+          loop:
+            - auth.env
+            - movies.env
+            - recommendations.env
+            - tmdb.env
+            - tls/server.crt
+            - tls/server.key
+            - jwt-private.pem
+            - jwt-public.pem
+          no_log: true
+
+        - name: Apply the service Secrets
+          ansible.builtin.shell: |
+            set -o pipefail
+            {{ kubectl }} create secret generic {{ item }}-config --namespace {{ k8s_namespace }} \
+              --from-env-file={{ secret_scratch.path }}/{{ item }}.env --dry-run=client -o yaml | {{ kubectl_apply }}
+          args:
+            executable: /bin/bash
+          loop: [auth, movies, recommendations, tmdb]
+          changed_when: false
+          no_log: true
+
+        - name: Apply the PostgreSQL TLS and JWT Secrets
+          ansible.builtin.shell: |
+            set -o pipefail
+            {{ kubectl }} create secret generic postgres-tls --namespace {{ k8s_namespace }} \
+              --from-file=server.crt={{ secret_scratch.path }}/server.crt \
+              --from-file=server.key={{ secret_scratch.path }}/server.key \
+              --dry-run=client -o yaml | {{ kubectl_apply }}
+            {{ kubectl }} create secret generic jwt-keys --namespace {{ k8s_namespace }} \
+              --from-file=jwt-private.pem={{ secret_scratch.path }}/jwt-private.pem \
+              --from-file=jwt-public.pem={{ secret_scratch.path }}/jwt-public.pem \
+              --dry-run=client -o yaml | {{ kubectl_apply }}
+          args:
+            executable: /bin/bash
+          changed_when: false
+          no_log: true
+
+        - name: Check the HTTPS certificate for {{ web_host }}
+          ansible.builtin.shell: |
+            set -o pipefail
+            {{ kubectl }} -n {{ k8s_namespace }} get secret movierec-web-tls -o jsonpath='{.data.tls\.crt}' \
+              | base64 -d | openssl x509 -noout -ext subjectAltName | grep -F '{{ web_san_check }}' >/dev/null
+          args:
+            executable: /bin/bash
+          register: web_cert_check
+          failed_when: false
+          changed_when: false
+
+        - name: Create a self-signed HTTPS certificate
+          ansible.builtin.command:
+            argv:
+              - openssl
+              - req
+              - -x509
+              - -newkey
+              - rsa:2048
+              - -nodes
+              - -days
+              - "365"
+              - -keyout
+              - "{{ secret_scratch.path }}/web.key"
+              - -out
+              - "{{ secret_scratch.path }}/web.crt"
+              - -subj
+              - "/CN={{ web_host }}"
+              - -addext
+              - "subjectAltName={{ web_san }}"
+            creates: "{{ secret_scratch.path }}/web.crt"
+          when: web_cert_check.rc != 0
+
+        - name: Apply the HTTPS certificate Secret
+          ansible.builtin.shell: |
+            set -o pipefail
+            {{ kubectl }} create secret tls movierec-web-tls --namespace {{ k8s_namespace }} \
+              --cert={{ secret_scratch.path }}/web.crt --key={{ secret_scratch.path }}/web.key \
+              --dry-run=client -o yaml | {{ kubectl_apply }}
+          args:
+            executable: /bin/bash
+          when: web_cert_check.rc != 0
+          changed_when: true
+          no_log: true
+
+        - name: Check for the Grafana password Secret
+          ansible.builtin.command: "{{ kubectl }} -n {{ k8s_namespace }} get secret grafana-config"
+          register: grafana_secret
+          failed_when: false
+          changed_when: false
+
+        - name: Require a Grafana password for the first deployment
+          ansible.builtin.assert:
+            that: grafana_secret.rc == 0 or grafana_admin_password | length > 0
+            fail_msg: "Set a Grafana admin password when prompted (or pass -e grafana_admin_password=...)."
+
+        - name: Create the Grafana password Secret
+          ansible.builtin.shell: |
+            set -o pipefail
+            {{ kubectl }} create secret generic grafana-config --namespace {{ k8s_namespace }} \
+              --from-file=admin-password=/dev/stdin --dry-run=client -o yaml | {{ kubectl_apply }}
+          args:
+            executable: /bin/bash
+            stdin: "{{ grafana_admin_password }}"
+            stdin_add_newline: false
+          when: grafana_secret.rc != 0
+          changed_when: true
+          no_log: true
+      always:
+        - name: Remove the scratch directory
+          ansible.builtin.file:
+            path: "{{ secret_scratch.path }}"
+            state: absent
+
+    - name: Report the HTTPS host
+      ansible.builtin.debug:
+        msg: "Namespace, ConfigMaps, Secrets and the HTTPS certificate are ready for https://{{ web_host }}"

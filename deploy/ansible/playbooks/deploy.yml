@@ -1,0 +1,71 @@
+---
+# Renders the Kustomize base (or the GPU overlay) and applies it.
+- name: Deploy MovieRec
+  hosts: app
+  become: true
+  gather_facts: false
+  vars:
+    web_host: "{{ public_host if public_host else public_ip ~ '.nip.io' }}"
+    kustomize_dir: "{{ remote_dir }}/k8s/{{ 'overlays/gpu' if gpu_overlay | bool else 'base' }}"
+  environment:
+    KUBECONFIG: "{{ kubeconfig_path }}"
+  tasks:
+    - name: Validate the inputs
+      ansible.builtin.assert:
+        that:
+          - image_tag is match('^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$')
+          - web_host is match('^[A-Za-z0-9.-]+$')
+          - gpu_llama_image is match('^[A-Za-z0-9./_-]+:[A-Za-z0-9_.-]+$')
+          - not (gpu_overlay | bool) or (terraform_gpu_enabled | bool)
+        fail_msg: >-
+          Set a valid image_tag (make deploy IMAGE_TAG=...), a DNS name or IPv4 address as the public host,
+          and for the GPU overlay set model_gpu_enabled = true in terraform.tfvars and run make infra-apply.
+
+    - name: Install envsubst
+      ansible.builtin.apt:
+        name: gettext-base
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Create the manifest directory
+      ansible.builtin.file:
+        path: "{{ remote_dir }}/k8s"
+        state: directory
+        mode: "0755"
+
+    - name: Upload the manifests
+      ansible.builtin.copy:
+        src: "{{ manifests_dir }}/"
+        dest: "{{ remote_dir }}/k8s/"
+        mode: preserve
+
+    - name: Apply the rendered manifests
+      ansible.builtin.shell: |
+        set -o pipefail
+        {{ kubectl }} kustomize {{ kustomize_dir }} \
+          | envsubst '${REGISTRY} ${IMAGE_TAG} ${PUBLIC_HOST} ${GPU_LLAMA_IMAGE}' \
+          | {{ kubectl }} apply -f -
+      args:
+        executable: /bin/bash
+      environment:
+        REGISTRY: "{{ artifact_registry }}"
+        IMAGE_TAG: "{{ image_tag }}"
+        PUBLIC_HOST: "{{ web_host }}"
+        GPU_LLAMA_IMAGE: "{{ gpu_llama_image }}"
+      register: manifests_apply
+      changed_when: "'created' in manifests_apply.stdout or 'configured' in manifests_apply.stdout"
+
+    # The API starts even when the databases or llama.cpp are unavailable, so a
+    # finished rollout means the processes are serving; /movieAPI/health reports
+    # dependency readiness.
+    - name: Wait for the backend and frontend rollouts
+      ansible.builtin.command: "{{ kubectl }} -n {{ k8s_namespace }} rollout status deployment/{{ item.name }} --timeout={{ item.timeout }}"
+      loop:
+        - { name: backend, timeout: 15m }
+        - { name: frontend, timeout: 10m }
+      changed_when: false
+
+    - name: Show where the application is served
+      ansible.builtin.debug:
+        msg: "Deployment applied. Check health at https://{{ web_host }}/movieAPI/health"

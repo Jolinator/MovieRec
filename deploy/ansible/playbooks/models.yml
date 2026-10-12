@@ -1,0 +1,22 @@
+---
+# Downloads and verifies the model files on the model VM.
+- name: Download the models
+  hosts: app
+  become: true
+  gather_facts: false
+  environment:
+    KUBECONFIG: "{{ kubeconfig_path }}"
+  tasks:
+    - name: Apply the model download Job
+      ansible.builtin.command: "{{ kubectl }} apply -f -"
+      args:
+        stdin: "{{ lookup('file', manifests_dir ~ '/models.yaml') }}"
+      register: models_apply
+      changed_when: "'created' in models_apply.stdout or 'configured' in models_apply.stdout"
+
+    - name: Wait for the model files to be downloaded and verified
+      ansible.builtin.command: >-
+        {{ kubectl }} -n {{ k8s_namespace }} wait --for=condition=complete job/model-downloader --timeout=35m
+      async: 2200
+      poll: 20
+      changed_when: false

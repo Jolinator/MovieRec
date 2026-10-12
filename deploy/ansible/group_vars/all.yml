@@ -1,0 +1,15 @@
+---
+k8s_namespace: movierec
+kubeconfig_path: /etc/rancher/k3s/k3s.yaml
+kubectl: /usr/local/bin/k3s kubectl
+
+repo_root: "{{ ansible_config_file | dirname }}/../.."
+secrets_dir: "{{ repo_root }}/deploy/gcp/secrets"
+manifests_dir: "{{ repo_root }}/deploy/k8s"
+remote_dir: /opt/movierec
+
+# Set from the command line (make deploy IMAGE_TAG=..., make k8s-config PUBLIC_HOST=...).
+image_tag: ""
+public_host: ""
+gpu_overlay: false
+gpu_llama_image: ghcr.io/ggml-org/llama.cpp:server-cuda-v0.4.1

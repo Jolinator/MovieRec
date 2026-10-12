@@ -170,10 +170,11 @@ resource "google_compute_disk" "model_data" {
 }
 
 resource "google_compute_instance" "app" {
-  name         = "${var.name}-app"
-  machine_type = local.app_machine_type
-  zone         = var.zone
-  tags         = ["${var.name}-node", "${var.name}-app"]
+  name                      = "${var.name}-app"
+  machine_type              = local.app_machine_type
+  zone                      = var.zone
+  allow_stopping_for_update = true
+  tags                      = ["${var.name}-node", "${var.name}-app"]
 
   boot_disk {
     initialize_params {
@@ -217,10 +218,11 @@ resource "google_compute_instance" "app" {
 }
 
 resource "google_compute_instance" "database" {
-  name         = "${var.name}-database"
-  machine_type = local.database_machine_type
-  zone         = var.zone
-  tags         = ["${var.name}-node", "${var.name}-database"]
+  name                      = "${var.name}-database"
+  machine_type              = local.database_machine_type
+  zone                      = var.zone
+  allow_stopping_for_update = true
+  tags                      = ["${var.name}-node", "${var.name}-database"]
 
   boot_disk {
     initialize_params {
@@ -260,10 +262,11 @@ resource "google_compute_instance" "database" {
 }
 
 resource "google_compute_instance" "model" {
-  name         = "${var.name}-model"
-  machine_type = local.model_machine_type
-  zone         = var.zone
-  tags         = ["${var.name}-node", "${var.name}-model"]
+  name                      = "${var.name}-model"
+  machine_type              = local.model_machine_type
+  zone                      = var.zone
+  allow_stopping_for_update = true
+  tags                      = ["${var.name}-node", "${var.name}-model"]
 
   boot_disk {
     initialize_params {

@@ -36,10 +36,9 @@ if ! command -v nvidia-ctk >/dev/null 2>&1; then
   apt-get install -y nvidia-container-toolkit
 fi
 
-CONTAINERD_TEMPLATE=/var/lib/rancher/k3s/agent/etc/containerd/config.toml.tmpl
-if [[ -f "${CONTAINERD_TEMPLATE}" ]]; then
-  nvidia-ctk runtime configure --runtime=containerd --config="${CONTAINERD_TEMPLATE}"
-  systemctl restart k3s-agent || true
+# K3s detects the NVIDIA runtime when the agent starts, so restart it.
+if systemctl list-unit-files k3s-agent.service 2>/dev/null | grep -q '^k3s-agent.service'; then
+  systemctl restart k3s-agent
 else
   echo 'K3s is not installed yet; run make cluster-bootstrap, then rerun make gpu-runtime.'
 fi
