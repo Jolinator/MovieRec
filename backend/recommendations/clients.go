@@ -29,6 +29,7 @@ func NewEmbeddingClient() *EmbeddingClient {
 func NewGenerationClient() *GenerationClient {
 	return &GenerationClient{url: strings.TrimRight(env("GENERATION_URL", "http://llama-generation:8080"), "/"), model: env("GENERATION_MODEL", "Qwen3-0.6B-Instruct"), client: &http.Client{Timeout: 60 * time.Second}}
 }
+
 func env(name, fallback string) string {
 	if value := os.Getenv(name); value != "" {
 		return value
@@ -57,11 +58,25 @@ func (c *EmbeddingClient) Embed(ctx context.Context, input string) ([]float32, e
 	return response.Data[0].Embedding, nil
 }
 
+func (c *EmbeddingClient) WarmUp(ctx context.Context) error {
+	_, err := c.Embed(ctx, "Movie recommendation model warm-up.")
+	return err
+}
+
 func (c *GenerationClient) Complete(ctx context.Context, system, user string) (string, error) {
+	return c.complete(ctx, system, user, 300, true)
+}
+
+func (c *GenerationClient) WarmUp(ctx context.Context) error {
+	_, err := c.complete(ctx, "Reply with one short word.", "Say ready.", 8, true)
+	return err
+}
+
+func (c *GenerationClient) complete(ctx context.Context, system, user string, maxTokens int, requireContent bool) (string, error) {
 	body, _ := json.Marshal(map[string]any{
 		"model":                c.model,
 		"temperature":          0.7,
-		"max_tokens":           300,
+		"max_tokens":           maxTokens,
 		"chat_template_kwargs": map[string]bool{"enable_thinking": false},
 		"messages": []map[string]string{
 			{"role": "system", "content": system},
@@ -87,7 +102,7 @@ func (c *GenerationClient) Complete(ctx context.Context, system, user string) (s
 		return "", fmt.Errorf("%w: generation endpoint returned no choices", common.ErrInferenceUnavailable)
 	}
 	answer := strings.TrimSpace(response.Choices[0].Message.Content)
-	if answer == "" {
+	if answer == "" && requireContent {
 		return "", fmt.Errorf("%w: generation endpoint returned an empty answer", common.ErrInferenceUnavailable)
 	}
 	return answer, nil

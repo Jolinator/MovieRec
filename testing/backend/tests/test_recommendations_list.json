@@ -90,10 +90,24 @@
             "expected_response": []
         },
         {
+            "method": "GET",
+            "url": "/movieAPI/movies?limit=1",
+            "expected_status": 200,
+            "expected_response": [],
+            "expected_response_non_empty": true,
+            "required_response_fields": [
+                "tmdbId",
+                "title"
+            ],
+            "capture_response": {
+                "movieId": "[0]['tmdbId']"
+            }
+        },
+        {
             "method": "POST",
             "url": "/movieAPI/my-list",
             "body": {
-                "tmdbId": 27205
+                "tmdbId": "{{movieId}}"
             },
             "expected_status": 201,
             "expected_response": {},
@@ -113,7 +127,7 @@
         },
         {
             "method": "DELETE",
-            "url": "/movieAPI/my-list/27205",
+            "url": "/movieAPI/my-list/{{movieId}}",
             "expected_status": 200,
             "expected_response": {
                 "success": true

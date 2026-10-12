@@ -31,8 +31,15 @@ func NewService(repository *movies.MovieRepository, lists *ListRepository, cache
 	return &Service{repository: repository, embedding: NewEmbeddingClient(), generation: NewGenerationClient(), lists: lists, cache: cache}
 }
 func (s *Service) Initialize(ctx context.Context) error {
+	s.ready.Store(false)
 	if err := s.repository.EmbedSynopses(ctx, s.embedding); err != nil {
-		return err
+		return fmt.Errorf("embed movie synopses: %w", err)
+	}
+	if err := s.embedding.WarmUp(ctx); err != nil {
+		return fmt.Errorf("embedding model warm-up failed: %w", err)
+	}
+	if err := s.generation.WarmUp(ctx); err != nil {
+		return fmt.Errorf("generation model warm-up failed: %w", err)
 	}
 	s.ready.Store(true)
 	return nil
@@ -58,7 +65,7 @@ func (s *Service) InitializeWithRetry(ctx context.Context, attempts int, delay t
 			}
 		}
 	}
-	return fmt.Errorf("embedding initialization failed after %d attempts: %w", attempts, lastErr)
+	return fmt.Errorf("recommendation initialization failed after %d attempts: %w", attempts, lastErr)
 }
 func (s *Service) Ready() bool { return s.ready.Load() }
 
