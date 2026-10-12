@@ -55,25 +55,9 @@ variable "model_machine_type" {
 }
 
 variable "model_gpu_enabled" {
-  description = "Attach a GPU to the model VM. Driver/runtime setup and the GPU manifest are separate opt-in steps."
+  description = "Use a G2 model VM with its built-in NVIDIA L4 GPU. Driver/runtime setup and the GPU manifest are separate opt-in steps."
   type        = bool
   default     = false
-}
-
-variable "model_gpu_type" {
-  description = "GPU type when model_gpu_enabled is true."
-  type        = string
-  default     = "nvidia-l4"
-}
-
-variable "model_gpu_count" {
-  description = "Number of GPUs attached to the model VM."
-  type        = number
-  default     = 1
-  validation {
-    condition     = var.model_gpu_count >= 1 && floor(var.model_gpu_count) == var.model_gpu_count
-    error_message = "model_gpu_count must be a positive whole number."
-  }
 }
 
 variable "app_data_disk_gb" {

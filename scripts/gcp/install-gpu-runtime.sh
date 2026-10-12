@@ -11,6 +11,11 @@ done
 ZONE="$(terraform -chdir="${TF_DIR}" output -raw zone)"
 MODEL="$(terraform -chdir="${TF_DIR}" output -raw model_instance_name)"
 [[ -n "${ZONE}" && -n "${MODEL}" ]] || { printf 'Terraform outputs are incomplete; run infra-apply first.\n' >&2; exit 1; }
+GPU_ENABLED="$(terraform -chdir="${TF_DIR}" output -raw model_gpu_enabled 2>/dev/null || true)"
+if [[ "${GPU_ENABLED}" != "true" ]]; then
+  printf 'Terraform model_gpu_enabled is not true. Set it and a GPU-compatible model_machine_type, then run make infra-apply.\n' >&2
+  exit 2
+fi
 
 printf 'Installing NVIDIA drivers and the container toolkit on %s. A reboot may be required.\n' "${MODEL}"
 gcloud compute ssh "${MODEL}" --zone="${ZONE}" --tunnel-through-iap --quiet --command='sudo bash -s' <<'REMOTE'

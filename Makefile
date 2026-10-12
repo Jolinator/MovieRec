@@ -21,10 +21,10 @@ help:
 	  '  make infra-config                Set project_id from gcloud; run before plan/apply' \
 	  '  make infra-init                   Initialize Terraform' \
 	  '  make infra-plan                   Validate and review the three-VM plan' \
-	  '  make infra-apply                  Create/start app, database, and model VMs' \
-	  '  make cluster-bootstrap             Join database/model VMs to the app K3s server' \
+	  '  make infra-apply                  Create/start three VMs and cloud resources (billed while running)' \
+	  '  make cluster-bootstrap             Join running database/model VMs to the app K3s server' \
 	  '  make secrets-init                 Prepare ignored cloud secret files and cryptographic keys' \
-	  '  make build-push [IMAGE_TAG=tag]   Build and push backend/frontend images' \
+	  '  make build-push [IMAGE_TAG=tag]   Build/push images (does not start or stop VMs)' \
 	  '  make connect                      Download kubeconfig and open the app IAP tunnel' \
 	  '  make k8s-config                   Create/update Kubernetes ConfigMaps and Secrets' \
 	  '  make models                       Download and verify the model files on the model VM' \
@@ -33,10 +33,10 @@ help:
 	  '  make gpu-setup                    Install the Kubernetes GPU device plugin (opt-in)' \
 	  '  make deploy-gpu IMAGE_TAG=tag     Apply the CUDA generation model overlay (opt-in)' \
 	  '  make start                        Start all three existing VMs' \
-	  '  make stop                         Stop all three VMs' \
+	  '  make stop                         Stop VMs; disks/IP/registry remain' \
 	  '  make destroy CONFIRM_DESTROY=1    Destroy Terraform resources and attached disks' \
 	  '' \
-	  'Keep the IAP tunnel from make connect open while running k8s-config, models, or deploy.'
+	  'Keep the IAP tunnel from make connect open while running k8s-config, models, deploy, or GPU setup.'
 
 cloud-shell-setup:
 	bash $(GCP_SCRIPTS)/setup-cloud-shell.sh
@@ -57,7 +57,7 @@ infra-plan: infra-validate
 	terraform -chdir=$(TF_DIR) plan
 
 infra-apply: infra-validate
-	@printf '%s\n' 'Warning: this creates and starts three cloud VMs plus attached data disks, which can incur charges.'
+	@printf '%s\n' 'Warning: this creates and starts three cloud VMs plus disks, NAT, a public IP, and Artifact Registry resources; charges begin while VMs run and retained resources can still incur charges after make stop.'
 	terraform -chdir=$(TF_DIR) apply
 
 cluster-bootstrap:
@@ -96,16 +96,38 @@ deploy-gpu:
 
 start:
 	ZONE="$$(terraform -chdir=$(TF_DIR) output -raw zone)"; \
+	STATUS=0; \
 	for INSTANCE in "$$(terraform -chdir=$(TF_DIR) output -raw app_instance_name)" "$$(terraform -chdir=$(TF_DIR) output -raw database_instance_name)" "$$(terraform -chdir=$(TF_DIR) output -raw model_instance_name)"; do \
-	  gcloud compute instances start "$$INSTANCE" --zone="$$ZONE"; \
-	  gcloud compute instances describe "$$INSTANCE" --zone="$$ZONE" --format='value(status)'; \
-	done
+	  if ! INSTANCE_STATUS="$$(gcloud compute instances describe "$$INSTANCE" --zone="$$ZONE" --format='value(status)' 2>/dev/null)"; then \
+	    printf '%s\n' "Could not read status for $$INSTANCE" >&2; STATUS=1; continue; \
+	  fi; \
+	  if [[ "$$INSTANCE_STATUS" == RUNNING || "$$INSTANCE_STATUS" == PROVISIONING || "$$INSTANCE_STATUS" == STAGING ]]; then \
+	    printf '%s\n' "$$INSTANCE already running (status: $$INSTANCE_STATUS)"; continue; \
+	  fi; \
+	  if ! gcloud compute instances start "$$INSTANCE" --zone="$$ZONE"; then \
+	    printf '%s\n' "Failed to start $$INSTANCE" >&2; STATUS=1; continue; \
+	  fi; \
+	  if ! gcloud compute instances describe "$$INSTANCE" --zone="$$ZONE" --format='value(status)'; then \
+	    printf '%s\n' "Could not read status for $$INSTANCE" >&2; STATUS=1; \
+	  fi; \
+	done; \
+	exit "$$STATUS"
 
 stop:
 	ZONE="$$(terraform -chdir=$(TF_DIR) output -raw zone)"; \
+	STATUS=0; \
 	for INSTANCE in "$$(terraform -chdir=$(TF_DIR) output -raw app_instance_name)" "$$(terraform -chdir=$(TF_DIR) output -raw database_instance_name)" "$$(terraform -chdir=$(TF_DIR) output -raw model_instance_name)"; do \
-	  gcloud compute instances stop "$$INSTANCE" --zone="$$ZONE"; \
-	done
+	  if ! INSTANCE_STATUS="$$(gcloud compute instances describe "$$INSTANCE" --zone="$$ZONE" --format='value(status)' 2>/dev/null)"; then \
+	    printf '%s\n' "Could not read status for $$INSTANCE" >&2; STATUS=1; continue; \
+	  fi; \
+	  if [[ "$$INSTANCE_STATUS" == TERMINATED ]]; then \
+	    printf '%s\n' "$$INSTANCE is already stopped"; continue; \
+	  fi; \
+	  if ! gcloud compute instances stop "$$INSTANCE" --zone="$$ZONE"; then \
+	    printf '%s\n' "Failed to stop $$INSTANCE; check its state because it may still be billing" >&2; STATUS=1; \
+	  fi; \
+	done; \
+	exit "$$STATUS"
 
 destroy:
 	@test "$(CONFIRM_DESTROY)" = 1 || { printf '%s\n' 'Refusing to destroy resources. Use: make destroy CONFIRM_DESTROY=1'; exit 2; }

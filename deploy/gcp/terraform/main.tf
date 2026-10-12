@@ -278,14 +278,6 @@ resource "google_compute_instance" "model" {
     device_name = "${var.name}-model-data"
   }
 
-  dynamic "guest_accelerator" {
-    for_each = var.model_gpu_enabled ? [1] : []
-    content {
-      type  = var.model_gpu_type
-      count = var.model_gpu_count
-    }
-  }
-
   scheduling {
     on_host_maintenance = var.model_gpu_enabled ? "TERMINATE" : "MIGRATE"
   }

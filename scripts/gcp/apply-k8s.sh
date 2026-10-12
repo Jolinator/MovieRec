@@ -52,6 +52,11 @@ if [[ "${MODEL_GPU_ENABLED}" != "true" && "${MODEL_GPU_ENABLED}" != "false" ]]; 
   printf 'MODEL_GPU_ENABLED must be true or false: %s\n' "${MODEL_GPU_ENABLED}" >&2
   exit 2
 fi
+TERRAFORM_GPU_ENABLED="$(terraform -chdir="${TF_DIR}" output -raw model_gpu_enabled 2>/dev/null || true)"
+if [[ "${MODEL_GPU_ENABLED}" == "true" && "${TERRAFORM_GPU_ENABLED}" != "true" ]]; then
+  printf 'GPU deployment requested, but Terraform model_gpu_enabled is not true. Set it and a GPU-compatible model_machine_type, then run make infra-apply.\n' >&2
+  exit 2
+fi
 if [[ ! "${GPU_LLAMA_IMAGE}" =~ ^[A-Za-z0-9./_-]+:[A-Za-z0-9_.-]+$ ]]; then
   printf 'Invalid GPU llama image reference: %s\n' "${GPU_LLAMA_IMAGE}" >&2
   exit 2

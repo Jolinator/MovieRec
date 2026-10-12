@@ -18,6 +18,10 @@ output "model_instance_name" {
   value = google_compute_instance.model.name
 }
 
+output "model_gpu_enabled" {
+  value = var.model_gpu_enabled
+}
+
 output "app_private_ip" {
   value = google_compute_instance.app.network_interface[0].network_ip
 }
