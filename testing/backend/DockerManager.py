@@ -28,6 +28,9 @@ allowed_services: set[str] = {
     "grafana",
 }
 
+# "backend" is the logical name tests use for the gateway and the services behind it.
+BACKEND_COMPOSE_SERVICES = ("gateway", "auth", "movies", "recommendations")
+
 DATABASE_STATUS_KEYS = {
     "auth-postgres": "authDBAvailable",
     "movies-postgres": "moviesDBAvailable",
@@ -215,11 +218,18 @@ class DockerManager:
         
         return results
 
+    @staticmethod
+    def _compose_services(services: tuple[str, ...]) -> list[str]:
+        names: list[str] = []
+        for service in services:
+            names.extend(BACKEND_COMPOSE_SERVICES if service == "backend" else [service])
+        return names
+
     def stop_services(self, *services: str) -> CompletedProcess:
         self.verify_services(*services)
 
         return run(
-            ["docker", "compose", "stop", *services],
+            ["docker", "compose", "stop", *self._compose_services(services)],
             capture_output=True,
             text=True,
         )
@@ -236,7 +246,7 @@ class DockerManager:
                 "-d",
                 "--build",
                 "--remove-orphans",
-                *services,
+                *self._compose_services(services),
             ],
             capture_output=True,
             text=True,

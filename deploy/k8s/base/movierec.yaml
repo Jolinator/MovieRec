@@ -276,67 +276,6 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: backend
-  namespace: movierec
-spec:
-  replicas: 1
-  selector:
-    matchLabels: { app: backend }
-  template:
-    metadata:
-      labels: { app: backend }
-    spec:
-      nodeSelector:
-        movierec.io/role: app
-      containers:
-        - name: backend
-          image: ${REGISTRY}/backend:${IMAGE_TAG}
-          ports: [{ name: http, containerPort: 8080 }]
-          envFrom:
-            - secretRef: { name: auth-config }
-            - secretRef: { name: movies-config }
-            - secretRef: { name: recommendations-config }
-            - secretRef: { name: tmdb-config }
-          env:
-            - { name: BACKEND_PORT, value: "8080" }
-            - { name: AUTH_DB_HOST, value: auth-postgres }
-            - { name: MOVIES_DB_HOST, value: movies-postgres }
-            - { name: RECOMMENDATIONS_DB_HOST, value: recommendations-postgres }
-            - { name: EMBEDDING_URL, value: http://llama-embedding:8080 }
-            - { name: EMBEDDING_MODEL, value: bge-small-en-v1.5-q8_0 }
-            - { name: GENERATION_URL, value: http://llama-generation:8080 }
-            - { name: GENERATION_MODEL, value: Qwen3-0.6B-Q4_K_M }
-            - { name: AUTH_DB_SSLMODE, value: require }
-            - { name: MOVIES_DB_SSLMODE, value: require }
-            - { name: RECOMMENDATIONS_DB_SSLMODE, value: require }
-            - { name: JWT_PRIVATE_KEY_PATH, value: /app/secrets/jwt-private.pem }
-            - { name: JWT_PUBLIC_KEY_PATH, value: /app/secrets/jwt-public.pem }
-          readinessProbe:
-            httpGet: { path: /movieAPI/health, port: http }
-            initialDelaySeconds: 10
-            periodSeconds: 10
-          livenessProbe:
-            httpGet: { path: /movieAPI/health, port: http }
-            initialDelaySeconds: 20
-            periodSeconds: 20
-          volumeMounts:
-            - { name: jwt, mountPath: /app/secrets, readOnly: true }
-      volumes:
-        - name: jwt
-          secret: { secretName: jwt-keys, defaultMode: 0440 }
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: backend
-  namespace: movierec
-spec:
-  selector: { app: backend }
-  ports: [{ name: http, port: 8080, targetPort: http }]
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
   name: frontend
   namespace: movierec
 spec:
@@ -386,7 +325,7 @@ spec:
           - path: /movieAPI
             pathType: Prefix
             backend:
-              service: { name: backend, port: { number: 8080 } }
+              service: { name: gateway, port: { number: 8080 } }
           - path: /
             pathType: Prefix
             backend:
@@ -487,33 +426,62 @@ spec:
   selector: { app: grafana }
   ports: [{ name: http, port: 3000, targetPort: http }]
 ---
-# Keep databases reachable from the backend and model services reachable from
-# the backend plus Prometheus for metrics. Kubernetes Service DNS still works
-# across all three nodes; these policies constrain pod ingress after traffic
-# crosses the K3s overlay.
+# Each database accepts connections only from the service that owns it, and
+# the model services only from the recommendations service plus Prometheus for
+# metrics. Kubernetes Service DNS still works across all three nodes; these
+# policies constrain pod ingress after traffic crosses the K3s overlay.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: backend-only-databases
+  name: auth-database-ingress
   namespace: movierec
 spec:
   podSelector:
-    matchExpressions:
-      - key: app
-        operator: In
-        values: [auth-postgres, movies-postgres, recommendations-postgres]
+    matchLabels: { app: auth-postgres }
   policyTypes: [Ingress]
   ingress:
     - from:
         - podSelector:
-            matchLabels: { app: backend }
+            matchLabels: { app: auth }
       ports:
         - { protocol: TCP, port: 5432 }
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: backend-only-models
+  name: movies-database-ingress
+  namespace: movierec
+spec:
+  podSelector:
+    matchLabels: { app: movies-postgres }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: { app: movies }
+      ports:
+        - { protocol: TCP, port: 5432 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: recommendations-database-ingress
+  namespace: movierec
+spec:
+  podSelector:
+    matchLabels: { app: recommendations-postgres }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: { app: recommendations }
+      ports:
+        - { protocol: TCP, port: 5432 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: recommendations-only-models
   namespace: movierec
 spec:
   podSelector:
@@ -528,6 +496,6 @@ spec:
             matchExpressions:
               - key: app
                 operator: In
-                values: [backend, prometheus]
+                values: [recommendations, prometheus]
       ports:
         - { protocol: TCP, port: 8080 }

@@ -56,31 +56,89 @@ services:
       timeout: 5s
       retries: 5
 
-  backend:
+  # The gateway is the only backend service published to the host; the others
+  # are reached over the Compose network.
+  gateway:
     build:
       context: .
       dockerfile: backend/Dockerfile
       args:
-        BACKEND_PORT: "8080"
+        SERVICE: gateway
     env_file:
-      - ./secrets/auth.env
-      - ./secrets/movies.env
-      - ./secrets/recommendations.env
-      - ./secrets/tmdb.env
       - ./secrets/ports.env
     ports:
       - "${BACKEND_PORT:?Set BACKEND_PORT in secrets/ports.env}:8080"
     volumes:
-      - ./secrets/auth.env:/app/secrets/auth.env:ro
-      - ./secrets/movies.env:/app/secrets/movies.env:ro
-      - ./secrets/recommendations.env:/app/secrets/recommendations.env:ro
-      - ./secrets/jwt-private.pem:/app/secrets/jwt-private.pem:ro
-      - ./secrets/jwt-public.pem:/app/secrets/jwt-public.pem:ro
-      - ./secrets/tmdb.env:/app/secrets/tmdb.env:ro
       - ./secrets/ports.env:/app/secrets/ports.env:ro
     environment:
       BACKEND_PORT: "8080"
+      AUTH_URL: http://auth:8082
+      AUTH_INTERNAL_URL: http://auth:8086
+      MOVIES_URL: http://movies:8083
+      MOVIES_INTERNAL_URL: http://movies:8081
+      RECOMMENDATIONS_URL: http://recommendations:8084
+      RECOMMENDATIONS_INTERNAL_URL: http://recommendations:8085
+    depends_on:
+      - auth
+      - movies
+      - recommendations
+
+  auth:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      args:
+        SERVICE: auth
+    env_file:
+      - ./secrets/auth.env
+      - ./secrets/ports.env
+    volumes:
+      - ./secrets/auth.env:/app/secrets/auth.env:ro
+      - ./secrets/ports.env:/app/secrets/ports.env:ro
+      - ./secrets/jwt-private.pem:/app/secrets/jwt-private.pem:ro
+      - ./secrets/jwt-public.pem:/app/secrets/jwt-public.pem:ro
+    environment:
+      AUTH_PORT: "8082"
+      AUTH_INTERNAL_PORT: "8086"
+      RECOMMENDATIONS_INTERNAL_URL: http://recommendations:8085
       JWT_PRIVATE_KEY_PATH: /app/secrets/jwt-private.pem
+      JWT_PUBLIC_KEY_PATH: /app/secrets/jwt-public.pem
+
+  movies:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      args:
+        SERVICE: movies
+    env_file:
+      - ./secrets/movies.env
+      - ./secrets/tmdb.env
+      - ./secrets/ports.env
+    volumes:
+      - ./secrets/movies.env:/app/secrets/movies.env:ro
+      - ./secrets/tmdb.env:/app/secrets/tmdb.env:ro
+      - ./secrets/ports.env:/app/secrets/ports.env:ro
+    environment:
+      MOVIES_PORT: "8083"
+      MOVIES_INTERNAL_PORT: "8081"
+
+  recommendations:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      args:
+        SERVICE: recommendations
+    env_file:
+      - ./secrets/recommendations.env
+      - ./secrets/ports.env
+    volumes:
+      - ./secrets/recommendations.env:/app/secrets/recommendations.env:ro
+      - ./secrets/ports.env:/app/secrets/ports.env:ro
+      - ./secrets/jwt-public.pem:/app/secrets/jwt-public.pem:ro
+    environment:
+      RECOMMENDATIONS_PORT: "8084"
+      RECOMMENDATIONS_INTERNAL_PORT: "8085"
+      MOVIES_INTERNAL_URL: http://movies:8081
       JWT_PUBLIC_KEY_PATH: /app/secrets/jwt-public.pem
       EMBEDDING_URL: http://llama-embedding:8080
       GENERATION_URL: http://llama-generation:8080

@@ -1,0 +1,287 @@
+# The backend microservices. Only the gateway is exposed (through the Ingress);
+# auth, movies and recommendations are reached by the gateway and each other.
+# Each service has a public port (its /movieAPI routes and /metrics) and an
+# internal port (the /internal API and /internal/health), restricted below.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gateway
+  namespace: movierec
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: gateway }
+  template:
+    metadata:
+      labels: { app: gateway, tier: backend }
+    spec:
+      nodeSelector:
+        movierec.io/role: app
+      containers:
+        - name: gateway
+          image: ${REGISTRY}/gateway:${IMAGE_TAG}
+          ports: [{ name: http, containerPort: 8080 }]
+          env:
+            - { name: BACKEND_PORT, value: "8080" }
+            - { name: AUTH_URL, value: "http://auth:8082" }
+            - { name: AUTH_INTERNAL_URL, value: "http://auth:8086" }
+            - { name: MOVIES_URL, value: "http://movies:8083" }
+            - { name: MOVIES_INTERNAL_URL, value: "http://movies:8081" }
+            - { name: RECOMMENDATIONS_URL, value: "http://recommendations:8084" }
+            - { name: RECOMMENDATIONS_INTERNAL_URL, value: "http://recommendations:8085" }
+          readinessProbe:
+            httpGet: { path: /movieAPI/health, port: http }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /movieAPI/health, port: http }
+            initialDelaySeconds: 15
+            periodSeconds: 20
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gateway
+  namespace: movierec
+spec:
+  selector: { app: gateway }
+  ports: [{ name: http, port: 8080, targetPort: http }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth
+  namespace: movierec
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: auth }
+  template:
+    metadata:
+      labels: { app: auth, tier: backend }
+    spec:
+      nodeSelector:
+        movierec.io/role: app
+      containers:
+        - name: auth
+          image: ${REGISTRY}/auth:${IMAGE_TAG}
+          ports:
+            - { name: http, containerPort: 8082 }
+            - { name: internal, containerPort: 8086 }
+          envFrom:
+            - secretRef: { name: auth-config }
+          env:
+            - { name: AUTH_PORT, value: "8082" }
+            - { name: AUTH_INTERNAL_PORT, value: "8086" }
+            - { name: AUTH_DB_HOST, value: auth-postgres }
+            - { name: AUTH_DB_SSLMODE, value: require }
+            - { name: RECOMMENDATIONS_INTERNAL_URL, value: "http://recommendations:8085" }
+            - { name: JWT_PRIVATE_KEY_PATH, value: /app/secrets/jwt-private.pem }
+            - { name: JWT_PUBLIC_KEY_PATH, value: /app/secrets/jwt-public.pem }
+          readinessProbe:
+            httpGet: { path: /internal/health, port: internal }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /internal/health, port: internal }
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          volumeMounts:
+            - { name: jwt, mountPath: /app/secrets, readOnly: true }
+      volumes:
+        - name: jwt
+          secret: { secretName: jwt-keys, defaultMode: 0440 }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: auth
+  namespace: movierec
+spec:
+  selector: { app: auth }
+  ports:
+    - { name: http, port: 8082, targetPort: http }
+    - { name: internal, port: 8086, targetPort: internal }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: movies
+  namespace: movierec
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: movies }
+  template:
+    metadata:
+      labels: { app: movies, tier: backend }
+    spec:
+      nodeSelector:
+        movierec.io/role: app
+      containers:
+        - name: movies
+          image: ${REGISTRY}/movies:${IMAGE_TAG}
+          ports:
+            - { name: http, containerPort: 8083 }
+            - { name: internal, containerPort: 8081 }
+          envFrom:
+            - secretRef: { name: movies-config }
+            - secretRef: { name: tmdb-config }
+          env:
+            - { name: MOVIES_PORT, value: "8083" }
+            - { name: MOVIES_INTERNAL_PORT, value: "8081" }
+            - { name: MOVIES_DB_HOST, value: movies-postgres }
+            - { name: MOVIES_DB_SSLMODE, value: require }
+          readinessProbe:
+            httpGet: { path: /internal/health, port: internal }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /internal/health, port: internal }
+            initialDelaySeconds: 15
+            periodSeconds: 20
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: movies
+  namespace: movierec
+spec:
+  selector: { app: movies }
+  ports:
+    - { name: http, port: 8083, targetPort: http }
+    - { name: internal, port: 8081, targetPort: internal }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: recommendations
+  namespace: movierec
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: recommendations }
+  template:
+    metadata:
+      labels: { app: recommendations, tier: backend }
+    spec:
+      nodeSelector:
+        movierec.io/role: app
+      containers:
+        - name: recommendations
+          image: ${REGISTRY}/recommendations:${IMAGE_TAG}
+          ports:
+            - { name: http, containerPort: 8084 }
+            - { name: internal, containerPort: 8085 }
+          envFrom:
+            - secretRef: { name: recommendations-config }
+          env:
+            - { name: RECOMMENDATIONS_PORT, value: "8084" }
+            - { name: RECOMMENDATIONS_INTERNAL_PORT, value: "8085" }
+            - { name: RECOMMENDATIONS_DB_HOST, value: recommendations-postgres }
+            - { name: RECOMMENDATIONS_DB_SSLMODE, value: require }
+            - { name: MOVIES_INTERNAL_URL, value: "http://movies:8081" }
+            - { name: EMBEDDING_URL, value: "http://llama-embedding:8080" }
+            - { name: EMBEDDING_MODEL, value: bge-small-en-v1.5-q8_0 }
+            - { name: GENERATION_URL, value: "http://llama-generation:8080" }
+            - { name: GENERATION_MODEL, value: Qwen3-0.6B-Q4_K_M }
+            - { name: JWT_PUBLIC_KEY_PATH, value: /app/secrets/jwt-public.pem }
+          readinessProbe:
+            httpGet: { path: /internal/health, port: internal }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /internal/health, port: internal }
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          volumeMounts:
+            - { name: jwt, mountPath: /app/secrets, readOnly: true }
+      volumes:
+        - name: jwt
+          secret:
+            secretName: jwt-keys
+            defaultMode: 0440
+            items:
+              - { key: jwt-public.pem, path: jwt-public.pem }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: recommendations
+  namespace: movierec
+spec:
+  selector: { app: recommendations }
+  ports:
+    - { name: http, port: 8084, targetPort: http }
+    - { name: internal, port: 8085, targetPort: internal }
+---
+# The /internal APIs are unauthenticated, so only the services that call them
+# may reach the internal ports. Public ports are open to the gateway and to
+# Prometheus for metrics.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: auth-ingress
+  namespace: movierec
+spec:
+  podSelector:
+    matchLabels: { app: auth }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchExpressions:
+              - { key: app, operator: In, values: [gateway, prometheus] }
+      ports:
+        - { protocol: TCP, port: 8082 }
+    - from:
+        - podSelector:
+            matchLabels: { app: gateway }
+      ports:
+        - { protocol: TCP, port: 8086 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: movies-ingress
+  namespace: movierec
+spec:
+  podSelector:
+    matchLabels: { app: movies }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchExpressions:
+              - { key: app, operator: In, values: [gateway, prometheus] }
+      ports:
+        - { protocol: TCP, port: 8083 }
+    - from:
+        - podSelector:
+            matchExpressions:
+              - { key: app, operator: In, values: [gateway, recommendations] }
+      ports:
+        - { protocol: TCP, port: 8081 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: recommendations-ingress
+  namespace: movierec
+spec:
+  podSelector:
+    matchLabels: { app: recommendations }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchExpressions:
+              - { key: app, operator: In, values: [gateway, prometheus] }
+      ports:
+        - { protocol: TCP, port: 8084 }
+    - from:
+        - podSelector:
+            matchExpressions:
+              - { key: app, operator: In, values: [gateway, auth] }
+      ports:
+        - { protocol: TCP, port: 8085 }

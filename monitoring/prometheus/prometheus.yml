@@ -6,8 +6,15 @@ scrape_configs:
   - job_name: movierec-api
     metrics_path: /metrics
     static_configs:
-      # Scrape the backend's fixed container port; BACKEND_PORT is its host binding.
-      - targets: ["backend:8080"]
+      # Scrape the fixed container ports; BACKEND_PORT is the gateway's host binding.
+      - targets: ["gateway:8080"]
+        labels: { service: gateway }
+      - targets: ["auth:8082"]
+        labels: { service: auth }
+      - targets: ["movies:8083"]
+        labels: { service: movies }
+      - targets: ["recommendations:8084"]
+        labels: { service: recommendations }
   - job_name: llama-embedding
     metrics_path: /metrics
     static_configs:

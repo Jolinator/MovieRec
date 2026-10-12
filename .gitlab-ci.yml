@@ -47,7 +47,8 @@ docker_images:
   variables:
     DOCKER_HOST: tcp://docker:2375
     DOCKER_TLS_CERTDIR: ""
-    BACKEND_IMAGE: "$CI_REGISTRY/$CI_PROJECT_PATH/backend:$CI_COMMIT_SHA"
+    BACKEND_IMAGE_PREFIX: "$CI_REGISTRY/$CI_PROJECT_PATH"
+    BACKEND_IMAGE_TAG: "$CI_COMMIT_SHA"
     FRONTEND_IMAGE: "$CI_REGISTRY/$CI_PROJECT_PATH/frontend:$CI_COMMIT_SHA"
   script:
     - ./ci-cd/build-images.sh

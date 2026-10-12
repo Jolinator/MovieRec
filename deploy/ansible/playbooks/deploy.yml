@@ -59,10 +59,13 @@
     # The API starts even when the databases or llama.cpp are unavailable, so a
     # finished rollout means the processes are serving; /movieAPI/health reports
     # dependency readiness.
-    - name: Wait for the backend and frontend rollouts
+    - name: Wait for the backend services and frontend rollouts
       ansible.builtin.command: "{{ kubectl }} -n {{ k8s_namespace }} rollout status deployment/{{ item.name }} --timeout={{ item.timeout }}"
       loop:
-        - { name: backend, timeout: 15m }
+        - { name: gateway, timeout: 15m }
+        - { name: auth, timeout: 15m }
+        - { name: movies, timeout: 15m }
+        - { name: recommendations, timeout: 15m }
         - { name: frontend, timeout: 10m }
       changed_when: false
 

@@ -31,13 +31,17 @@ printf 'Registry: %s\n' "${REGISTRY}"
 
 gcloud auth configure-docker "${REGION}-docker.pkg.dev"
 
-docker build -f "${REPO_ROOT}/backend/Dockerfile" \
-  -t "${REGISTRY}/backend:${IMAGE_TAG}" "${REPO_ROOT}"
+for service in gateway auth movies recommendations; do
+  docker build -f "${REPO_ROOT}/backend/Dockerfile" \
+    --build-arg "SERVICE=${service}" \
+    -t "${REGISTRY}/${service}:${IMAGE_TAG}" "${REPO_ROOT}"
+done
 docker build -f "${REPO_ROOT}/frontend/Dockerfile" \
   --build-arg VITE_API_BASE_URL=/ \
   -t "${REGISTRY}/frontend:${IMAGE_TAG}" "${REPO_ROOT}"
 
-docker push "${REGISTRY}/backend:${IMAGE_TAG}"
-docker push "${REGISTRY}/frontend:${IMAGE_TAG}"
+for service in gateway auth movies recommendations frontend; do
+  docker push "${REGISTRY}/${service}:${IMAGE_TAG}"
+done
 
 printf '\nUse this tag in the Kubernetes deploy step:\nIMAGE_TAG=%s\n' "${IMAGE_TAG}"

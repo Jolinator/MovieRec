@@ -5,15 +5,13 @@ WORKDIR /src
 COPY backend/go.mod backend/go.sum ./
 RUN go mod download
 
+ARG SERVICE
 COPY backend/ ./
-RUN CGO_ENABLED=0 GOOS=linux go build -o /out/backend ./cmd/backend
+RUN test -n "${SERVICE}" && CGO_ENABLED=0 GOOS=linux go build -o /out/server "./cmd/${SERVICE}"
 
 FROM gcr.io/distroless/static-debian12
 
-ARG BACKEND_PORT=8080
-
 WORKDIR /app/backend
-COPY --from=build /out/backend /app/backend/server
+COPY --from=build /out/server /app/backend/server
 
-EXPOSE ${BACKEND_PORT}
 ENTRYPOINT ["/app/backend/server"]
