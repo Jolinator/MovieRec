@@ -1,0 +1,41 @@
+stages:
+  - validate
+  - test
+  - build
+
+workflow:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "master"'
+    - if: '$CI_COMMIT_BRANCH == "master"'
+
+backend_validation:
+  stage: validate
+  image: golang:1.27.1
+  script:
+    - ./ci-cd/validate-backend.sh
+
+frontend_validation:
+  stage: validate
+  image: node:22-alpine
+  script:
+    - ./ci-cd/validate-frontend.sh
+
+backend_tests:
+  stage: test
+  image: golang:1.27.1
+  script:
+    - ./ci-cd/test-backend.sh
+
+docker_images:
+  stage: build
+  image: docker:27.5.1-cli
+  services:
+    - name: docker:27.5.1-dind
+      command: ["--tls=false"]
+  variables:
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_TLS_CERTDIR: ""
+    BACKEND_IMAGE: "$CI_REGISTRY_IMAGE/backend:$CI_COMMIT_SHA"
+    FRONTEND_IMAGE: "$CI_REGISTRY_IMAGE/frontend:$CI_COMMIT_SHA"
+  script:
+    - ./ci-cd/build-images.sh
