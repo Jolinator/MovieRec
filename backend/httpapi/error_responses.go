@@ -11,6 +11,8 @@ func writeMoviesError(w http.ResponseWriter, err error, fallback string) {
 	switch {
 	case errors.Is(err, common.ErrInvalidMoviePagination):
 		http.Error(w, err.Error(), http.StatusBadRequest)
+	case errors.Is(err, common.ErrMovieNotFound):
+		http.Error(w, common.ErrMovieNotFound.Error(), http.StatusNotFound)
 	case errors.Is(err, common.ErrMoviesDatabaseUnavailable):
 		http.Error(w, common.ErrMoviesDatabaseUnavailable.Error(), http.StatusServiceUnavailable)
 	default:

@@ -23,10 +23,11 @@ import (
 func setupServer(authDB *pgxpool.Pool, ctx context.Context, moviesDB, recommendationsDB *pgxpool.Pool, tokenIssuer *auth.TokenIssuer, tokenVerifier *auth.TokenVerifier, dbStatuses database.Statuses, port, internalPort string) (publicServer, internalServer *http.Server) {
 
 	movieRepository := movies.NewMovieRepository(moviesDB, dbStatuses[database.MoviesDatabase])
+	movieService := movies.NewMovieService(movieRepository)
 	listRepository := recommendations.NewListRepository(recommendationsDB, dbStatuses[database.RecommendationsDatabase])
 	cacheRepository := recommendations.NewRecommendationCacheRepository(recommendationsDB, dbStatuses[database.RecommendationsDatabase])
 	embeddingRepository := recommendations.NewEmbeddingRepository(recommendationsDB, dbStatuses[database.RecommendationsDatabase])
-	recommendationService := recommendations.NewService(movieRepository, embeddingRepository, listRepository, cacheRepository)
+	recommendationService := recommendations.NewService(movieService, embeddingRepository, listRepository, cacheRepository)
 	var importedMovies atomic.Bool
 	go func() {
 		if err := movies.ImportPopularMoviesWithRetry(ctx, movieRepository, 10, 2*time.Second); err != nil {
@@ -39,8 +40,7 @@ func setupServer(authDB *pgxpool.Pool, ctx context.Context, moviesDB, recommenda
 		}
 	}()
 	userService := auth.NewUserService(auth.NewUserRepository(authDB, dbStatuses[database.AuthDatabase]), tokenIssuer)
-	movieService := movies.NewMovieService(movieRepository)
-	listService := recommendations.NewListService(listRepository, movieRepository)
+	listService := recommendations.NewListService(listRepository, movieService)
 	server := httpapi.NewServer(dbStatuses, &importedMovies, userService, movieService, listService, tokenVerifier, recommendationService)
 	mux := http.NewServeMux()
 	httpapi.RegisterEndpoints(mux, server)

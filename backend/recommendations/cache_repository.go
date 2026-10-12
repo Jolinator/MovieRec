@@ -7,7 +7,6 @@ import (
 
 	"backend/common"
 	"backend/database"
-	"backend/movies"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -106,9 +105,9 @@ func (r *RecommendationCacheRepository) LoadMovies(ctx context.Context, userID u
 	if err != nil {
 		return nil, err
 	}
-	cached, err := findMovies(ctx, catalog, cache.MovieIDs)
+	cached, err := catalog.ListByTMDBIDs(ctx, cache.MovieIDs)
 	if err != nil {
 		return nil, fmt.Errorf("load cached recommendations: %w", err)
 	}
-	return movies.MovieResponses(cached), nil
+	return cached, nil
 }

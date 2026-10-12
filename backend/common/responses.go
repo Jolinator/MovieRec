@@ -60,6 +60,11 @@ type MovieResponse struct {
 	BackdropPath  *string `json:"backdropPath"`
 }
 
+type MovieSynopsis struct {
+	TMDBID   int    `json:"tmdbId"`
+	Synopsis string `json:"synopsis"`
+}
+
 func WriteJSON(w http.ResponseWriter, value any) {
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(value); err != nil {

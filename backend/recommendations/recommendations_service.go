@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"backend/common"
-	"backend/movies"
 	"github.com/google/uuid"
 )
 
@@ -157,7 +156,7 @@ func (s *Service) Chat(ctx context.Context, message string) (common.ChatResponse
 	if err != nil {
 		return common.ChatResponse{}, err
 	}
-	candidates, err := findMovies(ctx, s.catalog, candidateIDs)
+	candidates, err := s.catalog.ListByTMDBIDs(ctx, candidateIDs)
 	if err != nil {
 		return common.ChatResponse{}, err
 	}
@@ -175,7 +174,7 @@ Never invent an identifier or recommend a movie outside the supplied JSON.`, fmt
 		return common.ChatResponse{}, err
 	}
 	recommendedMovies, normalizedAnswer := normalizeRecommendations(answer, candidates)
-	return common.ChatResponse{Message: normalizedAnswer, Movies: movies.MovieResponses(recommendedMovies)}, nil
+	return common.ChatResponse{Message: normalizedAnswer, Movies: recommendedMovies}, nil
 }
 
 type parsedRecommendation struct {
@@ -184,19 +183,19 @@ type parsedRecommendation struct {
 	id     int
 }
 
-func normalizeRecommendations(answer string, candidates []movies.Movie) ([]movies.Movie, string) {
-	byID := make(map[int]movies.Movie, len(candidates))
-	byTitle := make(map[string]movies.Movie, len(candidates))
+func normalizeRecommendations(answer string, candidates []common.MovieResponse) ([]common.MovieResponse, string) {
+	byID := make(map[int]common.MovieResponse, len(candidates))
+	byTitle := make(map[string]common.MovieResponse, len(candidates))
 	for _, candidate := range candidates {
 		byID[candidate.TMDBID] = candidate
 		byTitle[normalizeMovieTitle(candidate.Title)] = candidate
 	}
 
 	parsed := parseRecommendations(answer)
-	recommended := make([]movies.Movie, 0, 3)
+	recommended := make([]common.MovieResponse, 0, 3)
 	entries := make([]parsedRecommendation, 0, 3)
 	for _, item := range parsed {
-		var movie movies.Movie
+		var movie common.MovieResponse
 		var ok bool
 		if item.title != "" {
 			movie, ok = byTitle[normalizeMovieTitle(item.title)]
@@ -281,8 +280,8 @@ func normalizeMovieTitle(title string) string {
 	return strings.ToLower(strings.Join(strings.Fields(strings.TrimSpace(title)), " "))
 }
 
-func containsMovie(movies []movies.Movie, tmdbID int) bool {
-	for _, movie := range movies {
+func containsMovie(candidates []common.MovieResponse, tmdbID int) bool {
+	for _, movie := range candidates {
 		if movie.TMDBID == tmdbID {
 			return true
 		}

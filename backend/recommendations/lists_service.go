@@ -3,17 +3,14 @@ package recommendations
 import (
 	"context"
 	"errors"
-	"fmt"
 	"strconv"
 
-	"backend/auth"
 	"backend/common"
-	"backend/movies"
 	"github.com/google/uuid"
 )
 
-func NewListService(repository *ListRepository, movieRepo *movies.MovieRepository) *ListService {
-	return &ListService{repository: repository, movieRepo: movieRepo}
+func NewListService(repository *ListRepository, catalog MovieCatalog) *ListService {
+	return &ListService{repository: repository, catalog: catalog}
 }
 
 func (s *ListService) List(ctx context.Context, userID uuid.UUID) ([]common.MovieResponse, error) {
@@ -25,39 +22,22 @@ func (s *ListService) ListForUser(ctx context.Context, userID uuid.UUID) ([]comm
 	if err != nil {
 		return nil, err
 	}
-
-	response := make([]common.MovieResponse, 0, len(movieIDs))
-	for _, tmdbID := range movieIDs {
-		movie, err := s.movieRepo.FindByTMDBID(ctx, tmdbID)
-		if err != nil {
-			return nil, fmt.Errorf("load list movie %d: %w", tmdbID, err)
-		}
-		response = append(response, movies.MovieResponse(movie))
-	}
-	return response, nil
+	return s.catalog.ListByTMDBIDs(ctx, movieIDs)
 }
 
 func (s *ListService) Add(ctx context.Context, userID uuid.UUID, tmdbID int) (common.MovieResponse, error) {
-	movie, err := s.movieRepo.FindByTMDBID(ctx, tmdbID)
+	movies, err := s.catalog.ListByTMDBIDs(ctx, []int{tmdbID})
 	if err != nil {
 		return common.MovieResponse{}, err
 	}
 	if err := s.repository.Add(ctx, userID, tmdbID); err != nil {
 		return common.MovieResponse{}, err
 	}
-	return movies.MovieResponse(movie), nil
+	return movies[0], nil
 }
 
 func (s *ListService) Remove(ctx context.Context, userID uuid.UUID, tmdbID int) error {
 	return s.repository.Remove(ctx, userID, tmdbID)
-}
-
-func userIDFromContext(ctx context.Context) (uuid.UUID, error) {
-	userID, ok := auth.UserIDFromContext(ctx)
-	if !ok {
-		return uuid.Nil, common.ErrInvalidToken
-	}
-	return userID, nil
 }
 
 func ParseTMDBID(value string) (int, error) {

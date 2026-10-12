@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"backend/common"
@@ -94,8 +95,48 @@ func (s *MovieService) ListGenres(ctx context.Context) ([]Genre, error) {
 	return s.repository.ListGenres(ctx)
 }
 
+func (s *MovieService) ListByTMDBIDs(ctx context.Context, tmdbIDs []int) ([]common.MovieResponse, error) {
+	movies, err := s.repository.ListByTMDBIDs(ctx, tmdbIDs)
+	if err != nil {
+		return nil, err
+	}
+	return MovieResponses(movies), nil
+}
+
+// ListByTMDBIDsFromQuery looks up the movies named by the comma-separated "ids" parameter.
+func (s *MovieService) ListByTMDBIDsFromQuery(ctx context.Context, query url.Values) ([]common.MovieResponse, error) {
+	tmdbIDs, err := parseTMDBIDs(query.Get("ids"))
+	if err != nil {
+		return nil, err
+	}
+	return s.ListByTMDBIDs(ctx, tmdbIDs)
+}
+
+func parseTMDBIDs(value string) ([]int, error) {
+	if value == "" {
+		return nil, fmt.Errorf("%w: ids is required", common.ErrInvalidMoviePagination)
+	}
+	parts := strings.Split(value, ",")
+	if len(parts) > maxMovieLimit {
+		return nil, fmt.Errorf("%w: ids accepts at most %d values", common.ErrInvalidMoviePagination, maxMovieLimit)
+	}
+	tmdbIDs := make([]int, len(parts))
+	for i, part := range parts {
+		id, err := strconv.Atoi(part)
+		if err != nil || id <= 0 {
+			return nil, fmt.Errorf("%w: ids must be positive integers", common.ErrInvalidMoviePagination)
+		}
+		tmdbIDs[i] = id
+	}
+	return tmdbIDs, nil
+}
+
+func (s *MovieService) ListSynopses(ctx context.Context, afterTMDBID, limit int) ([]common.MovieSynopsis, error) {
+	return s.repository.ListSynopses(ctx, afterTMDBID, limit)
+}
+
 // ListSynopsesFromQuery pages through movie synopses using the "after" (TMDB id cursor) and "limit" parameters.
-func (s *MovieService) ListSynopsesFromQuery(ctx context.Context, query url.Values) ([]MovieSynopsis, error) {
+func (s *MovieService) ListSynopsesFromQuery(ctx context.Context, query url.Values) ([]common.MovieSynopsis, error) {
 	limit, err := queryInt(query, "limit", maxMovieLimit)
 	if err != nil {
 		return nil, err
@@ -110,7 +151,7 @@ func (s *MovieService) ListSynopsesFromQuery(ctx context.Context, query url.Valu
 	if err := validateMoviePagination(limit, 0); err != nil {
 		return nil, err
 	}
-	return s.repository.ListSynopses(ctx, after, limit)
+	return s.ListSynopses(ctx, after, limit)
 }
 
 func validateMoviePagination(limit, offset int) error {

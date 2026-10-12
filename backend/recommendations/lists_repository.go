@@ -7,7 +7,6 @@ import (
 
 	"backend/common"
 	"backend/database"
-	"backend/movies"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -120,5 +119,5 @@ func isUniqueViolation(err error) bool {
 
 type ListService struct {
 	repository *ListRepository
-	movieRepo  *movies.MovieRepository
+	catalog    MovieCatalog
 }

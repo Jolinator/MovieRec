@@ -2,7 +2,6 @@ package movies
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"math"
 	"strings"
@@ -132,15 +131,28 @@ func (r *MovieRepository) Upsert(ctx context.Context, movie Movie) error {
 	return nil
 }
 
+const movieColumns = `tmdb_id, title, release_date, average_rating, poster_path, synopsis, backdrop_path`
+
+func scanMovie(row pgx.CollectableRow) (Movie, error) {
+	var movie Movie
+	err := row.Scan(
+		&movie.TMDBID,
+		&movie.Title,
+		&movie.ReleaseDate,
+		&movie.AverageRating,
+		&movie.PosterPath,
+		&movie.Synopsis,
+		&movie.BackdropPath,
+	)
+	return movie, err
+}
+
 func (r *MovieRepository) List(ctx context.Context, limit, offset int, genreID *int) ([]Movie, error) {
 	if !r.db_status.Available() {
 		return []Movie{}, common.ErrMoviesDatabaseUnavailable
 	}
 
-	query := `
-		SELECT tmdb_id, title, release_date, average_rating, poster_path, synopsis, backdrop_path
-		FROM movies
-	`
+	query := `SELECT ` + movieColumns + ` FROM movies `
 	args := []any{limit, offset}
 	if genreID != nil {
 		query += `
@@ -155,56 +167,38 @@ func (r *MovieRepository) List(ctx context.Context, limit, offset int, genreID *
 	if err != nil {
 		return nil, fmt.Errorf("list movies: %w", err)
 	}
-	defer rows.Close()
-
-	movies := make([]Movie, 0, limit)
-	for rows.Next() {
-		var movie Movie
-		if err := rows.Scan(
-			&movie.TMDBID,
-			&movie.Title,
-			&movie.ReleaseDate,
-			&movie.AverageRating,
-			&movie.PosterPath,
-			&movie.Synopsis,
-			&movie.BackdropPath,
-		); err != nil {
-			return nil, fmt.Errorf("scan movie: %w", err)
-		}
-		movies = append(movies, movie)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate movies: %w", err)
+	movies, err := pgx.CollectRows(rows, scanMovie)
+	if err != nil {
+		return nil, fmt.Errorf("read movies: %w", err)
 	}
 	return movies, nil
 }
 
-func (r *MovieRepository) FindByTMDBID(ctx context.Context, tmdbID int) (Movie, error) {
+// ListByTMDBIDs returns the requested movies in the order of tmdbIDs, or ErrMovieNotFound if any is missing.
+func (r *MovieRepository) ListByTMDBIDs(ctx context.Context, tmdbIDs []int) ([]Movie, error) {
+	if len(tmdbIDs) == 0 {
+		return []Movie{}, nil
+	}
 	if !r.db_status.Available() {
-		return Movie{}, common.ErrMoviesDatabaseUnavailable
+		return nil, common.ErrMoviesDatabaseUnavailable
 	}
 
-	var movie Movie
-	err := r.db.QueryRow(ctx, `
-		SELECT tmdb_id, title, release_date, average_rating, poster_path, synopsis, backdrop_path
-		FROM movies
-		WHERE tmdb_id = $1
-	`, tmdbID).Scan(
-		&movie.TMDBID,
-		&movie.Title,
-		&movie.ReleaseDate,
-		&movie.AverageRating,
-		&movie.PosterPath,
-		&movie.Synopsis,
-		&movie.BackdropPath,
-	)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return Movie{}, common.ErrMovieNotFound
-	}
+	rows, err := r.db.Query(ctx, `
+		SELECT `+movieColumns+`
+		FROM unnest($1::int[]) WITH ORDINALITY AS requested(requested_id, position)
+		JOIN movies ON movies.tmdb_id = requested.requested_id
+		ORDER BY requested.position`, tmdbIDs)
 	if err != nil {
-		return Movie{}, fmt.Errorf("find movie %d: %w", tmdbID, err)
+		return nil, fmt.Errorf("find movies: %w", err)
 	}
-	return movie, nil
+	movies, err := pgx.CollectRows(rows, scanMovie)
+	if err != nil {
+		return nil, fmt.Errorf("read movies: %w", err)
+	}
+	if len(movies) != len(tmdbIDs) {
+		return nil, common.ErrMovieNotFound
+	}
+	return movies, nil
 }
 
 type Genre struct {
@@ -237,13 +231,8 @@ func (r *MovieRepository) ListGenres(ctx context.Context) ([]Genre, error) {
 	return genres, nil
 }
 
-type MovieSynopsis struct {
-	TMDBID   int    `json:"tmdbId"`
-	Synopsis string `json:"synopsis"`
-}
-
 // ListSynopses returns non-empty synopses ordered by TMDB id, starting after afterTMDBID.
-func (r *MovieRepository) ListSynopses(ctx context.Context, afterTMDBID, limit int) ([]MovieSynopsis, error) {
+func (r *MovieRepository) ListSynopses(ctx context.Context, afterTMDBID, limit int) ([]common.MovieSynopsis, error) {
 	if !r.db_status.Available() {
 		return nil, common.ErrMoviesDatabaseUnavailable
 	}
@@ -256,7 +245,7 @@ func (r *MovieRepository) ListSynopses(ctx context.Context, afterTMDBID, limit i
 	if err != nil {
 		return nil, fmt.Errorf("list movie synopses: %w", err)
 	}
-	synopses, err := pgx.CollectRows(rows, pgx.RowToStructByPos[MovieSynopsis])
+	synopses, err := pgx.CollectRows(rows, pgx.RowToStructByPos[common.MovieSynopsis])
 	if err != nil {
 		return nil, fmt.Errorf("read movie synopses: %w", err)
 	}

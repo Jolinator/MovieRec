@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"backend/movies"
+	"backend/common"
 )
 
 const embeddingSyncPageSize = 100
@@ -27,7 +27,7 @@ func (s *Service) syncEmbeddings(ctx context.Context) error {
 	}
 }
 
-func (s *Service) embedMissing(ctx context.Context, page []movies.MovieSynopsis) error {
+func (s *Service) embedMissing(ctx context.Context, page []common.MovieSynopsis) error {
 	ids := make([]int, len(page))
 	for i, synopsis := range page {
 		ids[i] = synopsis.TMDBID
@@ -47,7 +47,7 @@ func (s *Service) embedMissing(ctx context.Context, page []movies.MovieSynopsis)
 	return nil
 }
 
-func (s *Service) embedSynopsis(ctx context.Context, synopsis movies.MovieSynopsis) error {
+func (s *Service) embedSynopsis(ctx context.Context, synopsis common.MovieSynopsis) error {
 	vector, err := s.embedding.Embed(ctx, synopsis.Synopsis)
 	if err != nil {
 		return fmt.Errorf("embed movie %d: %w", synopsis.TMDBID, err)
