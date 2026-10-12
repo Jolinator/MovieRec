@@ -1,0 +1,18 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: llama-generation
+  namespace: movierec
+spec:
+  template:
+    spec:
+      runtimeClassName: nvidia
+      nodeSelector:
+        movierec.io/role: model
+      containers:
+        - name: llama-server
+          image: ${GPU_LLAMA_IMAGE}
+          args: ["--host", "0.0.0.0", "--port", "8080", "--model", "/models/qwen.gguf", "--ctx-size", "4096", "--n-gpu-layers", "99", "--metrics", "--log-verbosity", "2"]
+          resources:
+            limits:
+              nvidia.com/gpu: 1

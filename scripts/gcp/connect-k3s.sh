@@ -13,10 +13,10 @@ for command in gcloud terraform; do
   fi
 done
 
-INSTANCE="$(terraform -chdir="${TF_DIR}" output -raw instance_name)"
+INSTANCE="$(terraform -chdir="${TF_DIR}" output -raw app_instance_name)"
 ZONE="$(terraform -chdir="${TF_DIR}" output -raw zone)"
 if [[ -z "${INSTANCE}" || -z "${ZONE}" ]]; then
-  printf 'Terraform outputs instance_name and zone must be available.\n' >&2
+  printf 'Terraform outputs app_instance_name and zone must be available.\n' >&2
   exit 1
 fi
 

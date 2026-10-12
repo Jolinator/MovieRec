@@ -26,6 +26,13 @@ if ! kubectl --request-timeout=10s get nodes >/dev/null; then
   exit 1
 fi
 
+for role in app database model; do
+  if ! kubectl get nodes -l "movierec.io/role=${role}" --no-headers 2>/dev/null | grep -q .; then
+    printf 'No cluster node has role label movierec.io/role=%s. Run make cluster-bootstrap first.\n' "${role}" >&2
+    exit 1
+  fi
+done
+
 required_files=(
   auth.env
   movies.env
@@ -59,6 +66,14 @@ if [[ ! "${PUBLIC_HOST}" =~ ^[A-Za-z0-9.-]+$ ]]; then
   exit 2
 fi
 
+if [[ "${PUBLIC_HOST}" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; then
+  WEB_SAN="IP:${PUBLIC_HOST}"
+  WEB_SAN_CHECK="IP Address:${PUBLIC_HOST}"
+else
+  WEB_SAN="DNS:${PUBLIC_HOST}"
+  WEB_SAN_CHECK="DNS:${PUBLIC_HOST}"
+fi
+
 if [[ -e "${SECRETS_DIR}/tls/web.key" && ! -s "${SECRETS_DIR}/tls/web.crt" ]] || \
    [[ -e "${SECRETS_DIR}/tls/web.crt" && ! -s "${SECRETS_DIR}/tls/web.key" ]]; then
   printf 'HTTPS certificate files are incomplete; restore the pair or remove both before retrying.\n' >&2
@@ -66,12 +81,12 @@ if [[ -e "${SECRETS_DIR}/tls/web.key" && ! -s "${SECRETS_DIR}/tls/web.crt" ]] ||
 fi
 
 if [[ ! -s "${SECRETS_DIR}/tls/web.key" && ! -s "${SECRETS_DIR}/tls/web.crt" ]] || \
-   ! openssl x509 -in "${SECRETS_DIR}/tls/web.crt" -noout -ext subjectAltName 2>/dev/null | grep -Fq "DNS:${PUBLIC_HOST}"; then
+   ! openssl x509 -in "${SECRETS_DIR}/tls/web.crt" -noout -ext subjectAltName 2>/dev/null | grep -Fq "${WEB_SAN_CHECK}"; then
   openssl req -x509 -newkey rsa:2048 -nodes -days 365 \
     -keyout "${SECRETS_DIR}/tls/web.key" \
     -out "${SECRETS_DIR}/tls/web.crt" \
     -subj "/CN=${PUBLIC_HOST}" \
-    -addext "subjectAltName=DNS:${PUBLIC_HOST}"
+    -addext "subjectAltName=${WEB_SAN}"
   chmod 600 "${SECRETS_DIR}/tls/web.key"
 fi
 

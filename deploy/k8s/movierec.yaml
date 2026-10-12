@@ -42,6 +42,8 @@ spec:
     metadata:
       labels: { app: auth-postgres }
     spec:
+      nodeSelector:
+        movierec.io/role: database
       containers:
         - name: postgres
           image: postgres:16
@@ -97,6 +99,8 @@ spec:
     metadata:
       labels: { app: movies-postgres }
     spec:
+      nodeSelector:
+        movierec.io/role: database
       containers:
         - name: postgres
           image: pgvector/pgvector:pg16
@@ -152,6 +156,8 @@ spec:
     metadata:
       labels: { app: recommendations-postgres }
     spec:
+      nodeSelector:
+        movierec.io/role: database
       containers:
         - name: postgres
           image: postgres:16
@@ -196,6 +202,8 @@ spec:
     metadata:
       labels: { app: llama-embedding }
     spec:
+      nodeSelector:
+        movierec.io/role: model
       containers:
         - name: llama-server
           image: ghcr.io/ggml-org/llama.cpp:server-v0.4.1
@@ -236,6 +244,8 @@ spec:
     metadata:
       labels: { app: llama-generation }
     spec:
+      nodeSelector:
+        movierec.io/role: model
       containers:
         - name: llama-server
           image: ghcr.io/ggml-org/llama.cpp:server-v0.4.1
@@ -276,6 +286,8 @@ spec:
     metadata:
       labels: { app: backend }
     spec:
+      nodeSelector:
+        movierec.io/role: app
       containers:
         - name: backend
           image: ${REGISTRY}/backend:${IMAGE_TAG}
@@ -335,6 +347,8 @@ spec:
     metadata:
       labels: { app: frontend }
     spec:
+      nodeSelector:
+        movierec.io/role: app
       containers:
         - name: frontend
           image: ${REGISTRY}/frontend:${IMAGE_TAG}
@@ -391,6 +405,8 @@ spec:
     metadata:
       labels: { app: prometheus }
     spec:
+      nodeSelector:
+        movierec.io/role: app
       containers:
         - name: prometheus
           image: prom/prometheus:v3.5.0
@@ -437,6 +453,8 @@ spec:
     metadata:
       labels: { app: grafana }
     spec:
+      nodeSelector:
+        movierec.io/role: app
       containers:
         - name: grafana
           image: grafana/grafana:12.2.0
@@ -469,3 +487,47 @@ spec:
   selector: { app: grafana }
   ports: [{ name: http, port: 3000, targetPort: http }]
 ---
+# Keep databases reachable from the backend and model services reachable from
+# the backend plus Prometheus for metrics. Kubernetes Service DNS still works
+# across all three nodes; these policies constrain pod ingress after traffic
+# crosses the K3s overlay.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: backend-only-databases
+  namespace: movierec
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app
+        operator: In
+        values: [auth-postgres, movies-postgres, recommendations-postgres]
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: { app: backend }
+      ports:
+        - { protocol: TCP, port: 5432 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: backend-only-models
+  namespace: movierec
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app
+        operator: In
+        values: [llama-embedding, llama-generation]
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchExpressions:
+              - key: app
+                operator: In
+                values: [backend, prometheus]
+      ports:
+        - { protocol: TCP, port: 8080 }
