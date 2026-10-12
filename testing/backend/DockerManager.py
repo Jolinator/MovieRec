@@ -16,56 +16,27 @@ class Service:
         self.depends_on.add(service.name)
         service.depended_by.add(self.name)
 
-class SoftDependecyManager:
-    def __init__(self):
-        self.allowed_services: set[str] = {
-            "movies-postgres",
-            "auth-postgres",
-            "recommendations-postgres",
-            "llama-embedding",
-            "llama-generation",
-            "backend",
-            "frontend",
-            "prometheus",
-            "grafana",
-        }
-
-        self.services: dict[str, Service] = {name: Service(name) for name in self.allowed_services}
-        self.services["backend"].add_dependency(self.services["auth-postgres"])
-        self.services["backend"].add_dependency(self.services["movies-postgres"])
-        self.services["backend"].add_dependency(self.services["recommendations-postgres"])
-        self.services["backend"].add_dependency(self.services["llama-embedding"])
-        self.services["backend"].add_dependency(self.services["llama-generation"])
-        self.services["frontend"].add_dependency(self.services["backend"])
-        self.services["prometheus"].add_dependency(self.services["backend"])
-        self.services["grafana"].add_dependency(self.services["prometheus"])
-
-    def sort_service_list(self, *services: str) -> list[str]:
-        requested = set(services)
-        sorted_services: list[str] = []
-        visited: set[str] = set()
-
-        def visit(service_name: str):
-            if service_name in visited:
-                return
-            visited.add(service_name)
-            for dependency in sorted(self.services[service_name].depends_on):
-                if dependency in requested:
-                    visit(dependency)
-            sorted_services.append(service_name)
-
-        for service in sorted(requested):
-            visit(service)
-
-        return sorted_services
-        
-
-soft_dependecy_manager: SoftDependecyManager = SoftDependecyManager()
+allowed_services: set[str] = {
+    "movies-postgres",
+    "auth-postgres",
+    "recommendations-postgres",
+    "llama-embedding",
+    "llama-generation",
+    "backend",
+    "frontend",
+    "prometheus",
+    "grafana",
+}
 
 DATABASE_STATUS_KEYS = {
     "auth-postgres": "authDBAvailable",
     "movies-postgres": "moviesDBAvailable",
     "recommendations-postgres": "recommendationsDBAvailable",
+}
+DATABASE_SCAN_NAMES = {
+    "auth-postgres": "auth",
+    "movies-postgres": "movies",
+    "recommendations-postgres": "recommendations",
 }
 
 class DockerManager:
@@ -77,7 +48,7 @@ class DockerManager:
             raise ValueError("BACKEND_PORT is not set in secrets/ports.env")
 
         self.backend_url = f"http://localhost:{backend_port}"
-        self.allowed_services: set[str] = soft_dependecy_manager.allowed_services
+        self.allowed_services: set[str] = allowed_services
         self.required_services: set[str] = set()
         self.active_services: set[str] = set()
         self.defiled_dbs: set[str] = set()
@@ -106,6 +77,9 @@ class DockerManager:
             return
 
         url = f"{self.backend_url}/movieAPI/health"
+        if targets:
+            scan_targets = ",".join(DATABASE_SCAN_NAMES[target] for target in targets)
+            url = f"{url}?scan={scan_targets}"
         deadline = time.monotonic() + timeout
         while True:
             health = self._read_health_status(url)
@@ -252,9 +226,6 @@ class DockerManager:
 
     def up_services(self, *services: str) -> list[CompletedProcess]:
         self.verify_services(*services)
-        sorted_services = soft_dependecy_manager.sort_service_list(*services)
-        if not sorted_services:
-            return []
 
         result = run(
             [
@@ -264,7 +235,7 @@ class DockerManager:
                 "-d",
                 "--build",
                 "--remove-orphans",
-                *sorted_services,
+                *services,
             ],
             capture_output=True,
             text=True,

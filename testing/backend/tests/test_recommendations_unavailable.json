@@ -45,7 +45,7 @@
         },
         {
             "method": "GET",
-            "url": "/movieAPI/health",
+            "url": "/movieAPI/health?scan=auth,movies,recommendations",
             "expected_status": 200,
             "expected_response": {
                 "backendAvailable": true,
@@ -54,6 +54,12 @@
                 "recommendationsDBAvailable": false
             },
             "expected_response_subset": true
+        },
+        {
+            "method": "GET",
+            "url": "/movieAPI/health?scan=unknown",
+            "expected_status": 400,
+            "expected_response": "unsupported health scan database: unknown\n"
         }
     ]
 }

@@ -138,11 +138,20 @@ func redirectToMovieAPI(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) healthHandler(w http.ResponseWriter, r *http.Request) {
-	s.dbStatus.Scan(r.Context())
+	databases, scanRequested, err := parseHealthScanQuery(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if scanRequested {
+		s.dbStatus.Scan(r.Context(), databases...)
+	} else {
+		s.dbStatus.HealthScan(r.Context())
+	}
 
 	auth_available := s.dbStatus.AuthAvailable()
 	movies_db_available := s.dbStatus.MoviesAvailable()
-	recommendations_available := s.dbStatus.RecommendationsAvailable()
+	recommendations_available := s.dbStatus.RecommendationsDbAvailable()
 	imported_movies_available := s.dbStatus.ImportedMoviesAvailable()
 	backend_available := true
 	recommendations_ready := s.recommendationService.Ready()
