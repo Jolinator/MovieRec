@@ -21,6 +21,16 @@ frontend_validation:
   script:
     - ./ci-cd/validate-frontend.sh
 
+backend_unit_tests:
+  stage: test
+  image: golang:1.27.1
+  script:
+    - ./ci-cd/test-backend-unit.sh
+  artifacts:
+    when: always
+    paths:
+      - testing/backend/unit/coverage.out
+
 backend_tests:
   stage: test
   image: docker:27.5.1-cli
