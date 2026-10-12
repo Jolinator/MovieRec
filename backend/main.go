@@ -32,7 +32,7 @@ func setupServer(authDB *pgxpool.Pool, ctx context.Context, moviesDB, recommenda
 		}
 		dbStatus.SetImportedMoviesAvailable(true)
 		if err := recommendationService.InitializeWithRetry(ctx, 30, 2*time.Second); err != nil {
-			log.Printf("recommendation embeddings unavailable: %v", err)
+			log.Printf("recommendation models unavailable: %v", err)
 		}
 	}()
 	userService := auth.NewUserService(auth.NewUserRepository(authDB, dbStatus), tokenIssuer)
@@ -48,7 +48,7 @@ func setupServer(authDB *pgxpool.Pool, ctx context.Context, moviesDB, recommenda
 		Handler:           handler,
 		ReadTimeout:       10 * time.Second,
 		ReadHeaderTimeout: 5 * time.Second,
-		WriteTimeout:      10 * time.Second,
+		WriteTimeout:      120 * time.Second,
 		IdleTimeout:       60 * time.Second,
 	}
 	return httpServer

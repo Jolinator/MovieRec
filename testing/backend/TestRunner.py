@@ -1,3 +1,4 @@
+import argparse
 import json
 import logging
 import sys
@@ -88,6 +89,36 @@ def response_has_fields(actual: Any, fields: list[str]) -> bool:
     )
 
 
+def resolve_template(value: Any, variables: dict[str, Any], preserve_type: bool = True) -> Any:
+    if isinstance(value, dict):
+        return {
+            key: resolve_template(item, variables)
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [resolve_template(item, variables) for item in value]
+    if not isinstance(value, str):
+        return value
+
+    if value.startswith("{{") and value.endswith("}}") and value.count("{{") == 1:
+        variable_name = value[2:-2]
+        if variable_name in variables:
+            return variables[variable_name] if preserve_type else str(variables[variable_name])
+        raise ValueError(f"request references uncaptured variable {variable_name!r}")
+
+    resolved = value
+    while "{{" in resolved:
+        start = resolved.index("{{")
+        end = resolved.find("}}", start + 2)
+        if end < 0:
+            raise ValueError(f"invalid template in {value!r}")
+        variable_name = resolved[start + 2:end]
+        if variable_name not in variables:
+            raise ValueError(f"request references uncaptured variable {variable_name!r}")
+        resolved = resolved[:start] + str(variables[variable_name]) + resolved[end + 2:]
+    return resolved
+
+
 def response_is_non_empty(actual: Any) -> bool:
     return isinstance(actual, (list, dict, str)) and len(actual) > 0
 
@@ -103,6 +134,7 @@ class TestRequest:
     required_response_fields: list[str] = field(default_factory=list)
     expected_response_non_empty: bool = False
     expected_cookies: dict[str, bool] = field(default_factory=dict)
+    capture_response: dict[str, str] = field(default_factory=dict)
     timeout: float = 10
     body: Any = None
     output: TestOutput | None = None
@@ -118,6 +150,7 @@ class TestRequest:
         required_response_fields = config.get("required_response_fields", [])
         expected_response_non_empty = config.get("expected_response_non_empty", False)
         expected_cookies = config.get("expected_cookies") or {}
+        capture_response = config.get("capture_response") or {}
         timeout = config.get("timeout", 10)
 
         if not isinstance(method, str) or not method:
@@ -143,6 +176,11 @@ class TestRequest:
             raise ValueError("'expected_cookies' must map cookie names to booleans.")
         if not isinstance(timeout, (int, float)) or timeout <= 0:
             raise ValueError("'timeout' must be a positive number.")
+        if not isinstance(capture_response, dict) or not all(
+            isinstance(name, str) and name and isinstance(path, str) and path
+            for name, path in capture_response.items()
+        ):
+            raise ValueError("'capture_response' must map variable names to response access paths.")
 
         return cls(
             method=method,
@@ -153,6 +191,7 @@ class TestRequest:
             required_response_fields=required_response_fields,
             expected_response_non_empty=expected_response_non_empty,
             expected_cookies=expected_cookies,
+            capture_response=capture_response,
             timeout=float(timeout),
             body=config.get("body"),
             expected_output=TestOutput(expected_status, expected_body),
@@ -163,8 +202,17 @@ class TestRequest:
         logger: logging.Logger,
         session: requests.Session,
         backend_url: str,
+        variables: dict[str, Any],
     ) -> None:
-        request_url = urljoin(backend_url.rstrip("/") + "/", self.url.lstrip("/"))
+        try:
+            request_path = resolve_template(self.url, variables, preserve_type=False)
+            request_body = resolve_template(self.body, variables)
+        except ValueError as error:
+            self.error = str(error)
+            logger.error("Request failed: %s %s (%s)", self.method, self.url, error)
+            return
+
+        request_url = urljoin(backend_url.rstrip("/") + "/", request_path.lstrip("/"))
         logger.info("Request: %s %s", self.method, request_url)
         request_cookies = self.cookies or session.cookies.get_dict()
 
@@ -174,7 +222,7 @@ class TestRequest:
                 url=request_url,
                 headers=self.headers,
                 cookies=request_cookies,
-                json=self.body,
+                json=request_body,
                 timeout=self.timeout,
             )
         except requests.RequestException as error:
@@ -188,6 +236,16 @@ class TestRequest:
             response_body = response.text
 
         self.output = TestOutput(response.status_code, response_body)
+        for variable_name, access_path in self.capture_response.items():
+            try:
+                variables[variable_name] = eval(
+                    f"response_body{access_path}",
+                    {"__builtins__": {}},
+                    {"response_body": response_body},
+                )
+            except (KeyError, IndexError, TypeError, ValueError, SyntaxError, NameError) as error:
+                self.error = f"Could not capture response access {access_path!r} as {variable_name!r}: {error}"
+                break
         session_cookie_names = {cookie.name for cookie in session.cookies}
         for name, should_exist in self.expected_cookies.items():
             if (name in session_cookie_names) != should_exist:
@@ -371,9 +429,10 @@ class BackendTest:
                 elif database == "recommendations-postgres":
                     self.docker_manager.defile_recommendations()
             test_started_at = time.perf_counter()
+            variables: dict[str, Any] = {}
             with requests.Session() as session:
                 for request in self.requests:
-                    request.send(logger, session, self.docker_manager.backend_url)
+                    request.send(logger, session, self.docker_manager.backend_url, variables)
             test_ended_at = time.perf_counter()
             self.duration = test_ended_at - test_started_at
         finally:
@@ -466,7 +525,7 @@ def order_tests_to_minimize_service_changes(tests: list[BackendTest]) -> list[Ba
     return ordered
 
 
-def main() -> int:
+def run(reset_end: bool) -> int:
     run_started_at = time.perf_counter()
     logger, report_log = configure_logging()
     generated_at = datetime.now().astimezone()
@@ -509,6 +568,8 @@ def main() -> int:
     logger.info("Total Docker time: %.2fs", total_docker_duration)
     logger.info("Total test runtime: %.2fs", total_test_duration)
     logger.info("Processing time: %.2fs", processing_duration)
+    if not reset_end:
+        logger.info("Leaving Docker services running; final reset skipped")
     logger.info("Writing report to %s", report_path)
     report_path.write_text(
         build_report(
@@ -521,8 +582,28 @@ def main() -> int:
         ),
         encoding="utf-8",
     )
-    docker_manager.reset_all()
+    if reset_end:
+        docker_manager.reset_all()
     return 0 if all(test.success for test in tests) else 1
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Run backend integration tests.")
+    reset_options = parser.add_mutually_exclusive_group()
+    reset_options.add_argument(
+        "--reset-end",
+        dest="reset_end",
+        action="store_true",
+        help="stop services and remove database volumes after the run (default)",
+    )
+    reset_options.add_argument(
+        "--no-reset-end",
+        dest="reset_end",
+        action="store_false",
+        help="leave services and database volumes running after the run",
+    )
+    parser.set_defaults(reset_end=True)
+    arguments = parser.parse_args()
+    return run(reset_end=arguments.reset_end)
 
 
 if __name__ == "__main__":
