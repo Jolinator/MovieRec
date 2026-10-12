@@ -7,6 +7,17 @@ import (
 	"backend/common"
 )
 
+func writeMoviesError(w http.ResponseWriter, err error, fallback string) {
+	switch {
+	case errors.Is(err, common.ErrInvalidMoviePagination):
+		http.Error(w, err.Error(), http.StatusBadRequest)
+	case errors.Is(err, common.ErrMoviesDatabaseUnavailable):
+		http.Error(w, common.ErrMoviesDatabaseUnavailable.Error(), http.StatusServiceUnavailable)
+	default:
+		http.Error(w, fallback, http.StatusInternalServerError)
+	}
+}
+
 func writeMovieListError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, common.ErrMovieNotFound):

@@ -103,7 +103,7 @@ spec:
         movierec.io/role: database
       containers:
         - name: postgres
-          image: pgvector/pgvector:pg16
+          image: postgres:16
           command: ["/usr/local/bin/tls-entrypoint.sh"]
           args: ["postgres", "-c", "ssl=on", "-c", "ssl_cert_file=/tmp/server.crt", "-c", "ssl_key_file=/tmp/server.key"]
           envFrom:
@@ -160,7 +160,7 @@ spec:
         movierec.io/role: database
       containers:
         - name: postgres
-          image: postgres:16
+          image: pgvector/pgvector:pg16
           command: ["/usr/local/bin/tls-entrypoint.sh"]
           args: ["postgres", "-c", "ssl=on", "-c", "ssl_cert_file=/tmp/server.crt", "-c", "ssl_key_file=/tmp/server.key"]
           envFrom:

@@ -18,7 +18,8 @@ import (
 )
 
 type Service struct {
-	repository *movies.MovieRepository
+	catalog    MovieCatalog
+	embeddings *EmbeddingRepository
 	embedding  *EmbeddingClient
 	generation *GenerationClient
 	lists      *ListRepository
@@ -27,12 +28,12 @@ type Service struct {
 	ready      atomic.Bool
 }
 
-func NewService(repository *movies.MovieRepository, lists *ListRepository, cache *RecommendationCacheRepository) *Service {
-	return &Service{repository: repository, embedding: NewEmbeddingClient(), generation: NewGenerationClient(), lists: lists, cache: cache}
+func NewService(catalog MovieCatalog, embeddings *EmbeddingRepository, lists *ListRepository, cache *RecommendationCacheRepository) *Service {
+	return &Service{catalog: catalog, embeddings: embeddings, embedding: NewEmbeddingClient(), generation: NewGenerationClient(), lists: lists, cache: cache}
 }
 func (s *Service) Initialize(ctx context.Context) error {
 	s.ready.Store(false)
-	if err := s.repository.EmbedSynopses(ctx, s.embedding); err != nil {
+	if err := s.syncEmbeddings(ctx); err != nil {
 		return fmt.Errorf("embed movie synopses: %w", err)
 	}
 	if err := s.embedding.WarmUp(ctx); err != nil {
@@ -84,7 +85,7 @@ func (s *Service) RefreshForUser(ctx context.Context, userID uuid.UUID) {
 		_ = s.cache.Save(ctx, userID, "empty", nil)
 		return
 	}
-	profile, err := s.repository.RecommendationProfile(ctx, ids)
+	profile, err := s.embeddings.Profile(ctx, ids)
 	if err != nil {
 		log.Printf("background recommendations: build profile for %s: %v", userID, err)
 		_ = s.cache.Save(ctx, userID, "failed", nil)
@@ -94,15 +95,11 @@ func (s *Service) RefreshForUser(ctx context.Context, userID uuid.UUID) {
 		_ = s.cache.Save(ctx, userID, "empty", nil)
 		return
 	}
-	candidates, err := s.repository.SearchSimilarExcluding(ctx, profile, ids, 3)
+	resultIDs, err := s.embeddings.SearchSimilarExcluding(ctx, profile, ids, 3)
 	if err != nil {
 		log.Printf("background recommendations: search for %s: %v", userID, err)
 		_ = s.cache.Save(ctx, userID, "failed", nil)
 		return
-	}
-	resultIDs := make([]int, 0, len(candidates))
-	for _, movie := range candidates {
-		resultIDs = append(resultIDs, movie.TMDBID)
 	}
 	status := "ready"
 	if len(resultIDs) == 0 {
@@ -142,7 +139,7 @@ func (s *Service) Recommendations(ctx context.Context, userID uuid.UUID) (common
 		s.RequestRefresh(context.Background(), userID)
 		return common.PersonalizedRecommendationsResponse{Status: "preparing"}, nil
 	}
-	movies, err := s.cache.LoadMovies(ctx, userID, s.repository)
+	movies, err := s.cache.LoadMovies(ctx, userID, s.catalog)
 	if err != nil {
 		return common.PersonalizedRecommendationsResponse{}, err
 	}
@@ -156,7 +153,11 @@ func (s *Service) Chat(ctx context.Context, message string) (common.ChatResponse
 	if err != nil {
 		return common.ChatResponse{}, err
 	}
-	candidates, err := s.repository.SearchSimilar(ctx, vector, 8)
+	candidateIDs, err := s.embeddings.SearchSimilar(ctx, vector, 8)
+	if err != nil {
+		return common.ChatResponse{}, err
+	}
+	candidates, err := findMovies(ctx, s.catalog, candidateIDs)
 	if err != nil {
 		return common.ChatResponse{}, err
 	}

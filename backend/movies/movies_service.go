@@ -37,30 +37,28 @@ func (s *MovieService) ListFromQuery(ctx context.Context, query url.Values) ([]c
 	return s.List(ctx, pagination)
 }
 
-func parseMoviePagination(query url.Values) (MoviePagination, error) {
-	pagination := MoviePagination{
-		Limit:  defaultMovieLimit,
-		Offset: 0,
+func queryInt(query url.Values, name string, fallback int) (int, error) {
+	value := query.Get(name)
+	if value == "" {
+		return fallback, nil
 	}
+	parsed, err := strconv.Atoi(value)
+	if err != nil {
+		return 0, fmt.Errorf("%w: %s must be an integer", common.ErrInvalidMoviePagination, name)
+	}
+	return parsed, nil
+}
 
-	for name, target := range map[string]*int{
-		"limit":  &pagination.Limit,
-		"offset": &pagination.Offset,
-	} {
-		value := query.Get(name)
-		if value == "" {
-			continue
-		}
-		parsed, err := strconv.Atoi(value)
-		if err != nil {
-			return MoviePagination{}, fmt.Errorf(
-				"%w: %s must be an integer",
-				common.ErrInvalidMoviePagination,
-				name,
-			)
-		}
-		*target = parsed
+func parseMoviePagination(query url.Values) (MoviePagination, error) {
+	limit, err := queryInt(query, "limit", defaultMovieLimit)
+	if err != nil {
+		return MoviePagination{}, err
 	}
+	offset, err := queryInt(query, "offset", 0)
+	if err != nil {
+		return MoviePagination{}, err
+	}
+	pagination := MoviePagination{Limit: limit, Offset: offset}
 	if value := query.Get("genre"); value != "" {
 		parsed, err := strconv.Atoi(value)
 		if err != nil || parsed <= 0 {
@@ -94,6 +92,25 @@ func (s *MovieService) List(ctx context.Context, pagination MoviePagination) ([]
 
 func (s *MovieService) ListGenres(ctx context.Context) ([]Genre, error) {
 	return s.repository.ListGenres(ctx)
+}
+
+// ListSynopsesFromQuery pages through movie synopses using the "after" (TMDB id cursor) and "limit" parameters.
+func (s *MovieService) ListSynopsesFromQuery(ctx context.Context, query url.Values) ([]MovieSynopsis, error) {
+	limit, err := queryInt(query, "limit", maxMovieLimit)
+	if err != nil {
+		return nil, err
+	}
+	after, err := queryInt(query, "after", 0)
+	if err != nil {
+		return nil, err
+	}
+	if after < 0 {
+		return nil, fmt.Errorf("%w: after must be a non-negative integer", common.ErrInvalidMoviePagination)
+	}
+	if err := validateMoviePagination(limit, 0); err != nil {
+		return nil, err
+	}
+	return s.repository.ListSynopses(ctx, after, limit)
 }
 
 func validateMoviePagination(limit, offset int) error {

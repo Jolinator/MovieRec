@@ -20,12 +20,13 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func setupServer(authDB *pgxpool.Pool, ctx context.Context, moviesDB, recommendationsDB *pgxpool.Pool, tokenIssuer *auth.TokenIssuer, tokenVerifier *auth.TokenVerifier, dbStatuses database.Statuses, port string) *http.Server {
+func setupServer(authDB *pgxpool.Pool, ctx context.Context, moviesDB, recommendationsDB *pgxpool.Pool, tokenIssuer *auth.TokenIssuer, tokenVerifier *auth.TokenVerifier, dbStatuses database.Statuses, port, internalPort string) (publicServer, internalServer *http.Server) {
 
 	movieRepository := movies.NewMovieRepository(moviesDB, dbStatuses[database.MoviesDatabase])
 	listRepository := recommendations.NewListRepository(recommendationsDB, dbStatuses[database.RecommendationsDatabase])
 	cacheRepository := recommendations.NewRecommendationCacheRepository(recommendationsDB, dbStatuses[database.RecommendationsDatabase])
-	recommendationService := recommendations.NewService(movieRepository, listRepository, cacheRepository)
+	embeddingRepository := recommendations.NewEmbeddingRepository(recommendationsDB, dbStatuses[database.RecommendationsDatabase])
+	recommendationService := recommendations.NewService(movieRepository, embeddingRepository, listRepository, cacheRepository)
 	var importedMovies atomic.Bool
 	go func() {
 		if err := movies.ImportPopularMoviesWithRetry(ctx, movieRepository, 10, 2*time.Second); err != nil {
@@ -43,9 +44,16 @@ func setupServer(authDB *pgxpool.Pool, ctx context.Context, moviesDB, recommenda
 	server := httpapi.NewServer(dbStatuses, &importedMovies, userService, movieService, listService, tokenVerifier, recommendationService)
 	mux := http.NewServeMux()
 	httpapi.RegisterEndpoints(mux, server)
-	handler := httpapi.RequestMetricsMiddleware(httpapi.CorsMiddleware(mux))
+	internalMux := http.NewServeMux()
+	httpapi.RegisterInternalEndpoints(internalMux, server)
 
-	httpServer := &http.Server{
+	publicServer = newHTTPServer(port, httpapi.RequestMetricsMiddleware(httpapi.CorsMiddleware(mux)))
+	internalServer = newHTTPServer(internalPort, internalMux)
+	return publicServer, internalServer
+}
+
+func newHTTPServer(port string, handler http.Handler) *http.Server {
+	return &http.Server{
 		Addr:              ":" + port,
 		Handler:           handler,
 		ReadTimeout:       10 * time.Second,
@@ -53,21 +61,20 @@ func setupServer(authDB *pgxpool.Pool, ctx context.Context, moviesDB, recommenda
 		WriteTimeout:      120 * time.Second,
 		IdleTimeout:       60 * time.Second,
 	}
-	return httpServer
 }
 
-func RunServer(pool *pgxpool.Pool, httpServer *http.Server) chan error {
-
-	serverErrors := make(chan error, 1)
-	go func() {
-		serverErrors <- httpServer.ListenAndServe()
-	}()
-
-	log.Printf("API running at http://localhost%s", httpServer.Addr)
+func RunServers(httpServers ...*http.Server) chan error {
+	serverErrors := make(chan error, len(httpServers))
+	for _, httpServer := range httpServers {
+		go func() {
+			serverErrors <- httpServer.ListenAndServe()
+		}()
+		log.Printf("HTTP server running at http://localhost%s", httpServer.Addr)
+	}
 	return serverErrors
 }
 
-func HandleErrors(serverErrors chan error, databaseContext context.Context, httpServer *http.Server) {
+func HandleErrors(serverErrors chan error, databaseContext context.Context, httpServers ...*http.Server) {
 	select {
 	case err := <-serverErrors:
 		if err != nil && err != http.ErrServerClosed {
@@ -77,20 +84,22 @@ func HandleErrors(serverErrors chan error, databaseContext context.Context, http
 		shutdownContext, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 
-		if err := httpServer.Shutdown(shutdownContext); err != nil {
-			log.Printf("HTTP server shutdown failed: %v", err)
+		for _, httpServer := range httpServers {
+			if err := httpServer.Shutdown(shutdownContext); err != nil {
+				log.Printf("HTTP server shutdown failed: %v", err)
+			}
 		}
 	}
 }
 
-func set_port() string {
-	port := os.Getenv("BACKEND_PORT")
+func portFromEnv(name, fallback string) string {
+	port := os.Getenv(name)
 	if port == "" {
-		port = "8080"
+		port = fallback
 	}
 	portNumber, err := strconv.ParseUint(port, 10, 16)
 	if err != nil || portNumber == 0 {
-		log.Printf("invalid BACKEND_PORT %q", port)
+		log.Printf("invalid %s %q", name, port)
 		return ""
 	}
 	return port
@@ -143,14 +152,15 @@ func main() {
 		return
 	}
 
-	port := set_port()
-	if port == "" {
+	port := portFromEnv("BACKEND_PORT", "8080")
+	internalPort := portFromEnv("INTERNAL_PORT", "8081")
+	if port == "" || internalPort == "" {
 		return
 	}
 
-	httpServer := setupServer(authPool, databaseContext, moviesPool, recommendationsPool, tokenIssuer, tokenVerifier, dbStatuses, port)
+	publicServer, internalServer := setupServer(authPool, databaseContext, moviesPool, recommendationsPool, tokenIssuer, tokenVerifier, dbStatuses, port, internalPort)
 
-	serverErrors := RunServer(authPool, httpServer)
+	serverErrors := RunServers(publicServer, internalServer)
 
-	HandleErrors(serverErrors, databaseContext, httpServer)
+	HandleErrors(serverErrors, databaseContext, publicServer, internalServer)
 }

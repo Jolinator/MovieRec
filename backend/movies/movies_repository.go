@@ -25,9 +25,6 @@ type Movie struct {
 	BackdropPath  *string    `json:"backdropPath"`
 	GenreIDs      []int
 }
-type Embedder interface {
-	Embed(context.Context, string) ([]float32, error)
-}
 
 func mapTMDBMovie(movie TMDBMovie) (Movie, error) {
 	title := strings.TrimSpace(movie.Title)
@@ -240,157 +237,28 @@ func (r *MovieRepository) ListGenres(ctx context.Context) ([]Genre, error) {
 	return genres, nil
 }
 
-func (r *MovieRepository) EmbedSynopses(ctx context.Context, embedder Embedder) error {
-	if !r.db_status.Available() {
-		return common.ErrMoviesDatabaseUnavailable
-	}
-	rows, err := r.db.Query(ctx, `SELECT id, synopsis FROM movies WHERE synopsis <> '' AND synopsis_embedding IS NULL`)
-	if err != nil {
-		return fmt.Errorf("list movies for embeddings: %w", err)
-	}
-	defer rows.Close()
-	type item struct {
-		id       uuid.UUID
-		synopsis string
-	}
-	var items []item
-	for rows.Next() {
-		var i item
-		if err := rows.Scan(&i.id, &i.synopsis); err != nil {
-			return err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return err
-	}
-	for _, item := range items {
-		vector, err := embedder.Embed(ctx, item.synopsis)
-		if err != nil {
-			return fmt.Errorf("embed movie %s: %w", item.id, err)
-		}
-		if _, err := r.db.Exec(ctx, `UPDATE movies SET synopsis_embedding = $1::vector WHERE id = $2`, vectorLiteral(vector), item.id); err != nil {
-			return err
-		}
-	}
-	return nil
+type MovieSynopsis struct {
+	TMDBID   int    `json:"tmdbId"`
+	Synopsis string `json:"synopsis"`
 }
 
-func vectorLiteral(vector []float32) string {
-	values := make([]string, len(vector))
-	for i, value := range vector {
-		values[i] = fmt.Sprintf("%g", value)
-	}
-	return "[" + strings.Join(values, ",") + "]"
-}
-
-func (r *MovieRepository) SearchSimilar(ctx context.Context, vector []float32, limit int) ([]Movie, error) {
-	if !r.db_status.Available() {
-		return nil, common.ErrMoviesDatabaseUnavailable
-	}
-	rows, err := r.db.Query(ctx, `SELECT tmdb_id, title, release_date, average_rating, poster_path, synopsis, backdrop_path FROM movies WHERE synopsis_embedding IS NOT NULL ORDER BY synopsis_embedding <=> $1::vector LIMIT $2`, vectorLiteral(vector), limit)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	result := make([]Movie, 0, limit)
-	for rows.Next() {
-		var movie Movie
-		if err := rows.Scan(&movie.TMDBID, &movie.Title, &movie.ReleaseDate, &movie.AverageRating, &movie.PosterPath, &movie.Synopsis, &movie.BackdropPath); err != nil {
-			return nil, err
-		}
-		result = append(result, movie)
-	}
-	return result, rows.Err()
-}
-
-func (r *MovieRepository) RecommendationProfile(ctx context.Context, tmdbIDs []int) ([]float32, error) {
-	if !r.db_status.Available() {
-		return nil, common.ErrMoviesDatabaseUnavailable
-	}
-	if len(tmdbIDs) == 0 {
-		return nil, nil
-	}
-	rows, err := r.db.Query(ctx, `
-		SELECT synopsis_embedding::text
-		FROM movies
-		WHERE tmdb_id = ANY($1) AND synopsis_embedding IS NOT NULL`, tmdbIDs)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var profile []float32
-	count := 0
-	for rows.Next() {
-		var literal string
-		if err := rows.Scan(&literal); err != nil {
-			return nil, err
-		}
-		vector, err := parseVectorLiteral(literal)
-		if err != nil {
-			return nil, err
-		}
-		if profile == nil {
-			profile = make([]float32, len(vector))
-		}
-		if len(profile) != len(vector) {
-			return nil, fmt.Errorf("inconsistent embedding dimensions")
-		}
-		for i, value := range vector {
-			profile[i] += value
-		}
-		count++
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	if count == 0 {
-		return nil, nil
-	}
-	for i := range profile {
-		profile[i] /= float32(count)
-	}
-	return profile, nil
-}
-
-func (r *MovieRepository) SearchSimilarExcluding(ctx context.Context, vector []float32, excluded []int, limit int) ([]Movie, error) {
+// ListSynopses returns non-empty synopses ordered by TMDB id, starting after afterTMDBID.
+func (r *MovieRepository) ListSynopses(ctx context.Context, afterTMDBID, limit int) ([]MovieSynopsis, error) {
 	if !r.db_status.Available() {
 		return nil, common.ErrMoviesDatabaseUnavailable
 	}
 	rows, err := r.db.Query(ctx, `
-		SELECT tmdb_id, title, release_date, average_rating, poster_path, synopsis, backdrop_path
+		SELECT tmdb_id, synopsis
 		FROM movies
-		WHERE synopsis_embedding IS NOT NULL AND NOT (tmdb_id = ANY($2))
-		ORDER BY synopsis_embedding <=> $1::vector LIMIT $3`,
-		vectorLiteral(vector), excluded, limit)
+		WHERE synopsis <> '' AND tmdb_id > $1
+		ORDER BY tmdb_id
+		LIMIT $2`, afterTMDBID, limit)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("list movie synopses: %w", err)
 	}
-	defer rows.Close()
-	result := make([]Movie, 0, limit)
-	for rows.Next() {
-		var movie Movie
-		if err := rows.Scan(&movie.TMDBID, &movie.Title, &movie.ReleaseDate, &movie.AverageRating, &movie.PosterPath, &movie.Synopsis, &movie.BackdropPath); err != nil {
-			return nil, err
-		}
-		result = append(result, movie)
+	synopses, err := pgx.CollectRows(rows, pgx.RowToStructByPos[MovieSynopsis])
+	if err != nil {
+		return nil, fmt.Errorf("read movie synopses: %w", err)
 	}
-	return result, rows.Err()
-}
-
-func parseVectorLiteral(literal string) ([]float32, error) {
-	literal = strings.Trim(strings.TrimSpace(literal), "[]")
-	if literal == "" {
-		return []float32{}, nil
-	}
-	parts := strings.Split(literal, ",")
-	vector := make([]float32, len(parts))
-	for i, part := range parts {
-		var value float32
-		if _, err := fmt.Sscanf(strings.TrimSpace(part), "%f", &value); err != nil {
-			return nil, fmt.Errorf("parse embedding value: %w", err)
-		}
-		vector[i] = value
-	}
-	return vector, nil
+	return synopses, nil
 }

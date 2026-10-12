@@ -72,6 +72,7 @@ func (s *Server) recommendationChatHandler(w http.ResponseWriter, r *http.Reques
 	response, err := s.recommendationService.Chat(r.Context(), request.Message)
 	if err != nil {
 		if errors.Is(err, common.ErrRecommendationsUnavailable) ||
+			errors.Is(err, common.ErrRecommendationsDatabaseUnavailable) ||
 			errors.Is(err, common.ErrMoviesDatabaseUnavailable) ||
 			errors.Is(err, common.ErrInferenceUnavailable) {
 			http.Error(w, err.Error(), http.StatusServiceUnavailable)
@@ -237,15 +238,7 @@ func (s *Server) signUpHandler(w http.ResponseWriter, r *http.Request) {
 func (s *Server) moviesHandler(w http.ResponseWriter, r *http.Request) {
 	movieList, err := s.movieService.ListFromQuery(r.Context(), r.URL.Query())
 	if err != nil {
-		if errors.Is(err, common.ErrInvalidMoviePagination) {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		if errors.Is(err, common.ErrMoviesDatabaseUnavailable) {
-			http.Error(w, common.ErrMoviesDatabaseUnavailable.Error(), http.StatusServiceUnavailable)
-			return
-		}
-		http.Error(w, "could not load movies", http.StatusInternalServerError)
+		writeMoviesError(w, err, "could not load movies")
 		return
 	}
 	common.WriteJSON(w, movieList)

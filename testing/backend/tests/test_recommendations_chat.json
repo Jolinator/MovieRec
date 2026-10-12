@@ -3,6 +3,7 @@
         "backend",
         "auth-postgres",
         "movies-postgres",
+        "recommendations-postgres",
         "llama-embedding",
         "llama-generation"
     ],

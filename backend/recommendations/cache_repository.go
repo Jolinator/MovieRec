@@ -101,18 +101,14 @@ func (r *RecommendationCacheRepository) Save(ctx context.Context, userID uuid.UU
 	return tx.Commit(ctx)
 }
 
-func (r *RecommendationCacheRepository) LoadMovies(ctx context.Context, userID uuid.UUID, movieRepo *movies.MovieRepository) ([]common.MovieResponse, error) {
+func (r *RecommendationCacheRepository) LoadMovies(ctx context.Context, userID uuid.UUID, catalog MovieCatalog) ([]common.MovieResponse, error) {
 	cache, err := r.Get(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
-	result := make([]common.MovieResponse, 0, len(cache.MovieIDs))
-	for _, id := range cache.MovieIDs {
-		movie, err := movieRepo.FindByTMDBID(ctx, id)
-		if err != nil {
-			return nil, fmt.Errorf("load cached recommendation %d: %w", id, err)
-		}
-		result = append(result, movies.MovieResponse(movie))
+	cached, err := findMovies(ctx, catalog, cache.MovieIDs)
+	if err != nil {
+		return nil, fmt.Errorf("load cached recommendations: %w", err)
 	}
-	return result, nil
+	return movies.MovieResponses(cached), nil
 }

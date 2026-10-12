@@ -1,5 +1,4 @@
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
-CREATE EXTENSION IF NOT EXISTS vector;
 
 CREATE TABLE movies (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -9,7 +8,6 @@ CREATE TABLE movies (
     average_rating NUMERIC(3, 1) NOT NULL DEFAULT 0,
     poster_path TEXT,
     synopsis TEXT NOT NULL DEFAULT '',
-    synopsis_embedding vector(384),
     backdrop_path TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -19,7 +17,6 @@ CREATE TABLE movies (
 );
 
 CREATE INDEX movies_title_idx ON movies (title);
-CREATE INDEX movies_synopsis_embedding_idx ON movies USING hnsw (synopsis_embedding vector_cosine_ops);
 
 CREATE TABLE genres (
     id INTEGER PRIMARY KEY,
