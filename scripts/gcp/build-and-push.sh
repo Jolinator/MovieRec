@@ -2,7 +2,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
+REPO_ROOT="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
 TF_DIR="${REPO_ROOT}/deploy/gcp/terraform"
 IMAGE_TAG="${1:-$(date -u +%Y%m%d%H%M%S)}"
 

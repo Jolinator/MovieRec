@@ -2,13 +2,13 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
+REPO_ROOT="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
 TF_DIR="${REPO_ROOT}/deploy/gcp/terraform"
 IMAGE_TAG="${1:-}"
 PUBLIC_HOST_OVERRIDE="${2:-}"
 
 if [[ -z "${IMAGE_TAG}" ]]; then
-  printf 'Usage: bash scripts/apply-k8s.sh IMAGE_TAG [PUBLIC_HOST]\n' >&2
+  printf 'Usage: bash scripts/gcp/apply-k8s.sh IMAGE_TAG [PUBLIC_HOST]\n' >&2
   exit 2
 fi
 
@@ -42,6 +42,10 @@ if [[ -z "${REGISTRY}" || -z "${PUBLIC_IP}" ]]; then
 fi
 
 PUBLIC_HOST="${PUBLIC_HOST_OVERRIDE:-${PUBLIC_HOST:-${PUBLIC_IP}.nip.io}}"
+if [[ ! "${PUBLIC_HOST}" =~ ^[A-Za-z0-9.-]+$ ]]; then
+  printf 'Invalid public host; use a DNS name or IPv4 address: %s\n' "${PUBLIC_HOST}" >&2
+  exit 2
+fi
 export REGISTRY IMAGE_TAG PUBLIC_HOST
 
 printf 'Kubernetes context: '
