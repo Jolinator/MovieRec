@@ -59,6 +59,7 @@ testing/backend/reports/
 *.tfstate
 *.tfstate.*
 /deploy/gcp/terraform/terraform.tfvars
+/deploy/gcp/terraform/backend.gitlab.tf
 crash.log
 
 # Frontend dependencies and build output
