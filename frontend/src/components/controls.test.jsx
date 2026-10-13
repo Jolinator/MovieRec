@@ -82,7 +82,7 @@ describe('frontend controls', () => {
     expect(screen.getByText('alice')).toBeInTheDocument()
 
     rerender(<UserBadge username="" />)
-    expect(screen.getByText('not signed in')).toBeInTheDocument()
+    expect(screen.getByText('Not signed in')).toBeInTheDocument()
   })
 
   it('routes sidebar actions to their callbacks', async () => {

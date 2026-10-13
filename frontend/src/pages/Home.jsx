@@ -266,7 +266,7 @@ export default function Home({ onLoginClick, onRequireLogin, onLogout, onHomeCli
         ) : (
           <>
             <MovieGrid movies={movies} onSelect={setSelectedMovie} />
-            <div ref={loadMoreRef} aria-hidden="true" />
+            <div ref={loadMoreRef} className={styles.loadMoreSentinel} aria-hidden="true" />
             {isLoadingMore && <p>Loading more movies...</p>}
             {loadMoreFailed && (
               <p className={styles.movieLoadError} role="status">
