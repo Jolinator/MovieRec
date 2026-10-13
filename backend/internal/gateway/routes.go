@@ -30,7 +30,6 @@ func RegisterRoutes(mux *http.ServeMux, config Config) {
 		{"DELETE /movieAPI/my-list/{tmdbId}", recommendations},
 		{"POST /movieAPI/recommendations/chat", recommendations},
 		{"GET /movieAPI/recommendations", recommendations},
-		{"GET /movieAPI/recommendations/ready", recommendations},
 	}
 	for _, route := range routes {
 		mux.Handle(route.pattern, route.handler)

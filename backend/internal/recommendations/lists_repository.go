@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"backend/internal/common"
 	"backend/internal/database"
@@ -25,7 +26,8 @@ func (r *ListRepository) List(ctx context.Context, userID uuid.UUID) ([]int, err
 	return r.ListByUserID(ctx, userID)
 }
 
-func (r *ListRepository) ListByUserID(ctx context.Context, userID uuid.UUID) ([]int, error) {
+func (r *ListRepository) ListByUserID(ctx context.Context, userID uuid.UUID) (movieIDs []int, err error) {
+	defer trackRecommendationDatabaseOperation("list_user_movies", time.Now(), &err)
 	if !r.dbStatus.Available() {
 		return nil, common.ErrRecommendationsDatabaseUnavailable
 	}
@@ -42,7 +44,7 @@ func (r *ListRepository) ListByUserID(ctx context.Context, userID uuid.UUID) ([]
 	}
 	defer rows.Close()
 
-	movieIDs := make([]int, 0)
+	movieIDs = make([]int, 0)
 	for rows.Next() {
 		var tmdbID int
 		if err := rows.Scan(&tmdbID); err != nil {
@@ -56,7 +58,8 @@ func (r *ListRepository) ListByUserID(ctx context.Context, userID uuid.UUID) ([]
 	return movieIDs, nil
 }
 
-func (r *ListRepository) Add(ctx context.Context, userID uuid.UUID, tmdbID int) error {
+func (r *ListRepository) Add(ctx context.Context, userID uuid.UUID, tmdbID int) (err error) {
+	defer trackRecommendationDatabaseOperation("add_list_movie", time.Now(), &err)
 	if !r.dbStatus.Available() {
 		return common.ErrRecommendationsDatabaseUnavailable
 	}
@@ -93,7 +96,8 @@ func (r *ListRepository) Add(ctx context.Context, userID uuid.UUID, tmdbID int) 
 	return nil
 }
 
-func (r *ListRepository) Remove(ctx context.Context, userID uuid.UUID, tmdbID int) error {
+func (r *ListRepository) Remove(ctx context.Context, userID uuid.UUID, tmdbID int) (err error) {
+	defer trackRecommendationDatabaseOperation("remove_list_movie", time.Now(), &err)
 	if !r.dbStatus.Available() {
 		return common.ErrRecommendationsDatabaseUnavailable
 	}

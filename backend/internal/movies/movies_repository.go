@@ -9,6 +9,7 @@ import (
 
 	"backend/internal/common"
 	"backend/internal/database"
+	"backend/internal/observability"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -71,7 +72,8 @@ func NewMovieRepository(db *pgxpool.Pool, dbStatus *database.DBStatus) *MovieRep
 	return &MovieRepository{db: db, db_status: dbStatus}
 }
 
-func (r *MovieRepository) Upsert(ctx context.Context, movie Movie) error {
+func (r *MovieRepository) Upsert(ctx context.Context, movie Movie) (err error) {
+	defer trackMovieDatabaseOperation("upsert_movie", time.Now(), &err)
 	if !r.db_status.Available() {
 		return common.ErrMoviesDatabaseUnavailable
 	}
@@ -147,7 +149,8 @@ func scanMovie(row pgx.CollectableRow) (Movie, error) {
 	return movie, err
 }
 
-func (r *MovieRepository) List(ctx context.Context, limit, offset int, genreID *int) ([]Movie, error) {
+func (r *MovieRepository) List(ctx context.Context, limit, offset int, genreID *int) (movies []Movie, err error) {
+	defer trackMovieDatabaseOperation("list_movies", time.Now(), &err)
 	if !r.db_status.Available() {
 		return []Movie{}, common.ErrMoviesDatabaseUnavailable
 	}
@@ -167,7 +170,7 @@ func (r *MovieRepository) List(ctx context.Context, limit, offset int, genreID *
 	if err != nil {
 		return nil, fmt.Errorf("list movies: %w", err)
 	}
-	movies, err := pgx.CollectRows(rows, scanMovie)
+	movies, err = pgx.CollectRows(rows, scanMovie)
 	if err != nil {
 		return nil, fmt.Errorf("read movies: %w", err)
 	}
@@ -175,7 +178,8 @@ func (r *MovieRepository) List(ctx context.Context, limit, offset int, genreID *
 }
 
 // ListByTMDBIDs returns the requested movies in the order of tmdbIDs, or ErrMovieNotFound if any is missing.
-func (r *MovieRepository) ListByTMDBIDs(ctx context.Context, tmdbIDs []int) ([]Movie, error) {
+func (r *MovieRepository) ListByTMDBIDs(ctx context.Context, tmdbIDs []int) (movies []Movie, err error) {
+	defer trackMovieDatabaseOperation("list_movies_by_id", time.Now(), &err)
 	if len(tmdbIDs) == 0 {
 		return []Movie{}, nil
 	}
@@ -191,7 +195,7 @@ func (r *MovieRepository) ListByTMDBIDs(ctx context.Context, tmdbIDs []int) ([]M
 	if err != nil {
 		return nil, fmt.Errorf("find movies: %w", err)
 	}
-	movies, err := pgx.CollectRows(rows, scanMovie)
+	movies, err = pgx.CollectRows(rows, scanMovie)
 	if err != nil {
 		return nil, fmt.Errorf("read movies: %w", err)
 	}
@@ -206,7 +210,8 @@ type Genre struct {
 	Name string `json:"name"`
 }
 
-func (r *MovieRepository) ListGenres(ctx context.Context) ([]Genre, error) {
+func (r *MovieRepository) ListGenres(ctx context.Context) (genres []Genre, err error) {
+	defer trackMovieDatabaseOperation("list_genres", time.Now(), &err)
 	if !r.db_status.Available() {
 		return []Genre{}, common.ErrMoviesDatabaseUnavailable
 	}
@@ -217,7 +222,7 @@ func (r *MovieRepository) ListGenres(ctx context.Context) ([]Genre, error) {
 	}
 	defer rows.Close()
 
-	genres := make([]Genre, 0)
+	genres = make([]Genre, 0)
 	for rows.Next() {
 		var genre Genre
 		if err := rows.Scan(&genre.ID, &genre.Name); err != nil {
@@ -232,7 +237,8 @@ func (r *MovieRepository) ListGenres(ctx context.Context) ([]Genre, error) {
 }
 
 // ListSynopses returns non-empty synopses ordered by TMDB id, starting after afterTMDBID.
-func (r *MovieRepository) ListSynopses(ctx context.Context, afterTMDBID, limit int) ([]common.MovieSynopsis, error) {
+func (r *MovieRepository) ListSynopses(ctx context.Context, afterTMDBID, limit int) (synopses []common.MovieSynopsis, err error) {
+	defer trackMovieDatabaseOperation("list_synopses", time.Now(), &err)
 	if !r.db_status.Available() {
 		return nil, common.ErrMoviesDatabaseUnavailable
 	}
@@ -245,9 +251,17 @@ func (r *MovieRepository) ListSynopses(ctx context.Context, afterTMDBID, limit i
 	if err != nil {
 		return nil, fmt.Errorf("list movie synopses: %w", err)
 	}
-	synopses, err := pgx.CollectRows(rows, pgx.RowToStructByPos[common.MovieSynopsis])
+	synopses, err = pgx.CollectRows(rows, pgx.RowToStructByPos[common.MovieSynopsis])
 	if err != nil {
 		return nil, fmt.Errorf("read movie synopses: %w", err)
 	}
 	return synopses, nil
+}
+
+func trackMovieDatabaseOperation(operation string, started time.Time, err *error) {
+	result := "success"
+	if *err != nil {
+		result = "error"
+	}
+	observability.ObserveDatabaseOperation("movies", operation, result, started)
 }

@@ -28,11 +28,12 @@ type recommendationCache struct {
 	MovieIDs    []int
 }
 
-func (r *RecommendationCacheRepository) Request(ctx context.Context, userID uuid.UUID) error {
+func (r *RecommendationCacheRepository) Request(ctx context.Context, userID uuid.UUID) (err error) {
+	defer trackRecommendationDatabaseOperation("request_refresh", time.Now(), &err)
 	if !r.dbStatus.Available() {
 		return common.ErrRecommendationsDatabaseUnavailable
 	}
-	_, err := r.db.Exec(ctx, `
+	_, err = r.db.Exec(ctx, `
 		INSERT INTO user_recommendations (user_id, requested_at, status)
 		VALUES ($1, CURRENT_TIMESTAMP, 'pending')
 		ON CONFLICT (user_id) DO UPDATE
@@ -40,12 +41,12 @@ func (r *RecommendationCacheRepository) Request(ctx context.Context, userID uuid
 	return err
 }
 
-func (r *RecommendationCacheRepository) Get(ctx context.Context, userID uuid.UUID) (recommendationCache, error) {
+func (r *RecommendationCacheRepository) Get(ctx context.Context, userID uuid.UUID) (cache recommendationCache, err error) {
+	defer trackRecommendationDatabaseOperation("get_recommendation_cache", time.Now(), &err)
 	if !r.dbStatus.Available() {
 		return recommendationCache{}, common.ErrRecommendationsDatabaseUnavailable
 	}
-	var cache recommendationCache
-	err := r.db.QueryRow(ctx, `
+	err = r.db.QueryRow(ctx, `
 		SELECT requested_at, generated_at, status
 		FROM user_recommendations WHERE user_id = $1`, userID).
 		Scan(&cache.RequestedAt, &cache.GeneratedAt, &cache.Status)
@@ -72,7 +73,8 @@ func (r *RecommendationCacheRepository) Get(ctx context.Context, userID uuid.UUI
 	return cache, rows.Err()
 }
 
-func (r *RecommendationCacheRepository) Save(ctx context.Context, userID uuid.UUID, status string, movieIDs []int) error {
+func (r *RecommendationCacheRepository) Save(ctx context.Context, userID uuid.UUID, status string, movieIDs []int) (err error) {
+	defer trackRecommendationDatabaseOperation("save_recommendation_cache", time.Now(), &err)
 	if !r.dbStatus.Available() {
 		return common.ErrRecommendationsDatabaseUnavailable
 	}

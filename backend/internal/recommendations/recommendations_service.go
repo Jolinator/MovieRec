@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"backend/internal/common"
+	"backend/internal/observability"
 	"github.com/google/uuid"
 )
 
@@ -28,7 +29,11 @@ type Service struct {
 }
 
 func NewService(catalog MovieCatalog, embeddings *EmbeddingRepository, lists *ListRepository, cache *RecommendationCacheRepository) *Service {
-	return &Service{catalog: catalog, embeddings: embeddings, embedding: NewEmbeddingClient(), generation: NewGenerationClient(), lists: lists, cache: cache}
+	embedding := NewEmbeddingClient()
+	generation := NewGenerationClient()
+	observability.ObserveModelReady("embedding", embedding.model, false)
+	observability.ObserveModelReady("generation", generation.model, false)
+	return &Service{catalog: catalog, embeddings: embeddings, embedding: embedding, generation: generation, lists: lists, cache: cache}
 }
 func (s *Service) Initialize(ctx context.Context) error {
 	s.ready.Store(false)
@@ -38,9 +43,11 @@ func (s *Service) Initialize(ctx context.Context) error {
 	if err := s.embedding.WarmUp(ctx); err != nil {
 		return fmt.Errorf("embedding model warm-up failed: %w", err)
 	}
+	observability.ObserveModelReady("embedding", s.embedding.model, true)
 	if err := s.generation.WarmUp(ctx); err != nil {
 		return fmt.Errorf("generation model warm-up failed: %w", err)
 	}
+	observability.ObserveModelReady("generation", s.generation.model, true)
 	s.ready.Store(true)
 	return nil
 }
@@ -70,41 +77,53 @@ func (s *Service) InitializeWithRetry(ctx context.Context, attempts int, delay t
 func (s *Service) Ready() bool { return s.ready.Load() }
 
 func (s *Service) RefreshForUser(ctx context.Context, userID uuid.UUID) {
+	started := time.Now()
+	result := "ready"
+	defer func() {
+		observability.ObserveRecommendationRequest("refresh", result, started)
+	}()
+
 	if _, loaded := s.jobs.LoadOrStore(userID, struct{}{}); loaded {
+		result = "skipped"
 		return
 	}
 	defer s.jobs.Delete(userID)
 	ids, err := s.lists.ListByUserID(ctx, userID)
 	if err != nil {
+		result = "failed"
 		log.Printf("background recommendations: load list for %s: %v", userID, err)
 		_ = s.cache.Save(ctx, userID, "failed", nil)
 		return
 	}
 	if len(ids) == 0 {
+		result = "empty"
 		_ = s.cache.Save(ctx, userID, "empty", nil)
 		return
 	}
 	profile, err := s.embeddings.Profile(ctx, ids)
 	if err != nil {
+		result = "failed"
 		log.Printf("background recommendations: build profile for %s: %v", userID, err)
 		_ = s.cache.Save(ctx, userID, "failed", nil)
 		return
 	}
 	if len(profile) == 0 {
+		result = "empty"
 		_ = s.cache.Save(ctx, userID, "empty", nil)
 		return
 	}
 	resultIDs, err := s.embeddings.SearchSimilarExcluding(ctx, profile, ids, 3)
 	if err != nil {
+		result = "failed"
 		log.Printf("background recommendations: search for %s: %v", userID, err)
 		_ = s.cache.Save(ctx, userID, "failed", nil)
 		return
 	}
-	status := "ready"
 	if len(resultIDs) == 0 {
-		status = "empty"
+		result = "empty"
 	}
-	if err := s.cache.Save(ctx, userID, status, resultIDs); err != nil {
+	if err := s.cache.Save(ctx, userID, result, resultIDs); err != nil {
+		result = "failed"
 		log.Printf("background recommendations: save for %s: %v", userID, err)
 	}
 }
@@ -129,7 +148,18 @@ func (s *Service) EnsureFresh(ctx context.Context, userID uuid.UUID) {
 	}
 }
 
-func (s *Service) Recommendations(ctx context.Context, userID uuid.UUID) (PersonalizedRecommendationsResponse, error) {
+func (s *Service) Recommendations(ctx context.Context, userID uuid.UUID) (response PersonalizedRecommendationsResponse, err error) {
+	started := time.Now()
+	result := "ready"
+	defer func() {
+		if err != nil {
+			result = "error"
+		} else if response.Status != "" {
+			result = response.Status
+		}
+		observability.ObserveRecommendationRequest("recommendations", result, started)
+	}()
+
 	cache, err := s.cache.Get(ctx, userID)
 	if err != nil {
 		return PersonalizedRecommendationsResponse{}, err
@@ -144,7 +174,16 @@ func (s *Service) Recommendations(ctx context.Context, userID uuid.UUID) (Person
 	}
 	return PersonalizedRecommendationsResponse{Status: cache.Status, Movies: movies}, nil
 }
-func (s *Service) Chat(ctx context.Context, message string) (ChatResponse, error) {
+func (s *Service) Chat(ctx context.Context, message string) (response ChatResponse, err error) {
+	started := time.Now()
+	result := "success"
+	defer func() {
+		if err != nil {
+			result = "error"
+		}
+		observability.ObserveRecommendationRequest("chat", result, started)
+	}()
+
 	if !s.Ready() {
 		return ChatResponse{}, common.ErrRecommendationsUnavailable
 	}

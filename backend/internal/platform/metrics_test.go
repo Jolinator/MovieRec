@@ -58,3 +58,13 @@ func TestRequestMetricsMiddlewareUnmatchedAndDefaultStatus(t *testing.T) {
 		t.Fatalf("counter delta = %v, want 1", got)
 	}
 }
+
+func TestRequestMetricsMiddlewareLabelsCORSPreflight(t *testing.T) {
+	handler := RequestMetricsMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+
+	before := counterValue(t, "OPTIONS", "cors_preflight", "200")
+	handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodOptions, "/x", nil))
+	if got := counterValue(t, "OPTIONS", "cors_preflight", "200") - before; got != 1 {
+		t.Fatalf("counter delta = %v, want 1", got)
+	}
+}

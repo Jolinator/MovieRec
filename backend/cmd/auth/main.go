@@ -32,7 +32,7 @@ func main() {
 		return
 	}
 	defer pool.Close()
-	status := database.NewDBStatus(pool)
+	status := database.NewDBStatus(pool, "auth")
 	go status.Start(ctx, 5*time.Second)
 
 	tokenIssuer, err := auth.SetupTokenIssuer()
@@ -62,7 +62,7 @@ func main() {
 	internalMux := http.NewServeMux()
 	internalMux.HandleFunc("GET "+common.InternalHealthPath, platform.ServiceHealthHandler(status, func() bool { return true }))
 
-	publicServer := platform.NewHTTPServer(port, platform.RequestMetricsMiddleware(mux))
+	publicServer := platform.NewHTTPServer(port, platform.RequestMetricsMiddleware(mux, "auth"))
 	internalServer := platform.NewHTTPServer(internalPort, internalMux)
 	platform.HandleErrors(platform.RunServers(publicServer, internalServer), ctx, publicServer, internalServer)
 }

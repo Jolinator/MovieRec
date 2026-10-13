@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"backend/internal/common"
+	"backend/internal/observability"
 )
 
 type EmbeddingClient struct {
@@ -37,7 +38,16 @@ func env(name, fallback string) string {
 	return fallback
 }
 
-func (c *EmbeddingClient) Embed(ctx context.Context, input string) ([]float32, error) {
+func (c *EmbeddingClient) Embed(ctx context.Context, input string) (vector []float32, err error) {
+	started := time.Now()
+	result := "success"
+	defer func() {
+		if err != nil {
+			result = "error"
+		}
+		observability.ObserveModelRequest("embedding", c.model, "embed", result, started)
+	}()
+
 	body, _ := json.Marshal(map[string]any{"model": c.model, "input": input})
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.url+"/v1/embeddings", bytes.NewReader(body))
 	if err != nil {
@@ -72,7 +82,16 @@ func (c *GenerationClient) WarmUp(ctx context.Context) error {
 	return err
 }
 
-func (c *GenerationClient) complete(ctx context.Context, system, user string, maxTokens int, requireContent bool) (string, error) {
+func (c *GenerationClient) complete(ctx context.Context, system, user string, maxTokens int, requireContent bool) (answer string, err error) {
+	started := time.Now()
+	result := "success"
+	defer func() {
+		if err != nil {
+			result = "error"
+		}
+		observability.ObserveModelRequest("generation", c.model, "complete", result, started)
+	}()
+
 	body, _ := json.Marshal(map[string]any{
 		"model":                c.model,
 		"temperature":          0.7,
@@ -101,7 +120,7 @@ func (c *GenerationClient) complete(ctx context.Context, system, user string, ma
 	if len(response.Choices) == 0 {
 		return "", fmt.Errorf("%w: generation endpoint returned no choices", common.ErrInferenceUnavailable)
 	}
-	answer := strings.TrimSpace(response.Choices[0].Message.Content)
+	answer = strings.TrimSpace(response.Choices[0].Message.Content)
 	if answer == "" && requireContent {
 		return "", fmt.Errorf("%w: generation endpoint returned an empty answer", common.ErrInferenceUnavailable)
 	}
