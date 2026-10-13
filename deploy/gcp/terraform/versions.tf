@@ -1,9 +1,8 @@
 terraform {
   required_version = ">= 1.5.0"
 
-  # Shared by local Terraform and GitLab CI. Configure credentials and the
-  # state address with TF_HTTP_* environment variables.
-  backend "http" {}
+  # Manual Cloud Shell runs use Terraform's local state backend. GitLab CI
+  # adds its HTTP backend explicitly before initialization.
 
   required_providers {
     google = {

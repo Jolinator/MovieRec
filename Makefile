@@ -21,7 +21,7 @@ help:
 	  'Cloud workflow:' \
 	  '  make cloud-shell-setup            Install Cloud Shell tools and optional IAP NumPy optimization' \
 	  '  make infra-config                Set project_id from gcloud; run before plan/apply' \
-	  '  make infra-init                   Initialize Terraform' \
+	  '  make infra-init                   Initialize Terraform (local state in Cloud Shell)' \
 	  '  make infra-plan [TF_PARALLELISM=n] Validate/review plan (default: Terraform, 10 operations)' \
 	  '  make infra-apply [TF_PARALLELISM=n] Create/start resources (default: Terraform, 10 operations)' \
 	  '  make cluster-bootstrap             Ansible: join running database/model VMs to the app K3s server' \
