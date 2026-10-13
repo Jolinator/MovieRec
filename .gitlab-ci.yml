@@ -137,6 +137,7 @@ update_app:
   variables:
     DOCKER_HOST: tcp://docker:2375
     DOCKER_TLS_CERTDIR: ""
+    CLOUDSDK_PYTHON_SITEPACKAGES: "1"
     IMAGE_TAG: "$CI_COMMIT_SHA"
     GCP_REGION: "europe-west1"
     GCP_ZONE: "europe-west1-b"
@@ -145,6 +146,15 @@ update_app:
   before_script:
     - apt-get update
     - apt-get install -y --no-install-recommends ansible make curl
+    - |
+      gcloud_python="$(gcloud info --format='value(basic.python_location)')"
+      if [ -z "$gcloud_python" ] || [ ! -x "$gcloud_python" ]; then
+        echo 'Could not locate the Python interpreter used by gcloud; skipping optional NumPy install.' >&2
+      elif ! "$gcloud_python" -c 'import numpy' >/dev/null 2>&1; then
+        if ! "$gcloud_python" -m pip install numpy; then
+          echo 'Optional NumPy install failed; continuing without IAP upload acceleration.' >&2
+        fi
+      fi
     - |
       case "$(dpkg --print-architecture)" in
         amd64) docker_arch=x86_64 ;;
