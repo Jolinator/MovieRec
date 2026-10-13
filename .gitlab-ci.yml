@@ -2,6 +2,7 @@ stages:
   - validate
   - test
   - build
+  - deploy
 
 workflow:
   rules:
@@ -20,6 +21,14 @@ frontend_validation:
   image: node:22-alpine
   script:
     - ./ci-cd/validate-frontend.sh
+
+frontend_tests:
+  stage: test
+  image: node:22-alpine
+  script:
+    - cd frontend
+    - npm ci --no-audit --no-fund
+    - npm run test:run
 
 backend_unit_tests:
   stage: test
@@ -63,3 +72,41 @@ docker_images:
     FRONTEND_IMAGE: "$CI_REGISTRY/$CI_PROJECT_PATH/frontend:$CI_COMMIT_SHA"
   script:
     - ./ci-cd/build-images.sh
+
+update_app:
+  stage: deploy
+  image: google/cloud-sdk:slim
+  services:
+    - name: docker:27.5.1-dind
+      command: ["--tls=false"]
+  variables:
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_TLS_CERTDIR: ""
+    IMAGE_TAG: "$CI_COMMIT_SHA"
+  before_script:
+    - apt-get update
+    - apt-get install -y --no-install-recommends ansible make docker.io curl unzip
+    - curl -fsSLo /tmp/terraform.zip https://releases.hashicorp.com/terraform/1.9.8/terraform_1.9.8_linux_amd64.zip
+    - unzip -o /tmp/terraform.zip -d /usr/local/bin
+    - test -n "$TF_VAR_project_id" || { echo 'Set protected CI/CD variable TF_VAR_project_id'; exit 2; }
+    - test -n "$GCP_SERVICE_ACCOUNT_KEY" || { echo 'Set GCP_SERVICE_ACCOUNT_KEY as a protected GitLab file variable'; exit 2; }
+    - export GOOGLE_APPLICATION_CREDENTIALS="$GCP_SERVICE_ACCOUNT_KEY"
+    - gcloud auth activate-service-account --key-file="$GCP_SERVICE_ACCOUNT_KEY" --project="$TF_VAR_project_id"
+    - export TF_HTTP_ADDRESS="$CI_API_V4_URL/projects/$CI_PROJECT_ID/terraform/state/movierec"
+    - export TF_HTTP_LOCK_ADDRESS="$TF_HTTP_ADDRESS/lock"
+    - export TF_HTTP_UNLOCK_ADDRESS="$TF_HTTP_ADDRESS/lock"
+    - export TF_HTTP_USERNAME=gitlab-ci-token
+    - export TF_HTTP_PASSWORD="$CI_JOB_TOKEN"
+    - export TF_HTTP_LOCK_METHOD=POST
+    - export TF_HTTP_UNLOCK_METHOD=DELETE
+    - export TF_HTTP_RETRY_WAIT_MIN=5
+    - terraform -chdir=deploy/gcp/terraform init -input=false
+    - until docker info >/dev/null 2>&1; do sleep 1; done
+  script:
+    - make update-app IMAGE_TAG="$IMAGE_TAG" PUBLIC_HOST="$PUBLIC_HOST"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "master"'
+      when: manual
+  allow_failure: false
+  environment:
+    name: production

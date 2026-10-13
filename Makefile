@@ -14,7 +14,7 @@ ANSIBLE_PLAY := cd $(ANSIBLE_DIR) && ansible-playbook
 
 .PHONY: help cloud-shell-setup infra-config infra-init infra-fmt infra-validate infra-plan infra-apply \
         ssh-access cluster-bootstrap secrets-init secrets-passwords docker-push-limit docker-push-limit-reset build-push \
-        k8s-config models deploy gpu-runtime gpu-setup deploy-gpu start stop destroy
+        k8s-config models deploy update-app gpu-runtime gpu-setup deploy-gpu start stop destroy
 
 help:
 	@printf '%s\n' \
@@ -33,6 +33,7 @@ help:
 	  '  make k8s-config                   Ansible: create/update Kubernetes ConfigMaps and Secrets' \
 	  '  make models                       Ansible: download and verify the model files on the model VM' \
 	  '  make deploy IMAGE_TAG=tag         Ansible: apply the Kustomize manifests and wait for rollouts' \
+	  '  make update-app IMAGE_TAG=tag     Build/push the app images, then deploy that tag' \
 	  '  make gpu-runtime                  Install NVIDIA drivers/runtime on the model VM (opt-in)' \
 	  '  make gpu-setup                    Ansible: install the Kubernetes GPU device plugin (opt-in)' \
 	  '  make deploy-gpu IMAGE_TAG=tag     Ansible: apply the CUDA generation model overlay (opt-in)' \
@@ -103,6 +104,11 @@ models: ssh-access
 deploy: ssh-access
 	@test -n "$(IMAGE_TAG)" || { printf '%s\n' 'Set IMAGE_TAG, for example: make deploy IMAGE_TAG=20261012'; exit 2; }
 	$(ANSIBLE_PLAY) playbooks/deploy.yml -e image_tag="$(IMAGE_TAG)" -e public_host="$(PUBLIC_HOST)"
+
+update-app:
+	@test -n "$(IMAGE_TAG)" || { printf '%s\n' 'Set IMAGE_TAG, for example: make update-app IMAGE_TAG=20261012'; exit 2; }
+	$(MAKE) build-push IMAGE_TAG="$(IMAGE_TAG)"
+	$(MAKE) deploy IMAGE_TAG="$(IMAGE_TAG)" PUBLIC_HOST="$(PUBLIC_HOST)"
 
 gpu-runtime:
 	bash $(GCP_SCRIPTS)/install-gpu-runtime.sh

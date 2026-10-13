@@ -59,6 +59,8 @@
       - { name: postgres-tls-entrypoint, source: "tls-entrypoint.sh={{ remote_dir }}/scripts/postgres-tls-entrypoint.sh" }
       - { name: model-downloader-script, source: "download-models.sh={{ remote_dir }}/scripts/download-models.sh" }
       - { name: prometheus-config, source: "prometheus.yml={{ remote_dir }}/monitoring/prometheus/prometheus.yml" }
+      - { name: grafana-dashboards, source: "{{ remote_dir }}/monitoring/grafana/provisioning/dashboards" }
+      - { name: grafana-datasources, source: "{{ remote_dir }}/monitoring/grafana/provisioning/datasources" }
   environment:
     KUBECONFIG: "{{ kubeconfig_path }}"
   tasks:
@@ -90,7 +92,7 @@
         path: "{{ remote_dir }}/{{ item }}"
         state: directory
         mode: "0755"
-      loop: [database/migrations, scripts, monitoring/prometheus]
+      loop: [database/migrations, scripts, monitoring/prometheus, monitoring/grafana/provisioning/dashboards, monitoring/grafana/provisioning/datasources]
 
     - name: Copy the files the ConfigMaps are built from
       ansible.builtin.copy:
@@ -102,6 +104,8 @@
         - { src: scripts/postgres-tls-entrypoint.sh, dest: scripts/postgres-tls-entrypoint.sh }
         - { src: scripts/download-models.sh, dest: scripts/download-models.sh }
         - { src: monitoring/prometheus/prometheus.yml, dest: monitoring/prometheus/prometheus.yml }
+        - { src: monitoring/grafana/provisioning/dashboards/, dest: monitoring/grafana/provisioning/dashboards/ }
+        - { src: monitoring/grafana/provisioning/datasources/, dest: monitoring/grafana/provisioning/datasources/ }
 
     - name: Apply the ConfigMaps
       ansible.builtin.shell: |
