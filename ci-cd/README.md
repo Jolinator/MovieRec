@@ -4,6 +4,8 @@ The pipeline currently performs validation and image builds only:
 
 - `backend_validation` checks Go formatting and runs `go vet`.
 - `frontend_validation` installs the locked npm dependencies and runs the production build.
+- `frontend_tests` installs the locked npm dependencies and runs the Vitest frontend
+  tests without requiring backend services.
 - `backend_tests` runs the integration scenarios from
   `testing/backend/DockerTests/TestRunner.py`, which starts the required
   Compose services and writes a test report. The job uses Docker-in-Docker,
@@ -14,10 +16,8 @@ The pipeline currently performs validation and image builds only:
   `movies`, `recommendations`, all from `backend/Dockerfile` with a `SERVICE`
   build argument) and the frontend image, tagged with the commit SHA.
 
-The frontend does not currently have a unit-test framework. Its production build is
-the appropriate CI check for the current small frontend and catches compilation,
-module-resolution, and bundling errors. Frontend tests can be added if the UI gains
-substantial stateful behavior or a regression-prone feature.
+The frontend uses Vitest with React Testing Library. The tests cover API request
+contracts, login behavior, movie-grid rendering, and application navigation.
 
 The image job only builds images. Publishing them to Google Artifact Registry and
 deploying to GCP will be added after CI authentication and deployment credentials

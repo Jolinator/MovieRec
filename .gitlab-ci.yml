@@ -21,6 +21,14 @@ frontend_validation:
   script:
     - ./ci-cd/validate-frontend.sh
 
+frontend_tests:
+  stage: test
+  image: node:22-alpine
+  script:
+    - cd frontend
+    - npm ci --no-audit --no-fund
+    - npm run test:run
+
 backend_unit_tests:
   stage: test
   image: golang:1.27.1
