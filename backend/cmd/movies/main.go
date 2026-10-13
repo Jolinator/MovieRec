@@ -32,7 +32,7 @@ func main() {
 		return
 	}
 	defer pool.Close()
-	status := database.NewDBStatus(pool)
+	status := database.NewDBStatus(pool, "movies")
 	go status.Start(ctx, 5*time.Second)
 
 	port := platform.PortFromEnv("MOVIES_PORT", "8083")
@@ -60,7 +60,7 @@ func main() {
 	internalMux.HandleFunc("GET "+common.InternalHealthPath, platform.ServiceHealthHandler(status, service.Imported))
 	handler.RegisterInternalRoutes(internalMux)
 
-	publicServer := platform.NewHTTPServer(port, platform.RequestMetricsMiddleware(mux))
+	publicServer := platform.NewHTTPServer(port, platform.RequestMetricsMiddleware(mux, "movies"))
 	internalServer := platform.NewHTTPServer(internalPort, internalMux)
 	platform.HandleErrors(platform.RunServers(publicServer, internalServer), ctx, publicServer, internalServer)
 }

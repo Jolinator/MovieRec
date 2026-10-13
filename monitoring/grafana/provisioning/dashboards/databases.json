@@ -1,0 +1,77 @@
+{
+  "uid": "movierec-databases",
+  "title": "MovieRec - Databases",
+  "tags": ["movierec", "database"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 2,
+  "refresh": "30s",
+  "time": {"from": "now-24h", "to": "now"},
+  "panels": [
+    {
+      "id": 1,
+      "title": "Database availability",
+      "type": "stat",
+      "datasource": {"type": "prometheus", "uid": "Prometheus"},
+      "targets": [{"expr": "movierec_database_available", "legendFormat": "{{database}}", "refId": "A"}],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [{"type": "value", "options": {"0": {"text": "DOWN"}, "1": {"text": "UP"}}}],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": 0}, {"color": "green", "value": 1}]}
+        },
+        "overrides": []
+      },
+      "options": {"colorMode": "background", "graphMode": "none", "textMode": "name"},
+      "gridPos": {"h": 7, "w": 24, "x": 0, "y": 0}
+    },
+    {
+      "id": 2,
+      "title": "Cumulative database operations",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "Prometheus"},
+      "targets": [
+        {
+          "expr": "sum by (database, operation, result) (movierec_database_operations_total)",
+          "legendFormat": "{{database}} · {{operation}} · {{result}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+      "options": {"tooltip": {"mode": "multi", "sort": "desc"}},
+      "gridPos": {"h": 9, "w": 12, "x": 0, "y": 7}
+    },
+    {
+      "id": 3,
+      "title": "Database operation totals",
+      "type": "table",
+      "datasource": {"type": "prometheus", "uid": "Prometheus"},
+      "targets": [
+        {
+          "expr": "sum by (database, operation, result) (movierec_database_operations_total)",
+          "legendFormat": "{{database}} · {{operation}} · {{result}}",
+          "format": "table",
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+      "gridPos": {"h": 9, "w": 12, "x": 12, "y": 7}
+    },
+    {
+      "id": 4,
+      "title": "Database operation latency (p95)",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "Prometheus"},
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le, database, operation, result) (movierec_database_operation_duration_seconds_bucket))",
+          "legendFormat": "{{database}} · {{operation}} · {{result}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
+      "options": {"tooltip": {"mode": "multi", "sort": "desc"}},
+      "gridPos": {"h": 9, "w": 24, "x": 0, "y": 16}
+    }
+  ]
+}

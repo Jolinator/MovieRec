@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"backend/internal/common"
 	"backend/internal/database"
+	"backend/internal/observability"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -22,23 +24,25 @@ func NewEmbeddingRepository(db *pgxpool.Pool, dbStatus *database.DBStatus) *Embe
 }
 
 // Existing reports which of the given movies already have an embedding.
-func (r *EmbeddingRepository) Existing(ctx context.Context, tmdbIDs []int) (map[int]bool, error) {
+func (r *EmbeddingRepository) Existing(ctx context.Context, tmdbIDs []int) (existing map[int]bool, err error) {
+	defer trackRecommendationDatabaseOperation("embeddings_existing", time.Now(), &err)
 	ids, err := r.queryIDs(ctx, `SELECT tmdb_id FROM movie_embeddings WHERE tmdb_id = ANY($1)`, tmdbIDs)
 	if err != nil {
 		return nil, err
 	}
-	existing := make(map[int]bool, len(ids))
+	existing = make(map[int]bool, len(ids))
 	for _, id := range ids {
 		existing[id] = true
 	}
 	return existing, nil
 }
 
-func (r *EmbeddingRepository) Save(ctx context.Context, tmdbID int, vector []float32) error {
+func (r *EmbeddingRepository) Save(ctx context.Context, tmdbID int, vector []float32) (err error) {
+	defer trackRecommendationDatabaseOperation("embedding_save", time.Now(), &err)
 	if !r.dbStatus.Available() {
 		return common.ErrRecommendationsDatabaseUnavailable
 	}
-	_, err := r.db.Exec(ctx, `
+	_, err = r.db.Exec(ctx, `
 		INSERT INTO movie_embeddings (tmdb_id, embedding)
 		VALUES ($1, $2::vector)
 		ON CONFLICT (tmdb_id) DO NOTHING`, tmdbID, vectorLiteral(vector))
@@ -49,19 +53,21 @@ func (r *EmbeddingRepository) Save(ctx context.Context, tmdbID int, vector []flo
 }
 
 // Profile returns the mean embedding of the given movies, or nil when none has an embedding.
-func (r *EmbeddingRepository) Profile(ctx context.Context, tmdbIDs []int) ([]float32, error) {
+func (r *EmbeddingRepository) Profile(ctx context.Context, tmdbIDs []int) (vector []float32, err error) {
+	defer trackRecommendationDatabaseOperation("embedding_profile", time.Now(), &err)
 	if !r.dbStatus.Available() {
 		return nil, common.ErrRecommendationsDatabaseUnavailable
 	}
 	var literal *string
-	err := r.db.QueryRow(ctx, `SELECT avg(embedding)::text FROM movie_embeddings WHERE tmdb_id = ANY($1)`, tmdbIDs).Scan(&literal)
+	err = r.db.QueryRow(ctx, `SELECT avg(embedding)::text FROM movie_embeddings WHERE tmdb_id = ANY($1)`, tmdbIDs).Scan(&literal)
 	if err != nil {
 		return nil, fmt.Errorf("build embedding profile: %w", err)
 	}
 	if literal == nil {
 		return nil, nil
 	}
-	return parseVectorLiteral(*literal)
+	vector, err = parseVectorLiteral(*literal)
+	return vector, err
 }
 
 func (r *EmbeddingRepository) SearchSimilar(ctx context.Context, vector []float32, limit int) ([]int, error) {
@@ -77,7 +83,8 @@ func (r *EmbeddingRepository) SearchSimilarExcluding(ctx context.Context, vector
 		LIMIT $3`, vectorLiteral(vector), excluded, limit)
 }
 
-func (r *EmbeddingRepository) queryIDs(ctx context.Context, query string, args ...any) ([]int, error) {
+func (r *EmbeddingRepository) queryIDs(ctx context.Context, query string, args ...any) (ids []int, err error) {
+	defer trackRecommendationDatabaseOperation("embedding_vector_search", time.Now(), &err)
 	if !r.dbStatus.Available() {
 		return nil, common.ErrRecommendationsDatabaseUnavailable
 	}
@@ -85,11 +92,19 @@ func (r *EmbeddingRepository) queryIDs(ctx context.Context, query string, args .
 	if err != nil {
 		return nil, fmt.Errorf("query movie embeddings: %w", err)
 	}
-	ids, err := pgx.CollectRows(rows, pgx.RowTo[int])
+	ids, err = pgx.CollectRows(rows, pgx.RowTo[int])
 	if err != nil {
 		return nil, fmt.Errorf("read movie embeddings: %w", err)
 	}
 	return ids, nil
+}
+
+func trackRecommendationDatabaseOperation(operation string, started time.Time, err *error) {
+	result := "success"
+	if *err != nil {
+		result = "error"
+	}
+	observability.ObserveDatabaseOperation("recommendations", operation, result, started)
 }
 
 func vectorLiteral(vector []float32) string {
