@@ -28,11 +28,12 @@ type recommendationCache struct {
 	MovieIDs    []int
 }
 
-func (r *RecommendationCacheRepository) Request(ctx context.Context, userID uuid.UUID) error {
+func (r *RecommendationCacheRepository) Request(ctx context.Context, userID uuid.UUID) (err error) {
+	defer trackRecommendationDatabaseOperation("request_refresh", time.Now(), &err)
 	if !r.dbStatus.Available() {
 		return common.ErrRecommendationsDatabaseUnavailable
 	}
-	_, err := r.db.Exec(ctx, `
+	_, err = r.db.Exec(ctx, `
 		INSERT INTO user_recommendations (user_id, requested_at, status)
 		VALUES ($1, CURRENT_TIMESTAMP, 'pending')
 		ON CONFLICT (user_id) DO UPDATE
@@ -40,12 +41,12 @@ func (r *RecommendationCacheRepository) Request(ctx context.Context, userID uuid
 	return err
 }
 
-func (r *RecommendationCacheRepository) Get(ctx context.Context, userID uuid.UUID) (recommendationCache, error) {
+func (r *RecommendationCacheRepository) Get(ctx context.Context, userID uuid.UUID) (cache recommendationCache, err error) {
+	defer trackRecommendationDatabaseOperation("get_recommendation_cache", time.Now(), &err)
 	if !r.dbStatus.Available() {
 		return recommendationCache{}, common.ErrRecommendationsDatabaseUnavailable
 	}
-	var cache recommendationCache
-	err := r.db.QueryRow(ctx, `
+	err = r.db.QueryRow(ctx, `
 		SELECT requested_at, generated_at, status
 		FROM user_recommendations WHERE user_id = $1`, userID).
 		Scan(&cache.RequestedAt, &cache.GeneratedAt, &cache.Status)
@@ -55,24 +56,31 @@ func (r *RecommendationCacheRepository) Get(ctx context.Context, userID uuid.UUI
 		}
 		return recommendationCache{}, err
 	}
+	cache.MovieIDs, err = r.loadMovieIDs(ctx, userID)
+	return cache, err
+}
+
+func (r *RecommendationCacheRepository) loadMovieIDs(ctx context.Context, userID uuid.UUID) ([]int, error) {
 	rows, err := r.db.Query(ctx, `
 		SELECT tmdb_id FROM user_recommendation_items
 		WHERE user_id = $1 ORDER BY position`, userID)
 	if err != nil {
-		return recommendationCache{}, err
+		return nil, err
 	}
 	defer rows.Close()
+	var movieIDs []int
 	for rows.Next() {
 		var id int
 		if err := rows.Scan(&id); err != nil {
-			return recommendationCache{}, err
+			return nil, err
 		}
-		cache.MovieIDs = append(cache.MovieIDs, id)
+		movieIDs = append(movieIDs, id)
 	}
-	return cache, rows.Err()
+	return movieIDs, rows.Err()
 }
 
-func (r *RecommendationCacheRepository) Save(ctx context.Context, userID uuid.UUID, status string, movieIDs []int) error {
+func (r *RecommendationCacheRepository) Save(ctx context.Context, userID uuid.UUID, status string, movieIDs []int) (err error) {
+	defer trackRecommendationDatabaseOperation("save_recommendation_cache", time.Now(), &err)
 	if !r.dbStatus.Available() {
 		return common.ErrRecommendationsDatabaseUnavailable
 	}
@@ -81,15 +89,32 @@ func (r *RecommendationCacheRepository) Save(ctx context.Context, userID uuid.UU
 		return err
 	}
 	defer tx.Rollback(ctx)
-	if _, err := tx.Exec(ctx, `
+	if err := updateRecommendationStatus(ctx, tx, userID, status); err != nil {
+		return err
+	}
+	if err := deleteRecommendationItems(ctx, tx, userID); err != nil {
+		return err
+	}
+	if err := insertRecommendationItems(ctx, tx, userID, movieIDs); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
+func updateRecommendationStatus(ctx context.Context, tx pgx.Tx, userID uuid.UUID, status string) error {
+	_, err := tx.Exec(ctx, `
 		UPDATE user_recommendations
 		SET generated_at = CURRENT_TIMESTAMP, status = $2
-		WHERE user_id = $1`, userID, status); err != nil {
-		return err
-	}
-	if _, err := tx.Exec(ctx, `DELETE FROM user_recommendation_items WHERE user_id = $1`, userID); err != nil {
-		return err
-	}
+		WHERE user_id = $1`, userID, status)
+	return err
+}
+
+func deleteRecommendationItems(ctx context.Context, tx pgx.Tx, userID uuid.UUID) error {
+	_, err := tx.Exec(ctx, `DELETE FROM user_recommendation_items WHERE user_id = $1`, userID)
+	return err
+}
+
+func insertRecommendationItems(ctx context.Context, tx pgx.Tx, userID uuid.UUID, movieIDs []int) error {
 	for position, movieID := range movieIDs {
 		if _, err := tx.Exec(ctx, `
 			INSERT INTO user_recommendation_items (user_id, tmdb_id, position)
@@ -97,7 +122,7 @@ func (r *RecommendationCacheRepository) Save(ctx context.Context, userID uuid.UU
 			return err
 		}
 	}
-	return tx.Commit(ctx)
+	return nil
 }
 
 func (r *RecommendationCacheRepository) LoadMovies(ctx context.Context, userID uuid.UUID, catalog MovieCatalog) ([]common.MovieResponse, error) {

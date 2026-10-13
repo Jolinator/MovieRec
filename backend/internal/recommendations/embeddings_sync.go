@@ -26,7 +26,7 @@ func (s *Service) syncEmbeddings(ctx context.Context) error {
 		if err := s.embedMissing(ctx, page); err != nil {
 			return err
 		}
-		after = page[len(page)-1].TMDBID
+		after = lastSynopsisID(page)
 	}
 }
 
@@ -42,11 +42,7 @@ func (s *Service) requireCatalogReady(ctx context.Context) error {
 }
 
 func (s *Service) embedMissing(ctx context.Context, page []common.MovieSynopsis) error {
-	ids := make([]int, len(page))
-	for i, synopsis := range page {
-		ids[i] = synopsis.TMDBID
-	}
-	existing, err := s.embeddings.Existing(ctx, ids)
+	existing, err := s.embeddings.Existing(ctx, synopsisIDs(page))
 	if err != nil {
 		return err
 	}
@@ -59,6 +55,18 @@ func (s *Service) embedMissing(ctx context.Context, page []common.MovieSynopsis)
 		}
 	}
 	return nil
+}
+
+func synopsisIDs(page []common.MovieSynopsis) []int {
+	ids := make([]int, len(page))
+	for i, synopsis := range page {
+		ids[i] = synopsis.TMDBID
+	}
+	return ids
+}
+
+func lastSynopsisID(page []common.MovieSynopsis) int {
+	return page[len(page)-1].TMDBID
 }
 
 func (s *Service) embedSynopsis(ctx context.Context, synopsis common.MovieSynopsis) error {

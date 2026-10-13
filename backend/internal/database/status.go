@@ -4,6 +4,8 @@ import (
 	"context"
 	"sync/atomic"
 	"time"
+
+	"backend/internal/observability"
 )
 
 const (
@@ -18,11 +20,18 @@ type pinger interface {
 // DBStatus tracks the availability of a single database.
 type DBStatus struct {
 	db        pinger
+	name      string
 	available atomic.Bool
 }
 
-func NewDBStatus(db pinger) *DBStatus {
-	return &DBStatus{db: db}
+func NewDBStatus(db pinger, name ...string) *DBStatus {
+	databaseName := "unknown"
+	if len(name) > 0 && name[0] != "" {
+		databaseName = name[0]
+	}
+	status := &DBStatus{db: db, name: databaseName}
+	observability.ObserveDatabaseAvailability(databaseName, false)
+	return status
 }
 
 func (s *DBStatus) Available() bool {
@@ -56,6 +65,7 @@ func (s *DBStatus) Scan(ctx context.Context) {
 		return
 	}
 	s.available.Store(err == nil)
+	observability.ObserveDatabaseAvailability(s.name, err == nil)
 }
 
 // Refresh rescans only when the database is currently believed to be unavailable.

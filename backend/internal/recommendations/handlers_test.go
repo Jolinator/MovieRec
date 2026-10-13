@@ -59,18 +59,6 @@ func TestWriteMovieListError(t *testing.T) {
 	}
 }
 
-func TestReadyHandler(t *testing.T) {
-	service := &Service{}
-	mux := testMux(service, nil)
-	if got := strings.TrimSpace(do(mux, "GET", "/movieAPI/recommendations/ready", "", nil).Body.String()); got != `{"ready":false}` {
-		t.Fatalf("got %s", got)
-	}
-	service.ready.Store(true)
-	if got := strings.TrimSpace(do(mux, "GET", "/movieAPI/recommendations/ready", "", nil).Body.String()); got != `{"ready":true}` {
-		t.Fatalf("got %s", got)
-	}
-}
-
 func TestUserListHandlerRejectsInvalidUUID(t *testing.T) {
 	rec := do(testMux(nil, nil), "GET", "/movieAPI/users/not-a-uuid/list", "", nil)
 	if rec.Code != http.StatusBadRequest {

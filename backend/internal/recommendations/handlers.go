@@ -27,11 +27,6 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux, authenticated func(http.Han
 	mux.Handle("DELETE /movieAPI/my-list/{tmdbId}", authenticated(http.HandlerFunc(h.removeFromListHandler)))
 	mux.Handle("POST /movieAPI/recommendations/chat", authenticated(http.HandlerFunc(h.recommendationChatHandler)))
 	mux.Handle("GET /movieAPI/recommendations", authenticated(http.HandlerFunc(h.personalizedRecommendationsHandler)))
-	mux.HandleFunc("GET /movieAPI/recommendations/ready", h.recommendationReadyHandler)
-}
-
-func (h *Handler) recommendationReadyHandler(w http.ResponseWriter, r *http.Request) {
-	httpx.WriteJSON(w, common.ReadyResponse{Ready: h.service.Ready()})
 }
 
 func (h *Handler) recommendationChatHandler(w http.ResponseWriter, r *http.Request) {

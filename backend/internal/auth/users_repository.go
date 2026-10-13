@@ -8,6 +8,7 @@ import (
 
 	"backend/internal/common"
 	"backend/internal/database"
+	"backend/internal/observability"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -34,7 +35,8 @@ func NewUserRepository(db *pgxpool.Pool, dbStatus *database.DBStatus) *UserRepos
 	return &UserRepository{db: db, dbStatus: dbStatus}
 }
 
-func (r *UserRepository) Create(ctx context.Context, username, passwordHash string) (User, error) {
+func (r *UserRepository) Create(ctx context.Context, username, passwordHash string) (user User, err error) {
+	defer trackDatabaseOperation("auth", "create_user", time.Now(), &err)
 	if !r.dbStatus.Available() {
 		return User{}, fmt.Errorf("%w: auth database is unavailable", common.ErrAuthDatabaseUnavailable)
 	}
@@ -45,8 +47,7 @@ func (r *UserRepository) Create(ctx context.Context, username, passwordHash stri
 		RETURNING id, username, created_at
 	`
 
-	var user User
-	err := r.db.QueryRow(ctx, query, username, passwordHash).
+	err = r.db.QueryRow(ctx, query, username, passwordHash).
 		Scan(&user.ID, &user.Username, &user.CreatedAt)
 	if err == nil {
 		return user, nil
@@ -62,7 +63,8 @@ func (r *UserRepository) Create(ctx context.Context, username, passwordHash stri
 	return User{}, fmt.Errorf("%w: %v", common.ErrUserPersistence, err)
 }
 
-func (r *UserRepository) FindByUsername(ctx context.Context, username string) (UserCredentials, error) {
+func (r *UserRepository) FindByUsername(ctx context.Context, username string) (credentials UserCredentials, err error) {
+	defer trackDatabaseOperation("auth", "find_user", time.Now(), &err)
 	if !r.dbStatus.Available() {
 		return UserCredentials{}, fmt.Errorf("%w: auth database is unavailable", common.ErrAuthDatabaseUnavailable)
 	}
@@ -73,8 +75,7 @@ func (r *UserRepository) FindByUsername(ctx context.Context, username string) (U
 		WHERE username = $1
 	`
 
-	var credentials UserCredentials
-	err := r.db.QueryRow(ctx, query, username).Scan(
+	err = r.db.QueryRow(ctx, query, username).Scan(
 		&credentials.ID,
 		&credentials.Username,
 		&credentials.PasswordHash,
@@ -90,13 +91,13 @@ func (r *UserRepository) FindByUsername(ctx context.Context, username string) (U
 	return credentials, nil
 }
 
-func (r *UserRepository) FindByID(ctx context.Context, userID uuid.UUID) (User, error) {
+func (r *UserRepository) FindByID(ctx context.Context, userID uuid.UUID) (user User, err error) {
+	defer trackDatabaseOperation("auth", "find_user_by_id", time.Now(), &err)
 	if !r.dbStatus.Available() {
 		return User{}, fmt.Errorf("%w: auth database is unavailable", common.ErrAuthDatabaseUnavailable)
 	}
 
-	var user User
-	err := r.db.QueryRow(ctx, `
+	err = r.db.QueryRow(ctx, `
 		SELECT id, username, created_at
 		FROM users
 		WHERE id = $1
@@ -110,7 +111,8 @@ func (r *UserRepository) FindByID(ctx context.Context, userID uuid.UUID) (User, 
 	return user, nil
 }
 
-func (r *UserRepository) SearchByUsername(ctx context.Context, query string, limit int) ([]User, error) {
+func (r *UserRepository) SearchByUsername(ctx context.Context, query string, limit int) (users []User, err error) {
+	defer trackDatabaseOperation("auth", "search_users", time.Now(), &err)
 	if !r.dbStatus.Available() {
 		return nil, common.ErrAuthDatabaseUnavailable
 	}
@@ -127,7 +129,7 @@ func (r *UserRepository) SearchByUsername(ctx context.Context, query string, lim
 	}
 	defer rows.Close()
 
-	users := make([]User, 0)
+	users = make([]User, 0)
 	for rows.Next() {
 		var user User
 		if err := rows.Scan(&user.ID, &user.Username, &user.CreatedAt); err != nil {
@@ -140,6 +142,14 @@ func (r *UserRepository) SearchByUsername(ctx context.Context, query string, lim
 	}
 
 	return users, nil
+}
+
+func trackDatabaseOperation(database, operation string, started time.Time, err *error) {
+	result := "success"
+	if *err != nil {
+		result = "error"
+	}
+	observability.ObserveDatabaseOperation(database, operation, result, started)
 }
 
 func isUniqueViolation(err error) bool {

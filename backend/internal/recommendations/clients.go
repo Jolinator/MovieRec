@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"backend/internal/common"
+	"backend/internal/observability"
 )
 
 type EmbeddingClient struct {
@@ -21,6 +22,20 @@ type EmbeddingClient struct {
 type GenerationClient struct {
 	url, model string
 	client     *http.Client
+}
+
+type embeddingResponse struct {
+	Data []struct {
+		Embedding []float32 `json:"embedding"`
+	} `json:"data"`
+}
+
+type generationResponse struct {
+	Choices []struct {
+		Message struct {
+			Content string `json:"content"`
+		} `json:"message"`
+	} `json:"choices"`
 }
 
 func NewEmbeddingClient() *EmbeddingClient {
@@ -37,18 +52,23 @@ func env(name, fallback string) string {
 	return fallback
 }
 
-func (c *EmbeddingClient) Embed(ctx context.Context, input string) ([]float32, error) {
-	body, _ := json.Marshal(map[string]any{"model": c.model, "input": input})
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.url+"/v1/embeddings", bytes.NewReader(body))
+func (c *EmbeddingClient) Embed(ctx context.Context, input string) (vector []float32, err error) {
+	started := time.Now()
+	result := "success"
+	defer func() {
+		if err != nil {
+			result = "error"
+		}
+		observability.ObserveModelRequest("embedding", c.model, "embed", result, started)
+	}()
+
+	body := marshalEmbeddingRequest(c.model, input)
+	req, err := newInferenceRequest(ctx, c.url, "/v1/embeddings", body)
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	var response struct {
-		Data []struct {
-			Embedding []float32 `json:"embedding"`
-		} `json:"data"`
-	}
+	var response embeddingResponse
 	if err := doJSON(c.client, req, &response); err != nil {
 		return nil, fmt.Errorf("%w: embedding request failed: %v", common.ErrInferenceUnavailable, err)
 	}
@@ -72,9 +92,48 @@ func (c *GenerationClient) WarmUp(ctx context.Context) error {
 	return err
 }
 
-func (c *GenerationClient) complete(ctx context.Context, system, user string, maxTokens int, requireContent bool) (string, error) {
+func (c *GenerationClient) complete(ctx context.Context, system, user string, maxTokens int, requireContent bool) (answer string, err error) {
+	started := time.Now()
+	result := "success"
+	defer func() {
+		if err != nil {
+			result = "error"
+		}
+		observability.ObserveModelRequest("generation", c.model, "complete", result, started)
+	}()
+
+	body := marshalGenerationRequest(c.model, system, user, maxTokens)
+	req, err := newInferenceRequest(ctx, c.url, "/v1/chat/completions", body)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	var response generationResponse
+	if err := doJSON(c.client, req, &response); err != nil {
+		return "", fmt.Errorf("%w: generation request failed: %v", common.ErrInferenceUnavailable, err)
+	}
+	if len(response.Choices) == 0 {
+		return "", fmt.Errorf("%w: generation endpoint returned no choices", common.ErrInferenceUnavailable)
+	}
+	answer = strings.TrimSpace(response.Choices[0].Message.Content)
+	if answer == "" && requireContent {
+		return "", fmt.Errorf("%w: generation endpoint returned an empty answer", common.ErrInferenceUnavailable)
+	}
+	return answer, nil
+}
+
+func newInferenceRequest(ctx context.Context, baseURL, path string, body []byte) (*http.Request, error) {
+	return http.NewRequestWithContext(ctx, http.MethodPost, baseURL+path, bytes.NewReader(body))
+}
+
+func marshalEmbeddingRequest(model, input string) []byte {
+	body, _ := json.Marshal(map[string]any{"model": model, "input": input})
+	return body
+}
+
+func marshalGenerationRequest(model, system, user string, maxTokens int) []byte {
 	body, _ := json.Marshal(map[string]any{
-		"model":                c.model,
+		"model":                model,
 		"temperature":          0.7,
 		"max_tokens":           maxTokens,
 		"chat_template_kwargs": map[string]bool{"enable_thinking": false},
@@ -83,29 +142,7 @@ func (c *GenerationClient) complete(ctx context.Context, system, user string, ma
 			{"role": "user", "content": user},
 		},
 	})
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.url+"/v1/chat/completions", bytes.NewReader(body))
-	if err != nil {
-		return "", err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	var response struct {
-		Choices []struct {
-			Message struct {
-				Content string `json:"content"`
-			} `json:"message"`
-		} `json:"choices"`
-	}
-	if err := doJSON(c.client, req, &response); err != nil {
-		return "", fmt.Errorf("%w: generation request failed: %v", common.ErrInferenceUnavailable, err)
-	}
-	if len(response.Choices) == 0 {
-		return "", fmt.Errorf("%w: generation endpoint returned no choices", common.ErrInferenceUnavailable)
-	}
-	answer := strings.TrimSpace(response.Choices[0].Message.Content)
-	if answer == "" && requireContent {
-		return "", fmt.Errorf("%w: generation endpoint returned an empty answer", common.ErrInferenceUnavailable)
-	}
-	return answer, nil
+	return body
 }
 
 type httpStatusError struct {
