@@ -66,3 +66,5 @@ crash.log
 frontend/node_modules/
 frontend/dist/
 testing/backend/unit/coverage.out
+testing/backend/evaluation/csv/
+testing/backend/evaluation/graphics/

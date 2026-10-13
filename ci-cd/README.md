@@ -13,6 +13,9 @@ job can deploy the app from `master`:
   installs Python dependencies from
   `testing/backend/DockerTests/requirements.txt`, and prepares throwaway
   Compose secrets from `secrets-example/`.
+- `apachebench_stress` is a separate Docker-in-Docker job that starts a fresh
+  gateway, backend-service, and database stack, waits for it to become ready,
+  then runs the ApacheBench stress profiles.
 - `docker_images` builds one image per backend service (`gateway`, `auth`,
   `movies`, `recommendations`, all from `backend/Dockerfile` with a `SERVICE`
   build argument) and the frontend image, tagged with the commit SHA.
@@ -120,6 +123,7 @@ state and need only the active Google Cloud credentials. GitLab CI explicitly
 adds the GitLab HTTP backend for the `update_app` job. The two states are
 separate until you migrate the manual state as described above.
 
-The `backend_tests` job requires a masked GitLab CI/CD variable named
-`TMDB_READ_ACCESS_TOKEN`. It is used only to import the test movie catalogue;
-the CI job creates the remaining local test configuration automatically.
+The `backend_tests` and `apachebench_stress` jobs require a masked GitLab CI/CD
+variable named `TMDB_READ_ACCESS_TOKEN`. It is used only to import the test
+movie catalogue; the CI jobs create the remaining local test configuration
+automatically.

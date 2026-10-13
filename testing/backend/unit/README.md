@@ -21,3 +21,4 @@ exercise unexported code. This folder is the single entry point and output locat
 | **total** | **53%** |
 
 - API/integration tests are separate: `testing/backend/tests` + `ci-cd/test-backend.sh`.
+- Throughput and latency evaluation: `testing/backend/evaluation/instructions.md`.
