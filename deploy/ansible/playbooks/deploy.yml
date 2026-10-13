@@ -56,6 +56,12 @@
       register: manifests_apply
       changed_when: "'created' in manifests_apply.stdout or 'configured' in manifests_apply.stdout"
 
+    # The dashboard and datasource provisioning files arrive through ConfigMap
+    # volumes. Restart Grafana so provisioning reloads after each deploy.
+    - name: Restart Grafana to load provisioning changes
+      ansible.builtin.command: "{{ kubectl }} -n {{ k8s_namespace }} rollout restart deployment/grafana"
+      changed_when: true
+
     # The API starts even when the databases or llama.cpp are unavailable, so a
     # finished rollout means the processes are serving; /movieAPI/health reports
     # dependency readiness.
@@ -67,6 +73,7 @@
         - { name: movies, timeout: 15m }
         - { name: recommendations, timeout: 15m }
         - { name: frontend, timeout: 10m }
+        - { name: grafana, timeout: 10m }
       changed_when: false
 
     - name: Show where the application is served
