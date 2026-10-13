@@ -9,12 +9,13 @@ GCP_SCRIPTS := scripts/gcp
 IMAGE_TAG ?=
 PUBLIC_HOST ?=
 GPU_LLAMA_IMAGE ?= ghcr.io/ggml-org/llama.cpp:server-cuda-v0.4.1
+GPU_MACHINE_TYPE ?= g2-standard-4
 ANSIBLE_DIR := deploy/ansible
 ANSIBLE_PLAY := cd $(ANSIBLE_DIR) && ansible-playbook
 
 .PHONY: help cloud-shell-setup infra-config infra-init infra-fmt infra-validate infra-plan infra-apply \
         ssh-access cluster-bootstrap secrets-init secrets-passwords docker-push-limit docker-push-limit-reset build-push \
-        k8s-config models deploy update-app gpu-runtime gpu-setup deploy-gpu start stop destroy
+        k8s-config models deploy update-app gpu-enable gpu-runtime gpu-setup deploy-gpu start stop destroy
 
 help:
 	@printf '%s\n' \
@@ -34,6 +35,7 @@ help:
 	  '  make models                       Ansible: download and verify the model files on the model VM' \
 	  '  make deploy IMAGE_TAG=tag         Ansible: apply the Kustomize manifests and wait for rollouts' \
 	  '  make update-app IMAGE_TAG=tag     Build/push the app images, then deploy that tag' \
+	  '  make gpu-enable [GPU_MACHINE_TYPE=g2-standard-4] Set GPU Terraform options (opt-in)' \
 	  '  make gpu-runtime                  Install NVIDIA drivers/runtime on the model VM (opt-in)' \
 	  '  make gpu-setup                    Ansible: install the Kubernetes GPU device plugin (opt-in)' \
 	  '  make deploy-gpu IMAGE_TAG=tag     Ansible: apply the CUDA generation model overlay (opt-in)' \
@@ -109,6 +111,9 @@ update-app:
 	@test -n "$(IMAGE_TAG)" || { printf '%s\n' 'Set IMAGE_TAG, for example: make update-app IMAGE_TAG=20261012'; exit 2; }
 	$(MAKE) build-push IMAGE_TAG="$(IMAGE_TAG)"
 	$(MAKE) deploy IMAGE_TAG="$(IMAGE_TAG)" PUBLIC_HOST="$(PUBLIC_HOST)"
+
+gpu-enable:
+	bash $(GCP_SCRIPTS)/enable-gpu.sh "$(GPU_MACHINE_TYPE)"
 
 gpu-runtime:
 	bash $(GCP_SCRIPTS)/install-gpu-runtime.sh
