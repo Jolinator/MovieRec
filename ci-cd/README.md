@@ -88,8 +88,9 @@ Before using the job:
    cannot find the Artifact Registry, VM names, or IAP connection details.
    From the repository root, source the helper below in Bash. It reads the
    project path from the `origin` Git remote, looks up the numeric project ID
-   through GitLab's API, and prompts for your GitLab username and API token if
-   they are not already set in the environment. Use a token with `api` scope.
+   through GitLab's API, and prompts for your GitLab username and API token
+   every time it is sourced. The token prompt is hidden. Use a token with
+   `api` scope.
    Then generate the backend block and run `terraform init -migrate-state`.
    Confirm the copy and preserve a secure backup of the local state until you
    have checked Terraform outputs from GitLab.

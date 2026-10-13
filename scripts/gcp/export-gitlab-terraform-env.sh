@@ -6,6 +6,11 @@ if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
   exit 2
 fi
 
+# Do not leave old backend credentials active if a fresh lookup fails.
+unset GITLAB_PROJECT_ID TF_HTTP_ADDRESS TF_HTTP_LOCK_ADDRESS TF_HTTP_UNLOCK_ADDRESS
+unset TF_HTTP_USERNAME TF_HTTP_PASSWORD TF_HTTP_LOCK_METHOD TF_HTTP_UNLOCK_METHOD
+unset TF_HTTP_RETRY_WAIT_MIN
+
 _export_gitlab_terraform_env() {
   local script_dir repo_root remote_url remote_path remote_authority api_root scheme
   local encoded_project_path project_id response gitlab_username gitlab_token
@@ -58,16 +63,9 @@ _export_gitlab_terraform_env() {
   fi
   encoded_project_path="${remote_path//\//%2F}"
 
-  gitlab_username="${GITLAB_USERNAME:-${TF_HTTP_USERNAME:-}}"
-  if [[ -z "${gitlab_username}" ]]; then
-    IFS= read -r -p 'GitLab username: ' gitlab_username || return 1
-  fi
-
-  gitlab_token="${GITLAB_TOKEN:-${TF_HTTP_PASSWORD:-}}"
-  if [[ -z "${gitlab_token}" ]]; then
-    IFS= read -r -s -p 'GitLab API token (input hidden): ' gitlab_token || return 1
-    printf '\n' >&2
-  fi
+  IFS= read -r -p 'GitLab username: ' gitlab_username || return 1
+  IFS= read -r -s -p 'GitLab API token (input hidden): ' gitlab_token || return 1
+  printf '\n' >&2
   if [[ -z "${gitlab_username}" || -z "${gitlab_token}" ]]; then
     printf 'A GitLab username and API token are required.\n' >&2
     return 1
