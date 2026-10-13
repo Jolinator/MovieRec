@@ -2,6 +2,9 @@ SHELL := /usr/bin/env bash
 .SHELLFLAGS := -eu -o pipefail -c
 
 TF_DIR := deploy/gcp/terraform
+TF_PARALLELISM ?=
+TF_PARALLELISM_FLAG = $(if $(strip $(TF_PARALLELISM)),-parallelism=$(TF_PARALLELISM),)
+DOCKER_MAX_CONCURRENT_UPLOADS ?= 1
 GCP_SCRIPTS := scripts/gcp
 IMAGE_TAG ?=
 PUBLIC_HOST ?=
@@ -10,7 +13,8 @@ ANSIBLE_DIR := deploy/ansible
 ANSIBLE_PLAY := cd $(ANSIBLE_DIR) && ansible-playbook
 
 .PHONY: help cloud-shell-setup infra-config infra-init infra-fmt infra-validate infra-plan infra-apply \
-        ssh-access cluster-bootstrap secrets-init build-push k8s-config models deploy gpu-runtime gpu-setup deploy-gpu start stop destroy
+        ssh-access cluster-bootstrap secrets-init secrets-passwords docker-push-limit docker-push-limit-reset build-push \
+        k8s-config models deploy gpu-runtime gpu-setup deploy-gpu start stop destroy
 
 help:
 	@printf '%s\n' \
@@ -18,10 +22,13 @@ help:
 	  '  make cloud-shell-setup            Install Cloud Shell tools and optional IAP NumPy optimization' \
 	  '  make infra-config                Set project_id from gcloud; run before plan/apply' \
 	  '  make infra-init                   Initialize Terraform' \
-	  '  make infra-plan                   Validate and review the three-VM plan' \
-	  '  make infra-apply                  Create/start three VMs and cloud resources (billed while running)' \
+	  '  make infra-plan [TF_PARALLELISM=n] Validate/review plan (default: Terraform, 10 operations)' \
+	  '  make infra-apply [TF_PARALLELISM=n] Create/start resources (default: Terraform, 10 operations)' \
 	  '  make cluster-bootstrap             Ansible: join running database/model VMs to the app K3s server' \
 	  '  make secrets-init                 Prepare ignored cloud secret files and cryptographic keys' \
+	  '  make secrets-passwords            Generate matching random passwords for the three databases' \
+	  '  make docker-push-limit [DOCKER_MAX_CONCURRENT_UPLOADS=n] Limit layers uploaded per image push (requires sudo)' \
+	  '  make docker-push-limit-reset      Remove the Docker upload limit and restore its default (requires sudo)' \
 	  '  make build-push [IMAGE_TAG=tag]   Build/push images (does not start or stop VMs)' \
 	  '  make k8s-config                   Ansible: create/update Kubernetes ConfigMaps and Secrets' \
 	  '  make models                       Ansible: download and verify the model files on the model VM' \
@@ -51,11 +58,11 @@ infra-validate: infra-init infra-fmt
 	terraform -chdir=$(TF_DIR) validate
 
 infra-plan: infra-validate
-	terraform -chdir=$(TF_DIR) plan
+	terraform -chdir=$(TF_DIR) plan $(TF_PARALLELISM_FLAG)
 
 infra-apply: infra-validate
 	@printf '%s\n' 'Warning: this creates and starts three cloud VMs plus disks, NAT, a public IP, and Artifact Registry resources; charges begin while VMs run and retained resources can still incur charges after make stop.'
-	terraform -chdir=$(TF_DIR) apply
+	terraform -chdir=$(TF_DIR) apply $(TF_PARALLELISM_FLAG)
 
 ssh-access:
 	@APP_INSTANCE="$$(terraform -chdir=$(TF_DIR) output -raw app_instance_name 2>/dev/null)" || { \
@@ -74,6 +81,15 @@ cluster-bootstrap: ssh-access
 
 secrets-init:
 	bash $(GCP_SCRIPTS)/init-secrets.sh
+
+secrets-passwords:
+	python3 $(GCP_SCRIPTS)/generate-db-passwords.py
+
+docker-push-limit:
+	sudo bash $(GCP_SCRIPTS)/set-docker-push-limit.sh "$(DOCKER_MAX_CONCURRENT_UPLOADS)"
+
+docker-push-limit-reset:
+	sudo bash $(GCP_SCRIPTS)/reset-docker-push-limit.sh
 
 build-push:
 	bash $(GCP_SCRIPTS)/build-and-push.sh "$(IMAGE_TAG)"
