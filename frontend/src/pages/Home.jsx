@@ -29,6 +29,7 @@ export default function Home({ onLoginClick, onRequireLogin, onLogout, onHomeCli
   const [isChatOpen, setIsChatOpen] = useState(false)
   const [personalizedRecommendations, setPersonalizedRecommendations] = useState([])
   const [recommendationStatus, setRecommendationStatus] = useState('idle')
+  const [recommendationReloadKey, setRecommendationReloadKey] = useState(0)
   const loadMoreRef = useRef(null)
 
   function openRecommendations() {
@@ -76,11 +77,13 @@ export default function Home({ onLoginClick, onRequireLogin, onLogout, onHomeCli
           nextIds.delete(movie.tmdbId)
           return nextIds
         })
+        setRecommendationReloadKey((key) => key + 1)
         return false
       }
 
       await addMovieToList(movie.tmdbId)
       setMyListMovieIds((currentIds) => new Set(currentIds).add(movie.tmdbId))
+      setRecommendationReloadKey((key) => key + 1)
       return true
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Unable to update your list.')
@@ -105,28 +108,44 @@ export default function Home({ onLoginClick, onRequireLogin, onLogout, onHomeCli
 
   useEffect(() => {
     let isCurrentRequest = true
+    let retryTimer
+
     if (!username) {
       setPersonalizedRecommendations([])
       setRecommendationStatus('idle')
       return () => {
         isCurrentRequest = false
+        clearTimeout(retryTimer)
       }
     }
-    setRecommendationStatus('loading')
-    getPersonalizedRecommendations().then((response) => {
-      if (!isCurrentRequest) return
-      setPersonalizedRecommendations(response.movies ?? [])
-      setRecommendationStatus(response.status ?? 'empty')
-    }).catch((requestError) => {
-      if (isCurrentRequest) {
-        setRecommendationStatus('error')
-        setError(requestError instanceof Error ? requestError.message : 'Unable to load recommendations.')
+
+    async function loadRecommendations(isRetry = false) {
+      if (!isRetry) {
+        setRecommendationStatus('loading')
       }
-    })
+      try {
+        const response = await getPersonalizedRecommendations()
+        if (!isCurrentRequest) return
+        const status = response.status ?? 'empty'
+        setPersonalizedRecommendations(response.movies ?? [])
+        setRecommendationStatus(status)
+        if (status === 'preparing') {
+          retryTimer = setTimeout(() => loadRecommendations(true), 1500)
+        }
+      } catch (requestError) {
+        if (isCurrentRequest) {
+          setRecommendationStatus('error')
+          setError(requestError instanceof Error ? requestError.message : 'Unable to load recommendations.')
+        }
+      }
+    }
+
+    loadRecommendations()
     return () => {
       isCurrentRequest = false
+      clearTimeout(retryTimer)
     }
-  }, [username])
+  }, [username, recommendationReloadKey])
 
   useEffect(() => {
     let isCurrentRequest = true

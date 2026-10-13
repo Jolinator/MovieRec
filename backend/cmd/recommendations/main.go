@@ -18,12 +18,9 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
-// The movies service may still be importing from TMDB when this one starts, so initialisation keeps
-// retrying until the catalogue is ready: 300 attempts at 2s is ten minutes.
-const (
-	initializeAttempts = 300
-	initializeDelay    = 2 * time.Second
-)
+// The movies service may still be importing from TMDB when this one starts, so initialization
+// keeps retrying until the catalogue and models are ready or this process shuts down.
+const initializeDelay = 2 * time.Second
 
 func main() {
 	if err := database.LoadEnvironmentFiles("recommendations.env", "ports.env"); err != nil {
@@ -60,9 +57,11 @@ func main() {
 	embeddingRepository := recommendations.NewEmbeddingRepository(pool, status)
 	service := recommendations.NewService(moviesClient, embeddingRepository, listRepository, cacheRepository)
 	go func() {
-		if err := service.InitializeWithRetry(ctx, initializeAttempts, initializeDelay); err != nil {
-			log.Printf("recommendation models unavailable: %v", err)
+		if err := service.InitializeUntilReady(ctx, initializeDelay); err != nil {
+			log.Printf("recommendation initialization stopped: %v", err)
+			return
 		}
+		log.Print("recommendations ready")
 	}()
 
 	handler := recommendations.NewHandler(service, recommendations.NewListService(listRepository, moviesClient))

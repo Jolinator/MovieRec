@@ -44,7 +44,7 @@ backend_tests:
   stage: test
   image: docker:27.5.1-cli
   services:
-    - name: docker:27.5.1-dind
+    - name: docker:27.5.1-dind-rootless
       command: ["--tls=false"]
   variables:
     DOCKER_HOST: tcp://docker:2375
@@ -62,7 +62,7 @@ docker_images:
   stage: build
   image: docker:27.5.1-cli
   services:
-    - name: docker:27.5.1-dind
+    - name: docker:27.5.1-dind-rootless
       command: ["--tls=false"]
   variables:
     DOCKER_HOST: tcp://docker:2375
@@ -77,7 +77,7 @@ update_app:
   stage: deploy
   image: google/cloud-sdk:slim
   services:
-    - name: docker:27.5.1-dind
+    - name: docker:27.5.1-dind-rootless
       command: ["--tls=false"]
   variables:
     DOCKER_HOST: tcp://docker:2375

@@ -56,6 +56,7 @@ func (h *Handler) personalizedRecommendationsHandler(w http.ResponseWriter, r *h
 		http.Error(w, common.ErrInvalidToken.Error(), http.StatusUnauthorized)
 		return
 	}
+	w.Header().Set("Cache-Control", "no-store")
 	response, err := h.service.Recommendations(r.Context(), userID)
 	if err != nil {
 		if errors.Is(err, common.ErrRecommendationsDatabaseUnavailable) ||
@@ -115,6 +116,7 @@ func (h *Handler) addToListHandler(w http.ResponseWriter, r *http.Request) {
 		writeMovieListError(w, err)
 		return
 	}
+	h.service.RequestRefresh(r.Context(), userID)
 	w.WriteHeader(http.StatusCreated)
 	httpx.WriteJSON(w, movie)
 }
@@ -135,6 +137,7 @@ func (h *Handler) removeFromListHandler(w http.ResponseWriter, r *http.Request) 
 		writeMovieListError(w, err)
 		return
 	}
+	h.service.RequestRefresh(r.Context(), userID)
 	httpx.WriteJSON(w, map[string]bool{"success": true})
 }
 
