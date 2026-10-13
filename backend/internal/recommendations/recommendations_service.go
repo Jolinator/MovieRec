@@ -73,27 +73,6 @@ func (s *Service) initializeGenerationModel(ctx context.Context) error {
 	return nil
 }
 
-func (s *Service) InitializeWithRetry(ctx context.Context, attempts int, delay time.Duration) error {
-	if attempts < 1 {
-		return fmt.Errorf("embedding initialization attempts must be at least 1")
-	}
-	var lastErr error
-	for attempt := 1; attempt <= attempts; attempt++ {
-		if err := s.Initialize(ctx); err == nil {
-			return nil
-		} else {
-			lastErr = err
-		}
-		if attempt == attempts {
-			break
-		}
-		if err := waitForRetry(ctx, delay); err != nil {
-			return err
-		}
-	}
-	return fmt.Errorf("recommendation initialization failed after %d attempts: %w", attempts, lastErr)
-}
-
 // InitializeUntilReady keeps retrying until initialization succeeds or the service context ends.
 func (s *Service) InitializeUntilReady(ctx context.Context, delay time.Duration) error {
 	for attempt := 1; ; attempt++ {

@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
 	"backend/internal/common"
 )
@@ -125,41 +124,6 @@ func TestInitializeFailuresLeaveServiceNotReady(t *testing.T) {
 				t.Fatal("service must not be ready after a failed Initialize")
 			}
 		})
-	}
-}
-
-func TestInitializeWithRetry(t *testing.T) {
-	embedding, generation := inferenceServer(t, true, true)
-	service := &Service{catalog: &fakeCatalog{ready: true}, embedding: embedding, generation: generation}
-
-	if err := service.InitializeWithRetry(context.Background(), 0, 0); err == nil {
-		t.Fatal("attempts < 1 should fail")
-	}
-	if err := service.InitializeWithRetry(context.Background(), 2, time.Millisecond); err != nil || !service.Ready() {
-		t.Fatalf("err = %v, ready = %v", err, service.Ready())
-	}
-}
-
-func TestInitializeWithRetryGivesUp(t *testing.T) {
-	embedding, generation := inferenceServer(t, true, true)
-	service := &Service{catalog: &fakeCatalog{}, embedding: embedding, generation: generation}
-	err := service.InitializeWithRetry(context.Background(), 3, time.Millisecond)
-	if !errors.Is(err, errCatalogNotReady) {
-		t.Fatalf("err = %v", err)
-	}
-}
-
-func TestInitializeWithRetryStopsWhenContextCancelled(t *testing.T) {
-	service := &Service{catalog: &fakeCatalog{}}
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
-	defer cancel()
-	start := time.Now()
-	err := service.InitializeWithRetry(ctx, 100, time.Minute)
-	if !errors.Is(err, context.DeadlineExceeded) {
-		t.Fatalf("err = %v", err)
-	}
-	if time.Since(start) > 5*time.Second {
-		t.Fatal("retry did not stop on cancellation")
 	}
 }
 
