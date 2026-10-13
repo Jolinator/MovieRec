@@ -16,7 +16,7 @@ ANSIBLE_PLAY := cd $(ANSIBLE_DIR) && ansible-playbook
 
 .PHONY: help cloud-shell-setup infra-config infra-init infra-fmt infra-validate infra-plan infra-apply \
         ssh-access cluster-bootstrap secrets-init secrets-passwords docker-push-limit docker-push-limit-reset build-push \
-        k8s-config models deploy update-app gpu-enable gpu-infra-plan gpu-infra-apply gpu-runtime gpu-setup deploy-gpu start stop destroy
+        k8s-config models deploy update-app gpu-enable gpu-infra-plan gpu-infra-apply gpu-runtime gpu-setup deploy-gpu start stop destroy benchmark benchmark-stress
 
 help:
 	@printf '%s\n' \
