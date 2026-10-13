@@ -129,6 +129,7 @@ docker_images:
 
 update_app:
   stage: deploy
+  dependencies: []
   image: google/cloud-sdk:slim
   services:
     - name: docker:27.5.1-dind
