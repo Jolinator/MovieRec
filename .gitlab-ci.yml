@@ -149,16 +149,19 @@ update_app:
     - gcloud auth activate-service-account --key-file="$GCP_SERVICE_ACCOUNT_KEY" --project="$TF_VAR_project_id"
     - export GCP_PROJECT_ID="$TF_VAR_project_id"
     - |
+      docker_ready=0
       for attempt in $(seq 1 60); do
         if docker info >/dev/null 2>&1; then
+          docker_ready=1
           break
         fi
         sleep 1
       done
-      docker info >/dev/null 2>&1 || {
+      if [ "$docker_ready" -ne 1 ]; then
         echo "Docker-in-Docker did not become ready within 60 seconds; check the runner's Docker executor and privileged setting."
+        docker info
         exit 1
-      }
+      fi
   script:
     - make update-app IMAGE_TAG="$IMAGE_TAG" PUBLIC_HOST="$PUBLIC_HOST"
   rules:
