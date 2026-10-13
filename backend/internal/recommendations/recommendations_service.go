@@ -84,34 +84,17 @@ func (s *Service) InitializeWithRetry(ctx context.Context, attempts int, delay t
 		} else {
 			lastErr = err
 		}
-		if attempt == attempts {
-			break
-		}
-		if err := waitForRetry(ctx, delay); err != nil {
+		if err := waitForRetry(ctx, attempt, attempts, delay); err != nil {
 			return err
 		}
 	}
 	return fmt.Errorf("recommendation initialization failed after %d attempts: %w", attempts, lastErr)
 }
 
-// InitializeUntilReady keeps retrying until initialization succeeds or the service context ends.
-func (s *Service) InitializeUntilReady(ctx context.Context, delay time.Duration) error {
-	for attempt := 1; ; attempt++ {
-		if err := s.Initialize(ctx); err == nil {
-			return nil
-		} else {
-			if ctx.Err() != nil {
-				return ctx.Err()
-			}
-			log.Printf("recommendation initialization attempt %d failed: %v; retrying in %s", attempt, err, delay)
-		}
-		if err := waitForRetry(ctx, delay); err != nil {
-			return err
-		}
+func waitForRetry(ctx context.Context, attempt, attempts int, delay time.Duration) error {
+	if attempt >= attempts {
+		return nil
 	}
-}
-
-func waitForRetry(ctx context.Context, delay time.Duration) error {
 	timer := time.NewTimer(delay)
 	defer timer.Stop()
 	select {
@@ -135,16 +118,10 @@ func (s *Service) RefreshForUser(ctx context.Context, userID uuid.UUID) {
 		return
 	}
 	defer s.jobs.Delete(userID)
-	for {
-		result, movieIDs := s.generateRecommendations(ctx, userID)
-		if err := s.cache.Save(ctx, userID, result, movieIDs); err != nil {
-			result = "failed"
-			log.Printf("background recommendations: save for %s: %v", userID, err)
-			return
-		}
-		if !s.refreshStillNeeded(ctx, userID) {
-			return
-		}
+	result, movieIDs := s.generateRecommendations(ctx, userID)
+	if err := s.cache.Save(ctx, userID, result, movieIDs); err != nil {
+		result = "failed"
+		log.Printf("background recommendations: save for %s: %v", userID, err)
 	}
 }
 
@@ -183,15 +160,6 @@ func (s *Service) generateRecommendations(ctx context.Context, userID uuid.UUID)
 func (s *Service) refreshFailure(userID uuid.UUID, operation string, err error) (string, []int) {
 	log.Printf("background recommendations: %s for %s: %v", operation, userID, err)
 	return "failed", nil
-}
-
-func (s *Service) refreshStillNeeded(ctx context.Context, userID uuid.UUID) bool {
-	cache, err := s.cache.Get(ctx, userID)
-	if err != nil {
-		log.Printf("background recommendations: inspect updated cache for %s: %v", userID, err)
-		return false
-	}
-	return cacheNeedsRefresh(cache)
 }
 
 func (s *Service) RequestRefresh(ctx context.Context, userID uuid.UUID) {
