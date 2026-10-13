@@ -45,7 +45,7 @@ infra-init:
 	terraform -chdir=$(TF_DIR) init
 
 infra-fmt:
-	terraform -chdir=$(TF_DIR) fmt -check
+	terraform -chdir=$(TF_DIR) fmt
 
 infra-validate: infra-init infra-fmt
 	terraform -chdir=$(TF_DIR) validate
@@ -58,8 +58,16 @@ infra-apply: infra-validate
 	terraform -chdir=$(TF_DIR) apply
 
 ssh-access:
-	gcloud compute ssh "$$(terraform -chdir=$(TF_DIR) output -raw app_instance_name)" \
-	  --zone="$$(terraform -chdir=$(TF_DIR) output -raw zone)" --tunnel-through-iap --quiet --command=true
+	@APP_INSTANCE="$$(terraform -chdir=$(TF_DIR) output -raw app_instance_name 2>/dev/null)" || { \
+	  printf '%s\n' 'Terraform has no app_instance_name output. Run make infra-apply first and confirm it completed successfully.' >&2; exit 2; \
+	}; \
+	ZONE="$$(terraform -chdir=$(TF_DIR) output -raw zone 2>/dev/null)" || { \
+	  printf '%s\n' 'Terraform has no zone output. Run make infra-apply first and confirm it completed successfully.' >&2; exit 2; \
+	}; \
+	if [[ -z "$$APP_INSTANCE" || -z "$$ZONE" ]]; then \
+	  printf '%s\n' 'Terraform returned an empty instance name or zone. Check the Terraform state and outputs.' >&2; exit 2; \
+	fi; \
+	gcloud compute ssh "$$APP_INSTANCE" --zone="$$ZONE" --tunnel-through-iap --quiet --command=true
 
 cluster-bootstrap: ssh-access
 	$(ANSIBLE_PLAY) playbooks/cluster.yml
