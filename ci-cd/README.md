@@ -22,6 +22,40 @@ job can deploy the app from `master`:
 The frontend uses Vitest with React Testing Library. The tests cover API request
 contracts, login behavior, movie-grid rendering, and application navigation.
 
+## Running ApacheBench
+
+ApacheBench is an opt-in performance smoke test for a running gateway. Start
+the backend first, then run:
+
+```sh
+make benchmark
+```
+
+The default benchmark sends 1,000 requests to
+`http://localhost:8080/movieAPI/health` with 10 concurrent clients. Override
+the target and load without changing the script:
+
+```sh
+AB_URL=http://localhost:8080/movieAPI/movies \
+AB_REQUESTS=5000 AB_CONCURRENCY=50 make benchmark
+```
+
+The command performs a `curl` readiness check before invoking `ab`. Install
+ApacheBench from the `apache2-utils` package when it is not already available.
+
+For a broader, read-only infrastructure load test, run:
+
+```sh
+make benchmark-stress
+```
+
+It runs the existing health and movie-list profiles plus a 100-movie page
+profile and a high-concurrency genre-list profile. All profiles use
+`BACKEND_HOST` (or `AB_HOST`) and `BACKEND_PORT` when supplied, so the CI job
+targets its Docker gateway rather than the CI container itself. Every profile
+can be tuned with `AB_HEALTH_*`, `AB_MOVIES_*`, `AB_MOVIES_LARGE_PAGE_*`, or
+`AB_GENRES_*` request/concurrency variables.
+
 The `docker_images` job publishes no images; it builds them in GitLab CI. The
 manual GCP deployment job builds and pushes the same services to Google Artifact
 Registry as part of `make update-app`.
