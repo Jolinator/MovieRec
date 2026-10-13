@@ -118,10 +118,16 @@ func (s *Service) RefreshForUser(ctx context.Context, userID uuid.UUID) {
 		return
 	}
 	defer s.jobs.Delete(userID)
-	result, movieIDs := s.generateRecommendations(ctx, userID)
-	if err := s.cache.Save(ctx, userID, result, movieIDs); err != nil {
-		result = "failed"
-		log.Printf("background recommendations: save for %s: %v", userID, err)
+	for {
+		result, movieIDs := s.generateRecommendations(ctx, userID)
+		if err := s.cache.Save(ctx, userID, result, movieIDs); err != nil {
+			result = "failed"
+			log.Printf("background recommendations: save for %s: %v", userID, err)
+			return
+		}
+		if !s.refreshStillNeeded(ctx, userID) {
+			return
+		}
 	}
 }
 
@@ -160,6 +166,15 @@ func (s *Service) generateRecommendations(ctx context.Context, userID uuid.UUID)
 func (s *Service) refreshFailure(userID uuid.UUID, operation string, err error) (string, []int) {
 	log.Printf("background recommendations: %s for %s: %v", operation, userID, err)
 	return "failed", nil
+}
+
+func (s *Service) refreshStillNeeded(ctx context.Context, userID uuid.UUID) bool {
+	cache, err := s.cache.Get(ctx, userID)
+	if err != nil {
+		log.Printf("background recommendations: inspect updated cache for %s: %v", userID, err)
+		return false
+	}
+	return cacheNeedsRefresh(cache)
 }
 
 func (s *Service) RequestRefresh(ctx context.Context, userID uuid.UUID) {
