@@ -55,3 +55,24 @@ chmod +x "${CUSTOMIZE_FILE}"
 printf 'Persistent setup saved to %s\n' "${CUSTOMIZE_FILE}"
 printf 'Installing Micro, Terraform and Ansible in this Cloud Shell session...\n'
 sudo bash "${BLOCK_FILE}"
+
+# NumPy can improve IAP TCP upload bandwidth. It is an optional optimization,
+# so keep setup working if the Cloud SDK's Python cannot install it.
+if command -v gcloud >/dev/null 2>&1; then
+  if GCLOUD_PYTHON_PATH="$(gcloud info --format='value(basic.python_location)' 2>/dev/null)" \
+    && [[ -n "${GCLOUD_PYTHON_PATH}" ]]; then
+    if ! "${GCLOUD_PYTHON_PATH}" -c 'import numpy' >/dev/null 2>&1; then
+      if ! "${GCLOUD_PYTHON_PATH}" -m pip install numpy; then
+        printf '%s\n' 'Optional NumPy install failed; see https://cloud.google.com/iap/docs/using-tcp-forwarding#increasing_the_tcp_upload_bandwidth' >&2
+      fi
+    fi
+
+    if ! grep -Fq 'CLOUDSDK_PYTHON_SITEPACKAGES=1' "${CUSTOMIZE_FILE}"; then
+      printf '\n%s\n' '# Let gcloud import NumPy for IAP TCP upload acceleration.' \
+        'export CLOUDSDK_PYTHON_SITEPACKAGES=1' >> "${CUSTOMIZE_FILE}"
+    fi
+    export CLOUDSDK_PYTHON_SITEPACKAGES=1
+  else
+    printf '%s\n' 'Could not locate gcloud Python; skipping optional NumPy install.' >&2
+  fi
+fi

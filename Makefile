@@ -15,7 +15,7 @@ ANSIBLE_PLAY := cd $(ANSIBLE_DIR) && ansible-playbook
 help:
 	@printf '%s\n' \
 	  'Cloud workflow:' \
-	  '  make cloud-shell-setup            Install Cloud Shell tools' \
+	  '  make cloud-shell-setup            Install Cloud Shell tools and optional IAP NumPy optimization' \
 	  '  make infra-config                Set project_id from gcloud; run before plan/apply' \
 	  '  make infra-init                   Initialize Terraform' \
 	  '  make infra-plan                   Validate and review the three-VM plan' \
