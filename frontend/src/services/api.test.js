@@ -29,7 +29,7 @@ describe('API service', () => {
       jsonResponse({ loggedIn: true }),
     )
 
-    await login({ username: 'alice', password: 'secret' })
+    await login({ username: 'alice', password: 'password123' })
 
     expect(fetchMock).toHaveBeenCalledWith(
       'http://localhost/movieAPI/login',
@@ -40,7 +40,7 @@ describe('API service', () => {
           Accept: 'application/json',
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ userName: 'alice', password: 'secret' }),
+        body: JSON.stringify({ userName: 'alice', password: 'password123' }),
       },
     )
   })
@@ -50,7 +50,7 @@ describe('API service', () => {
       jsonResponse({ error: 'invalid credentials' }, { status: 401 }),
     )
 
-    await expect(login({ username: 'alice', password: 'wrong' }))
+    await expect(login({ username: 'alice', password: 'wrongpass' }))
       .rejects.toThrow('Request failed (401): {"error":"invalid credentials"}')
   })
 })

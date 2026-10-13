@@ -22,10 +22,10 @@ describe('Login page', () => {
     render(<Login onBack={vi.fn()} onLoginSuccess={onLoginSuccess} notice="" />)
 
     await user.type(screen.getByLabelText('Username'), 'alice')
-    await user.type(screen.getByLabelText('Password'), 'secret')
+    await user.type(screen.getByLabelText('Password'), 'password123')
     await user.click(screen.getByRole('button', { name: 'Login' }))
 
-    expect(login).toHaveBeenCalledWith({ username: 'alice', password: 'secret' })
+    expect(login).toHaveBeenCalledWith({ username: 'alice', password: 'password123' })
     expect(onLoginSuccess).toHaveBeenCalledWith('alice')
   })
 
@@ -35,7 +35,7 @@ describe('Login page', () => {
     render(<Login onBack={vi.fn()} onLoginSuccess={vi.fn()} notice="" />)
 
     await user.type(screen.getByLabelText('Username'), 'alice')
-    await user.type(screen.getByLabelText('Password'), 'wrong')
+    await user.type(screen.getByLabelText('Password'), 'wrongpass')
     await user.click(screen.getByRole('button', { name: 'Login' }))
 
     expect(await screen.findByRole('alertdialog')).toHaveTextContent('Request failed (401)')
