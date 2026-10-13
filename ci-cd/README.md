@@ -5,6 +5,8 @@ job can deploy the app from `master`:
 
 - `backend_validation` checks Go formatting and runs `go vet`.
 - `frontend_validation` installs the locked npm dependencies and runs the production build.
+- `frontend_tests` installs the locked npm dependencies and runs the Vitest frontend
+  tests without requiring backend services.
 - `backend_tests` runs the integration scenarios from
   `testing/backend/DockerTests/TestRunner.py`, which starts the required
   Compose services and writes a test report. The job uses Docker-in-Docker,
@@ -17,10 +19,8 @@ job can deploy the app from `master`:
 - `update_app` runs `make update-app` to rebuild those images for Google Artifact
   Registry and deploy them to the GCP cluster.
 
-The frontend does not currently have a unit-test framework. Its production build is
-the appropriate CI check for the current small frontend and catches compilation,
-module-resolution, and bundling errors. Frontend tests can be added if the UI gains
-substantial stateful behavior or a regression-prone feature.
+The frontend uses Vitest with React Testing Library. The tests cover API request
+contracts, login behavior, movie-grid rendering, and application navigation.
 
 The `docker_images` job publishes no images; it builds them in GitLab CI. The
 manual GCP deployment job builds and pushes the same services to Google Artifact
