@@ -2,11 +2,14 @@ SHELL := /usr/bin/env bash
 .SHELLFLAGS := -eu -o pipefail -c
 
 TF_DIR := deploy/gcp/terraform
-# May be exported in the shell to apply one Terraform concurrency limit to multiple targets.
 TF_PARALLELISM ?=
 TF_PARALLELISM_FLAG = $(if $(strip $(TF_PARALLELISM)),-parallelism=$(TF_PARALLELISM),)
 DOCKER_MAX_CONCURRENT_UPLOADS ?= 1
 GCP_SCRIPTS := scripts/gcp
+GCP_PROJECT_ID ?= $(TF_VAR_project_id)
+GCP_REGION ?= europe-west1
+GCP_ZONE ?= europe-west1-b
+MOVIEREC_RESOURCE_NAME ?= movierec
 IMAGE_TAG ?=
 PUBLIC_HOST ?=
 GPU_LLAMA_IMAGE ?= ghcr.io/ggml-org/llama.cpp:server-cuda-v0.4.1
@@ -14,9 +17,11 @@ GPU_MACHINE_TYPE ?= g2-standard-4
 ANSIBLE_DIR := deploy/ansible
 ANSIBLE_PLAY := cd $(ANSIBLE_DIR) && ansible-playbook -i inventory.py
 
+export GCP_PROJECT_ID GCP_REGION GCP_ZONE MOVIEREC_RESOURCE_NAME
+
 .PHONY: help cloud-shell-setup infra-config infra-init infra-fmt infra-validate infra-plan infra-apply \
         ssh-access cluster-bootstrap secrets-init secrets-passwords docker-push-limit docker-push-limit-reset build-push \
-        k8s-config models deploy update-app gpu-enable gpu-infra-plan gpu-infra-apply gpu-runtime gpu-setup deploy-gpu start stop destroy
+        k8s-config models deploy update-app gpu-enable gpu-infra-plan gpu-infra-apply gpu-runtime gpu-setup deploy-gpu start stop destroy benchmark benchmark-stress
 
 help:
 	@printf '%s\n' \
@@ -42,6 +47,10 @@ help:
 	  '  make gpu-runtime                  Install NVIDIA drivers/runtime on the model VM (opt-in)' \
 	  '  make gpu-setup                    Ansible: install the Kubernetes GPU device plugin (opt-in)' \
 	  '  make deploy-gpu IMAGE_TAG=tag     Ansible: apply the CUDA generation model overlay (opt-in)' \
+	  '' \
+	  'Performance:' \
+	  '  make benchmark                    Run ApacheBench (AB_URL, AB_REQUESTS, AB_CONCURRENCY)' \
+	  '  make benchmark-stress             Run health, movies, large-page, and genres stress profiles' \
 	  '  make start                        Start all three existing VMs' \
 	  '  make stop                         Stop VMs; disks/IP/registry remain' \
 	  '  make destroy CONFIRM_DESTROY=1 [TF_PARALLELISM=n] Destroy Terraform resources and attached disks' \
@@ -71,16 +80,14 @@ infra-apply: infra-validate
 	terraform -chdir=$(TF_DIR) apply $(TF_PARALLELISM_FLAG)
 
 ssh-access:
-	@APP_INSTANCE="$$(terraform -chdir=$(TF_DIR) output -raw app_instance_name 2>/dev/null)" || { \
-	  printf '%s\n' 'Terraform has no app_instance_name output. Run make infra-apply first and confirm it completed successfully.' >&2; exit 2; \
-	}; \
-	ZONE="$$(terraform -chdir=$(TF_DIR) output -raw zone 2>/dev/null)" || { \
-	  printf '%s\n' 'Terraform has no zone output. Run make infra-apply first and confirm it completed successfully.' >&2; exit 2; \
-	}; \
-	if [[ -z "$$APP_INSTANCE" || -z "$$ZONE" ]]; then \
-	  printf '%s\n' 'Terraform returned an empty instance name or zone. Check the Terraform state and outputs.' >&2; exit 2; \
+	@PROJECT_ID="$(GCP_PROJECT_ID)"; \
+	if [[ -z "$$PROJECT_ID" ]]; then PROJECT_ID="$$(gcloud config get-value project 2>/dev/null)"; fi; \
+	APP_INSTANCE="$(MOVIEREC_RESOURCE_NAME)-app"; \
+	ZONE="$(GCP_ZONE)"; \
+	if [[ -z "$$PROJECT_ID" || "$$PROJECT_ID" == '(unset)' || -z "$$APP_INSTANCE" || -z "$$ZONE" ]]; then \
+	  printf '%s\n' 'Set the GCP project, zone, and MovieRec resource name before connecting.' >&2; exit 2; \
 	fi; \
-	gcloud compute ssh "$$APP_INSTANCE" --zone="$$ZONE" --tunnel-through-iap --quiet --command=true
+	gcloud compute ssh "$$APP_INSTANCE" --project="$$PROJECT_ID" --zone="$$ZONE" --tunnel-through-iap --quiet --command=true
 
 cluster-bootstrap: ssh-access
 	$(ANSIBLE_PLAY) playbooks/cluster.yml
@@ -134,6 +141,12 @@ gpu-setup: ssh-access
 deploy-gpu: ssh-access
 	@test -n "$(IMAGE_TAG)" || { printf '%s\n' 'Set IMAGE_TAG, for example: make deploy-gpu IMAGE_TAG=20261012'; exit 2; }
 	$(ANSIBLE_PLAY) playbooks/deploy.yml -e image_tag="$(IMAGE_TAG)" -e public_host="$(PUBLIC_HOST)" -e gpu_overlay=true -e gpu_llama_image="$(GPU_LLAMA_IMAGE)"
+
+benchmark:
+	bash scripts/apachebench.sh
+
+benchmark-stress:
+	bash scripts/apachebench-stress.sh
 
 start:
 	ZONE="$$(terraform -chdir=$(TF_DIR) output -raw zone)"; \

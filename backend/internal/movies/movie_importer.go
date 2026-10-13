@@ -2,12 +2,9 @@ package movies
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log"
 	"time"
-
-	"backend/internal/common"
 )
 
 func ImportPopularMovies(ctx context.Context, moviesDB *MovieRepository) error {
@@ -43,27 +40,24 @@ func ImportPopularMovies(ctx context.Context, moviesDB *MovieRepository) error {
 	return nil
 }
 
-func ImportPopularMoviesWithRetry(ctx context.Context, moviesDB *MovieRepository, attempts int, delay time.Duration) error {
-	if attempts < 1 {
-		return errors.New("movie import attempts must be at least 1")
-	}
-	if delay < 0 {
-		return errors.New("movie import retry delay cannot be negative")
-	}
+// ImportPopularMoviesUntilSuccess retries the initial catalogue import until it
+// succeeds or the service is shutting down. The capped backoff lets transient
+// database and TMDB failures recover without keeping the service unready forever.
+func ImportPopularMoviesUntilSuccess(ctx context.Context, moviesDB *MovieRepository) error {
+	const initialDelay = 2 * time.Second
+	const maxDelay = 30 * time.Second
 
-	var lastErr error
-	for attempt := 1; attempt <= attempts; attempt++ {
-		err := ImportPopularMovies(ctx, moviesDB)
-		if err == nil {
+	delay := initialDelay
+	for attempt := 1; ; attempt++ {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if err := ImportPopularMovies(ctx, moviesDB); err == nil {
 			return nil
-		}
-		lastErr = err
-
-		if !errors.Is(err, common.ErrMoviesDatabaseUnavailable) || attempt == attempts {
-			break
+		} else {
+			log.Printf("movie import attempt %d failed: %v; retrying in %s", attempt, err, delay)
 		}
 
-		log.Printf("movie import attempt %d/%d failed because the movies database is unavailable; retrying in %s", attempt, attempts, delay)
 		timer := time.NewTimer(delay)
 		select {
 		case <-ctx.Done():
@@ -71,7 +65,12 @@ func ImportPopularMoviesWithRetry(ctx context.Context, moviesDB *MovieRepository
 			return ctx.Err()
 		case <-timer.C:
 		}
-	}
 
-	return fmt.Errorf("movie import failed after %d attempts: %w", attempts, lastErr)
+		if delay < maxDelay {
+			delay *= 2
+			if delay > maxDelay {
+				delay = maxDelay
+			}
+		}
+	}
 }

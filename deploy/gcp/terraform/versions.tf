@@ -1,8 +1,8 @@
 terraform {
   required_version = ">= 1.5.0"
 
-  # Manual Cloud Shell runs use Terraform's local state backend. GitLab CI
-  # adds its HTTP backend explicitly before initialization.
+  # Terraform provisions infrastructure. The CI deployment job discovers the
+  # provisioned GCP resources directly and does not initialize Terraform.
 
   required_providers {
     google = {

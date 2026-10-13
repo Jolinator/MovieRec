@@ -13,6 +13,9 @@ job can deploy the app from `master`:
   installs Python dependencies from
   `testing/backend/DockerTests/requirements.txt`, and prepares throwaway
   Compose secrets from `secrets-example/`.
+- `apachebench_stress` is a separate Docker-in-Docker job that starts a fresh
+  gateway, backend-service, and database stack, waits for it to become ready,
+  then runs the ApacheBench stress profiles.
 - `docker_images` builds one image per backend service (`gateway`, `auth`,
   `movies`, `recommendations`, all from `backend/Dockerfile` with a `SERVICE`
   build argument) and the frontend image, tagged with the commit SHA.
@@ -21,6 +24,46 @@ job can deploy the app from `master`:
 
 The frontend uses Vitest with React Testing Library. The tests cover API request
 contracts, login behavior, movie-grid rendering, and application navigation.
+
+## Running ApacheBench
+
+ApacheBench is an opt-in performance smoke test for a running gateway. Start
+the backend first, then run:
+
+```sh
+make benchmark
+```
+
+The default benchmark sends 1,000 requests to
+`http://localhost:8080/movieAPI/health` with 10 concurrent clients. Override
+the target and load without changing the script:
+
+```sh
+AB_URL=http://localhost:8080/movieAPI/movies \
+AB_REQUESTS=5000 AB_CONCURRENCY=50 make benchmark
+```
+
+The command performs a `curl` readiness check before invoking `ab`. Install
+ApacheBench from the `apache2-utils` package when it is not already available.
+It waits up to five minutes by default; override that with `AB_READY_TIMEOUT`.
+
+For a broader, read-only infrastructure load test, run:
+
+```sh
+make benchmark-stress
+```
+
+It runs the existing health and movie-list profiles plus a 100-movie page
+profile and a high-concurrency genre-list profile. All profiles use
+`BACKEND_HOST` (or `AB_HOST`) and `BACKEND_PORT` when supplied, so the CI job
+targets its Docker gateway rather than the CI container itself. Every profile
+can be tuned with `AB_HEALTH_*`, `AB_MOVIES_*`, `AB_MOVIES_LARGE_PAGE_*`, or
+`AB_GENRES_*` request/concurrency variables.
+
+In CI, the integration runner first cleans up its temporary Compose services.
+The `backend_tests` wrapper then starts a fresh gateway, backend-service, and
+database stack, and waits for its databases and movie import to be ready before
+the stress profiles run.
 
 The `docker_images` job publishes no images; it builds them in GitLab CI. The
 manual GCP deployment job builds and pushes the same services to Google Artifact
@@ -38,49 +81,31 @@ secrets, or download model files.
 
 Before using the job:
 
-1. Enable Terraform/OpenTofu state storage for this project on the self-managed
-   GitLab instance. The CI state is stored as `movierec` in the project's GitLab
-   Terraform state backend. CI uses its job token to read the Terraform outputs.
-2. If the infrastructure was created manually in Cloud Shell, migrate its
-   local Terraform state to GitLab. Without the state, `make update-app`
-   cannot find the Artifact Registry, VM names, or IAP connection details.
-   From the repository root, set the HTTP backend variables below using the
-   project's numeric GitLab ID and a GitLab access token with API scope, then
-   generate the CI backend block and run `terraform init -migrate-state`.
-   Confirm the copy and preserve a secure backup of the local state until you
-   have checked Terraform outputs from GitLab.
-
-   ```sh
-   export TF_HTTP_ADDRESS="https://gitlab.rnl.tecnico.ulisboa.pt/api/v4/projects/<PROJECT_ID>/terraform/state/movierec"
-   export TF_HTTP_LOCK_ADDRESS="$TF_HTTP_ADDRESS/lock"
-   export TF_HTTP_UNLOCK_ADDRESS="$TF_HTTP_ADDRESS/lock"
-   export TF_HTTP_USERNAME="<GITLAB_USERNAME>"
-   export TF_HTTP_PASSWORD="<GITLAB_API_TOKEN>"
-   export TF_HTTP_LOCK_METHOD=POST
-   export TF_HTTP_UNLOCK_METHOD=DELETE
-   bash scripts/gcp/configure-gitlab-terraform-backend.sh
-   terraform -chdir=deploy/gcp/terraform init -migrate-state
-   ```
-
-3. Configure protected GitLab CI/CD variables for the `master` branch:
+1. Configure protected GitLab CI/CD variables for the `master` branch:
    - `TF_VAR_project_id`: the Google Cloud project ID.
    - `GCP_SERVICE_ACCOUNT_KEY`: a **file** variable containing a JSON key for a
-     dedicated service account that can push to Artifact Registry and connect to
-     the app VM through IAP. Keep the variable protected and limit who can
-     change protected variables. This job currently uses a service-account key;
-     Workload Identity Federation can replace it in a later hardening step.
+     dedicated service account that can push to Artifact Registry, describe the
+     three Compute Engine instances, and connect to the app VM through IAP. Keep
+     the variable protected and limit who can change protected variables. This
+     job currently uses a service-account key; Workload Identity Federation can
+     replace it in a later hardening step.
+   - `GCP_REGION`, `GCP_ZONE`, and `MOVIEREC_RESOURCE_NAME`, if they differ from
+     the defaults `europe-west1`, `europe-west1-b`, and `movierec`. These values
+     must match the infrastructure provisioned by Terraform.
    - `PUBLIC_HOST`, if the deployment should use a DNS name instead of the
      default IP based `nip.io` hostname.
    - `MOVIEREC_SSH_USER`, if Ansible should connect as a specific SSH user.
-4. Protect the `production` environment in GitLab so only intended maintainers
-   can start the manual deployment. Keep the project private because Terraform
-   state and CI variables can contain sensitive information.
+2. Protect the `production` environment in GitLab so only intended maintainers
+   can start the manual deployment.
 
-Manual Cloud Shell Make targets and direct Terraform CLI commands use local
-state and need only the active Google Cloud credentials. GitLab CI explicitly
-adds the GitLab HTTP backend for the `update_app` job. The two states are
-separate until you migrate the manual state as described above.
+The `update_app` job does not initialize Terraform or access Terraform state.
+It builds the Artifact Registry path from the project ID and configuration
+variables, then uses `gcloud` to read the configured VM instances for Ansible.
+GitLab-managed Terraform state is optional and is only needed if you want
+Terraform commands in different environments to share state. Manual Cloud Shell
+Terraform commands can continue using their local state.
 
-The `backend_tests` job requires a masked GitLab CI/CD variable named
-`TMDB_READ_ACCESS_TOKEN`. It is used only to import the test movie catalogue;
-the CI job creates the remaining local test configuration automatically.
+The `backend_tests` and `apachebench_stress` jobs require a masked GitLab CI/CD
+variable named `TMDB_READ_ACCESS_TOKEN`. It is used only to import the test
+movie catalogue; the CI jobs create the remaining local test configuration
+automatically.

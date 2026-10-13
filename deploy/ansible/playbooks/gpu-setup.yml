@@ -7,10 +7,10 @@
   environment:
     KUBECONFIG: "{{ kubeconfig_path }}"
   tasks:
-    - name: Require a GPU-enabled Terraform deployment
+    - name: Require a GPU-enabled model VM
       ansible.builtin.assert:
-        that: terraform_gpu_enabled | bool
-        fail_msg: Set model_gpu_enabled = true in terraform.tfvars and run make infra-apply first.
+        that: model_gpu_enabled | bool
+        fail_msg: Set model_gpu_enabled = true when provisioning the model VM, then run make infra-apply first.
 
     - name: Apply the NVIDIA device plugin
       ansible.builtin.command: "{{ kubectl }} apply -f -"

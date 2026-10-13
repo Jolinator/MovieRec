@@ -44,8 +44,8 @@ func main() {
 	repository := movies.NewMovieRepository(pool, status)
 	service := movies.NewMovieService(repository)
 	go func() {
-		if err := movies.ImportPopularMoviesWithRetry(ctx, repository, 10, 2*time.Second); err != nil {
-			log.Printf("movie import failed: %v", err)
+		if err := movies.ImportPopularMoviesUntilSuccess(ctx, repository); err != nil {
+			log.Printf("movie import stopped: %v", err)
 			return
 		}
 		service.MarkImported()

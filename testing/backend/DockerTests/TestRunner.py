@@ -1,6 +1,7 @@
 import argparse
 import json
 import logging
+import subprocess
 import sys
 import time
 from dataclasses import dataclass, field
@@ -421,6 +422,10 @@ class BackendTest:
         except Exception as error:
             self.setup_error = str(error)
             logger.error("Could not start services for %s: %s", self.path.stem, error)
+            if isinstance(error, subprocess.CalledProcessError):
+                details = error.stderr or error.stdout
+                if details:
+                    logger.error("Docker Compose output for %s:\n%s", self.path.stem, details.strip())
         else:
             for result in results:
                 logger.info("Docker command:%s", result.args)

@@ -51,12 +51,54 @@ backend_tests:
     DOCKER_TLS_CERTDIR: ""
     BACKEND_HOST: docker
   before_script:
-    - apk add --no-cache python3 py3-pip
+    - apk add --no-cache apache2-utils bash curl python3 py3-pip
     - pip install --break-system-packages -r testing/backend/DockerTests/requirements.txt
     - ./ci-cd/prepare-backend-integration.sh
-    - until docker info >/dev/null 2>&1; do sleep 1; done
+    - |
+      for attempt in $(seq 1 60); do
+        if docker info >/dev/null 2>&1; then
+          break
+        fi
+        sleep 1
+      done
+      docker info >/dev/null 2>&1 || {
+        echo "Docker-in-Docker did not become ready within 60 seconds; check the runner's Docker executor and privileged setting."
+        exit 1
+      }
   script:
     - ./ci-cd/test-backend.sh
+  artifacts:
+    when: always
+    paths:
+      - testing/backend/reports/
+    expire_in: 1 week
+
+apachebench_stress:
+  stage: test
+  image: docker:27.5.1-cli
+  services:
+    - name: docker:27.5.1-dind
+      command: ["--tls=false"]
+  variables:
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_TLS_CERTDIR: ""
+    BACKEND_HOST: docker
+  before_script:
+    - apk add --no-cache apache2-utils bash curl python3
+    - ./ci-cd/prepare-backend-integration.sh
+    - |
+      for attempt in $(seq 1 60); do
+        if docker info >/dev/null 2>&1; then
+          break
+        fi
+        sleep 1
+      done
+      docker info >/dev/null 2>&1 || {
+        echo "Docker-in-Docker did not become ready within 60 seconds; check the runner's Docker executor and privileged setting."
+        exit 1
+      }
+  script:
+    - ./ci-cd/run-apachebench-stress.sh
 
 docker_images:
   stage: build
@@ -70,6 +112,18 @@ docker_images:
     BACKEND_IMAGE_PREFIX: "$CI_REGISTRY/$CI_PROJECT_PATH"
     BACKEND_IMAGE_TAG: "$CI_COMMIT_SHA"
     FRONTEND_IMAGE: "$CI_REGISTRY/$CI_PROJECT_PATH/frontend:$CI_COMMIT_SHA"
+  before_script:
+    - |
+      for attempt in $(seq 1 60); do
+        if docker info >/dev/null 2>&1; then
+          break
+        fi
+        sleep 1
+      done
+      docker info >/dev/null 2>&1 || {
+        echo "Docker-in-Docker did not become ready within 60 seconds; check the runner's Docker executor and privileged setting."
+        exit 1
+      }
   script:
     - ./ci-cd/build-images.sh
 
@@ -83,26 +137,43 @@ update_app:
     DOCKER_HOST: tcp://docker:2375
     DOCKER_TLS_CERTDIR: ""
     IMAGE_TAG: "$CI_COMMIT_SHA"
+    GCP_REGION: "europe-west1"
+    GCP_ZONE: "europe-west1-b"
+    MOVIEREC_RESOURCE_NAME: "movierec"
   before_script:
     - apt-get update
-    - apt-get install -y --no-install-recommends ansible make docker.io curl unzip
-    - curl -fsSLo /tmp/terraform.zip https://releases.hashicorp.com/terraform/1.9.8/terraform_1.9.8_linux_amd64.zip
-    - unzip -o /tmp/terraform.zip -d /usr/local/bin
+    - apt-get install -y --no-install-recommends ansible make curl
+    - |
+      case "$(dpkg --print-architecture)" in
+        amd64) docker_arch=x86_64 ;;
+        arm64) docker_arch=aarch64 ;;
+        *) echo "Unsupported architecture for Docker CLI: $(dpkg --print-architecture)" >&2; exit 1 ;;
+      esac
+      curl -fsSL "https://download.docker.com/linux/static/stable/${docker_arch}/docker-27.5.1.tgz" -o /tmp/docker.tgz
+      tar --extract --file /tmp/docker.tgz --strip-components 1 --directory /usr/local/bin/ --no-same-owner docker/docker
+      rm /tmp/docker.tgz
+    - export PATH="/usr/local/bin:$PATH"
+    - command -v docker
+    - docker --version
     - test -n "$TF_VAR_project_id" || { echo 'Set protected CI/CD variable TF_VAR_project_id'; exit 2; }
     - test -n "$GCP_SERVICE_ACCOUNT_KEY" || { echo 'Set GCP_SERVICE_ACCOUNT_KEY as a protected GitLab file variable'; exit 2; }
     - export GOOGLE_APPLICATION_CREDENTIALS="$GCP_SERVICE_ACCOUNT_KEY"
     - gcloud auth activate-service-account --key-file="$GCP_SERVICE_ACCOUNT_KEY" --project="$TF_VAR_project_id"
-    - export TF_HTTP_ADDRESS="$CI_API_V4_URL/projects/$CI_PROJECT_ID/terraform/state/movierec"
-    - export TF_HTTP_LOCK_ADDRESS="$TF_HTTP_ADDRESS/lock"
-    - export TF_HTTP_UNLOCK_ADDRESS="$TF_HTTP_ADDRESS/lock"
-    - export TF_HTTP_USERNAME=gitlab-ci-token
-    - export TF_HTTP_PASSWORD="$CI_JOB_TOKEN"
-    - export TF_HTTP_LOCK_METHOD=POST
-    - export TF_HTTP_UNLOCK_METHOD=DELETE
-    - export TF_HTTP_RETRY_WAIT_MIN=5
-    - bash scripts/gcp/configure-gitlab-terraform-backend.sh
-    - terraform -chdir=deploy/gcp/terraform init -input=false
-    - until docker info >/dev/null 2>&1; do sleep 1; done
+    - export GCP_PROJECT_ID="$TF_VAR_project_id"
+    - |
+      docker_ready=0
+      for attempt in $(seq 1 60); do
+        if docker info >/dev/null 2>&1; then
+          docker_ready=1
+          break
+        fi
+        sleep 1
+      done
+      if [ "$docker_ready" -ne 1 ]; then
+        echo "Docker-in-Docker did not become ready within 60 seconds; check the runner's Docker executor and privileged setting."
+        docker info
+        exit 1
+      fi
   script:
     - make update-app IMAGE_TAG="$IMAGE_TAG" PUBLIC_HOST="$PUBLIC_HOST"
   rules:

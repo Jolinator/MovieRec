@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Dynamic Ansible inventory built from the Terraform outputs.
+"""Dynamic Ansible inventory built from the provisioned GCP instances.
 
 The VMs have no public SSH access, so every connection goes through an IAP
 tunnel using the key that `gcloud compute ssh` manages.
@@ -10,34 +10,98 @@ import os
 import subprocess
 import sys
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-TF_DIR = os.path.join(HERE, "..", "gcp", "terraform")
 
+def active_project():
+    project_id = os.environ.get("GCP_PROJECT_ID") or os.environ.get("TF_VAR_project_id")
+    if project_id:
+        return project_id
 
-def terraform_outputs():
     result = subprocess.run(
-        ["terraform", f"-chdir={TF_DIR}", "output", "-json"],
+        ["gcloud", "config", "get-value", "project"],
         capture_output=True,
         text=True,
     )
     if result.returncode != 0:
-        sys.exit(f"terraform output failed (run make infra-apply first):\n{result.stderr}")
-    outputs = {name: value["value"] for name, value in json.loads(result.stdout).items()}
-    required = [
-        "zone", "app_instance_name", "database_instance_name", "model_instance_name",
-        "app_private_ip", "public_ip", "artifact_registry", "model_gpu_enabled",
-    ]
-    missing = [name for name in required if name not in outputs]
-    if missing:
-        sys.exit(f"Terraform outputs are incomplete: {', '.join(missing)}")
-    return outputs
+        sys.exit(f"Could not determine the GCP project ID:\n{result.stderr}")
+    project_id = result.stdout.strip()
+    if not project_id or project_id == "(unset)":
+        sys.exit("Set GCP_PROJECT_ID or select an active project with gcloud config set project.")
+    return project_id
+
+
+def deployment_config():
+    project_id = active_project()
+    zone = os.environ.get("GCP_ZONE", "europe-west1-b")
+    region = os.environ.get("GCP_REGION", "europe-west1")
+    resource_name = os.environ.get("MOVIEREC_RESOURCE_NAME", "movierec")
+    if not zone or not region or not resource_name:
+        sys.exit("GCP_ZONE, GCP_REGION, and MOVIEREC_RESOURCE_NAME must not be empty.")
+
+    def describe_instance(role):
+        name = f"{resource_name}-{role}"
+        result = subprocess.run(
+            [
+                "gcloud", "compute", "instances", "describe", name,
+                f"--project={project_id}", f"--zone={zone}", "--format=json", "--quiet",
+            ],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            sys.exit(
+                f"Could not describe GCP instance {name} in {zone}:\n{result.stderr}"
+            )
+        try:
+            return json.loads(result.stdout)
+        except json.JSONDecodeError as error:
+            sys.exit(f"gcloud returned invalid instance data for {name}: {error}")
+
+    instances = {role: describe_instance(role) for role in ("app", "database", "model")}
+    app = instances["app"]
+    interfaces = app.get("networkInterfaces", [])
+    if not interfaces or not interfaces[0].get("networkIP"):
+        sys.exit(f"GCP instance {app.get('name', 'app')} has no private network IP.")
+    public_ip = next(
+        (
+            config.get("natIP")
+            for interface in interfaces
+            for config in interface.get("accessConfigs", [])
+            if config.get("natIP")
+        ),
+        None,
+    )
+    if not public_ip:
+        sys.exit(f"GCP instance {app.get('name', 'app')} has no public NAT IP.")
+
+    model_metadata = {
+        item["key"]: item.get("value", "")
+        for item in instances["model"].get("metadata", {}).get("items", [])
+        if "key" in item
+    }
+    gpu_enabled = model_metadata.get(
+        "gpu_enabled", os.environ.get("MOVIEREC_MODEL_GPU_ENABLED", "false")
+    ).lower() == "true"
+
+    return {
+        "project_id": project_id,
+        "region": region,
+        "zone": zone,
+        "app_instance_name": instances["app"]["name"],
+        "database_instance_name": instances["database"]["name"],
+        "model_instance_name": instances["model"]["name"],
+        "app_private_ip": interfaces[0]["networkIP"],
+        "public_ip": public_ip,
+        "artifact_registry": f"{region}-docker.pkg.dev/{project_id}/{resource_name}",
+        "model_gpu_enabled": gpu_enabled,
+    }
 
 
 def build_inventory():
-    out = terraform_outputs()
+    out = deployment_config()
     iap_proxy = (
         "-o ProxyCommand='gcloud compute start-iap-tunnel %h 22 "
-        f"--listen-on-stdin --zone={out['zone']} --verbosity=warning' "
+        f"--project={out['project_id']} --listen-on-stdin "
+        f"--zone={out['zone']} --verbosity=warning' "
         "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o CheckHostIP=no"
     )
     ssh_user = os.environ.get("MOVIEREC_SSH_USER") or getpass.getuser()
@@ -66,7 +130,7 @@ def build_inventory():
                 "app_private_ip": out["app_private_ip"],
                 "public_ip": out["public_ip"],
                 "artifact_registry": out["artifact_registry"],
-                "terraform_gpu_enabled": out["model_gpu_enabled"],
+                "model_gpu_enabled": out["model_gpu_enabled"],
             }
         },
         **{role: {"hosts": [name]} for role, name in roles.items()},
