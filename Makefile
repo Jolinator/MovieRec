@@ -1,6 +1,8 @@
 SHELL := /usr/bin/env bash
 .SHELLFLAGS := -eu -o pipefail -c
 
+-include deploy/gcp/secrets/.env
+
 TF_DIR := deploy/gcp/terraform
 TF_PARALLELISM ?=
 TF_PARALLELISM_FLAG = $(if $(strip $(TF_PARALLELISM)),-parallelism=$(TF_PARALLELISM),)
@@ -10,13 +12,21 @@ GCP_PROJECT_ID ?= $(TF_VAR_project_id)
 GCP_REGION ?= europe-west1
 GCP_ZONE ?= europe-west1-b
 MOVIEREC_RESOURCE_NAME ?= movierec
+TF_VAR_region ?= $(GCP_REGION)
+TF_VAR_zone ?= $(GCP_ZONE)
+TF_VAR_name ?= $(MOVIEREC_RESOURCE_NAME)
 IMAGE_TAG ?=
 PUBLIC_HOST ?=
 GPU_LLAMA_IMAGE ?= ghcr.io/ggml-org/llama.cpp:server-cuda-v0.4.1
 GPU_MACHINE_TYPE ?= g2-standard-4
 ANSIBLE_DIR := deploy/ansible
-ANSIBLE_PLAY := cd $(ANSIBLE_DIR) && ansible-playbook -i inventory.py
+ANSIBLE_CONFIG_FILE := $(CURDIR)/$(ANSIBLE_DIR)/ansible.cfg
+ANSIBLE_PLAY := cd $(ANSIBLE_DIR) && ANSIBLE_CONFIG="$(ANSIBLE_CONFIG_FILE)" ansible-playbook -i inventory.py
 
+ifneq ($(strip $(TF_VAR_project_id)),)
+export TF_VAR_project_id
+endif
+export TF_VAR_region TF_VAR_zone TF_VAR_name
 export GCP_PROJECT_ID GCP_REGION GCP_ZONE MOVIEREC_RESOURCE_NAME
 
 .PHONY: help cloud-shell-setup infra-config infra-init infra-fmt infra-validate infra-plan infra-apply \

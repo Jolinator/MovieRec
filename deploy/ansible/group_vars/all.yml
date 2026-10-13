@@ -3,7 +3,7 @@ k8s_namespace: movierec
 kubeconfig_path: /etc/rancher/k3s/k3s.yaml
 kubectl: /usr/local/bin/k3s kubectl
 
-repo_root: "{{ ansible_config_file | dirname }}/../.."
+repo_root: "{{ inventory_dir }}/../.."
 secrets_dir: "{{ repo_root }}/deploy/gcp/secrets"
 manifests_dir: "{{ repo_root }}/deploy/k8s"
 remote_dir: /opt/movierec

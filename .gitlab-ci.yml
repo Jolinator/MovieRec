@@ -141,6 +141,7 @@ update_app:
     GCP_REGION: "europe-west1"
     GCP_ZONE: "europe-west1-b"
     MOVIEREC_RESOURCE_NAME: "movierec"
+    MOVIEREC_SSH_USER: "root"
   before_script:
     - apt-get update
     - apt-get install -y --no-install-recommends ansible make curl
@@ -162,12 +163,8 @@ update_app:
     - gcloud auth activate-service-account --key-file="$GCP_SERVICE_ACCOUNT_KEY" --project="$TF_VAR_project_id"
     - export GCP_PROJECT_ID="$TF_VAR_project_id"
     - |
-      echo "gcloud compute ssh identity and key selected by CI:"
-      gcloud compute ssh "${MOVIEREC_RESOURCE_NAME}-app" \
-        --project="$TF_VAR_project_id" \
-        --zone="$GCP_ZONE" \
-        --tunnel-through-iap \
-        --dry-run
+      printf 'GCP project selected by CI: %s\n' "$TF_VAR_project_id"
+      mkdir -p "$HOME/.ssh"
     - |
       docker_ready=0
       for attempt in $(seq 1 60); do
