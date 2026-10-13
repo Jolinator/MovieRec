@@ -42,6 +42,7 @@ AB_REQUESTS=5000 AB_CONCURRENCY=50 make benchmark
 
 The command performs a `curl` readiness check before invoking `ab`. Install
 ApacheBench from the `apache2-utils` package when it is not already available.
+It waits up to five minutes by default; override that with `AB_READY_TIMEOUT`.
 
 For a broader, read-only infrastructure load test, run:
 
@@ -55,6 +56,11 @@ profile and a high-concurrency genre-list profile. All profiles use
 targets its Docker gateway rather than the CI container itself. Every profile
 can be tuned with `AB_HEALTH_*`, `AB_MOVIES_*`, `AB_MOVIES_LARGE_PAGE_*`, or
 `AB_GENRES_*` request/concurrency variables.
+
+In CI, the integration runner first cleans up its temporary Compose services.
+The `backend_tests` wrapper then starts a fresh gateway, backend-service, and
+database stack, and waits for its databases and movie import to be ready before
+the stress profiles run.
 
 The `docker_images` job publishes no images; it builds them in GitLab CI. The
 manual GCP deployment job builds and pushes the same services to Google Artifact

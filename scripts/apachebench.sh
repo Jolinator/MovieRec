@@ -6,6 +6,7 @@ set -euo pipefail
 : "${AB_CONCURRENCY:=10}"
 : "${AB_TIMEOUT:=30}"
 : "${AB_KEEPALIVE:=1}"
+: "${AB_READY_TIMEOUT:=300}"
 
 die() {
 	printf 'apachebench: %s\n' "$1" >&2
@@ -23,11 +24,15 @@ command -v curl >/dev/null 2>&1 || die "curl is required for the readiness check
 require_positive_integer AB_REQUESTS "$AB_REQUESTS"
 require_positive_integer AB_CONCURRENCY "$AB_CONCURRENCY"
 require_positive_integer AB_TIMEOUT "$AB_TIMEOUT"
+require_positive_integer AB_READY_TIMEOUT "$AB_READY_TIMEOUT"
 [[ "$AB_KEEPALIVE" == 0 || "$AB_KEEPALIVE" == 1 ]] ||
 	die "AB_KEEPALIVE must be 0 or 1 (got '$AB_KEEPALIVE')"
 
-curl --fail --silent --show-error --max-time "$AB_TIMEOUT" "$AB_URL" >/dev/null ||
-	die "readiness check failed for $AB_URL"
+ready_deadline=$((SECONDS + AB_READY_TIMEOUT))
+until curl --fail --silent --max-time "$AB_TIMEOUT" "$AB_URL" >/dev/null; do
+	(( SECONDS < ready_deadline )) || die "readiness check failed for $AB_URL after ${AB_READY_TIMEOUT}s"
+	sleep 1
+done
 
 printf 'Running ApacheBench against %s (%s requests, %s concurrent clients)\n' \
 	"$AB_URL" "$AB_REQUESTS" "$AB_CONCURRENCY"
