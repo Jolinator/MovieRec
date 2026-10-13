@@ -67,6 +67,11 @@ backend_tests:
       }
   script:
     - ./ci-cd/test-backend.sh
+  artifacts:
+    when: always
+    paths:
+      - testing/backend/reports/
+    expire_in: 1 week
 
 apachebench_stress:
   stage: test
