@@ -2,7 +2,6 @@ SHELL := /usr/bin/env bash
 .SHELLFLAGS := -eu -o pipefail -c
 
 TF_DIR := deploy/gcp/terraform
-# May be exported in the shell to apply one Terraform concurrency limit to multiple targets.
 TF_PARALLELISM ?=
 TF_PARALLELISM_FLAG = $(if $(strip $(TF_PARALLELISM)),-parallelism=$(TF_PARALLELISM),)
 DOCKER_MAX_CONCURRENT_UPLOADS ?= 1

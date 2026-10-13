@@ -86,20 +86,17 @@ Before using the job:
 2. If the infrastructure was created manually in Cloud Shell, migrate its
    local Terraform state to GitLab. Without the state, `make update-app`
    cannot find the Artifact Registry, VM names, or IAP connection details.
-   From the repository root, set the HTTP backend variables below using the
-   project's numeric GitLab ID and a GitLab access token with API scope, then
-   generate the CI backend block and run `terraform init -migrate-state`.
+   From the repository root, source the helper below in Bash. It reads the
+   project path from the `origin` Git remote, looks up the numeric project ID
+   through GitLab's API, and prompts for your GitLab username and API token
+   every time it is sourced. The token prompt is hidden. Use a token with
+   `api` scope.
+   Then generate the backend block and run `terraform init -migrate-state`.
    Confirm the copy and preserve a secure backup of the local state until you
    have checked Terraform outputs from GitLab.
 
    ```sh
-   export TF_HTTP_ADDRESS="https://gitlab.rnl.tecnico.ulisboa.pt/api/v4/projects/<PROJECT_ID>/terraform/state/movierec"
-   export TF_HTTP_LOCK_ADDRESS="$TF_HTTP_ADDRESS/lock"
-   export TF_HTTP_UNLOCK_ADDRESS="$TF_HTTP_ADDRESS/lock"
-   export TF_HTTP_USERNAME="<GITLAB_USERNAME>"
-   export TF_HTTP_PASSWORD="<GITLAB_API_TOKEN>"
-   export TF_HTTP_LOCK_METHOD=POST
-   export TF_HTTP_UNLOCK_METHOD=DELETE
+   source scripts/gcp/export-gitlab-terraform-env.sh
    bash scripts/gcp/configure-gitlab-terraform-backend.sh
    terraform -chdir=deploy/gcp/terraform init -migrate-state
    ```

@@ -51,7 +51,7 @@ backend_tests:
     DOCKER_TLS_CERTDIR: ""
     BACKEND_HOST: docker
   before_script:
-    - apk add --no-cache python3 py3-pip
+    - apk add --no-cache apache2-utils bash curl python3 py3-pip
     - pip install --break-system-packages -r testing/backend/DockerTests/requirements.txt
     - ./ci-cd/prepare-backend-integration.sh
     - |
