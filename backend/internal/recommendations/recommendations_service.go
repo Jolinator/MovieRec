@@ -84,17 +84,34 @@ func (s *Service) InitializeWithRetry(ctx context.Context, attempts int, delay t
 		} else {
 			lastErr = err
 		}
-		if err := waitForRetry(ctx, attempt, attempts, delay); err != nil {
+		if attempt == attempts {
+			break
+		}
+		if err := waitForRetry(ctx, delay); err != nil {
 			return err
 		}
 	}
 	return fmt.Errorf("recommendation initialization failed after %d attempts: %w", attempts, lastErr)
 }
 
-func waitForRetry(ctx context.Context, attempt, attempts int, delay time.Duration) error {
-	if attempt >= attempts {
-		return nil
+// InitializeUntilReady keeps retrying until initialization succeeds or the service context ends.
+func (s *Service) InitializeUntilReady(ctx context.Context, delay time.Duration) error {
+	for attempt := 1; ; attempt++ {
+		if err := s.Initialize(ctx); err == nil {
+			return nil
+		} else {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			log.Printf("recommendation initialization attempt %d failed: %v; retrying in %s", attempt, err, delay)
+		}
+		if err := waitForRetry(ctx, delay); err != nil {
+			return err
+		}
 	}
+}
+
+func waitForRetry(ctx context.Context, delay time.Duration) error {
 	timer := time.NewTimer(delay)
 	defer timer.Stop()
 	select {
