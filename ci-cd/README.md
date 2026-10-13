@@ -74,13 +74,14 @@ Before using the job:
 1. Enable Terraform/OpenTofu state storage for this project on the self-managed
    GitLab instance. The CI state is stored as `movierec` in the project's GitLab
    Terraform state backend. CI uses its job token to read the Terraform outputs.
-2. Migrate the existing local Terraform state from a trusted machine. Without
-   the state, `make update-app` cannot find the Artifact Registry, VM names, or
-   IAP connection details. From `deploy/gcp/terraform`, set the HTTP backend
-   variables below using the project's numeric GitLab ID and a GitLab access
-   token with API scope, then run `terraform init -migrate-state` and confirm
-   the copy. Preserve a secure backup of the local state until you have checked
-   Terraform outputs from the remote state.
+2. If the infrastructure was created manually in Cloud Shell, migrate its
+   local Terraform state to GitLab. Without the state, `make update-app`
+   cannot find the Artifact Registry, VM names, or IAP connection details.
+   From the repository root, set the HTTP backend variables below using the
+   project's numeric GitLab ID and a GitLab access token with API scope, then
+   generate the CI backend block and run `terraform init -migrate-state`.
+   Confirm the copy and preserve a secure backup of the local state until you
+   have checked Terraform outputs from GitLab.
 
    ```sh
    export TF_HTTP_ADDRESS="https://gitlab.rnl.tecnico.ulisboa.pt/api/v4/projects/<PROJECT_ID>/terraform/state/movierec"
@@ -90,7 +91,8 @@ Before using the job:
    export TF_HTTP_PASSWORD="<GITLAB_API_TOKEN>"
    export TF_HTTP_LOCK_METHOD=POST
    export TF_HTTP_UNLOCK_METHOD=DELETE
-   terraform init -migrate-state
+   bash scripts/gcp/configure-gitlab-terraform-backend.sh
+   terraform -chdir=deploy/gcp/terraform init -migrate-state
    ```
 
 3. Configure protected GitLab CI/CD variables for the `master` branch:
@@ -107,9 +109,10 @@ Before using the job:
    can start the manual deployment. Keep the project private because Terraform
    state and CI variables can contain sensitive information.
 
-The local Makefile Terraform targets still work with the HTTP backend. Use the
-same GitLab state backend credentials locally once migration is complete; avoid
-working against an old local state copy.
+Manual Cloud Shell Make targets and direct Terraform CLI commands use local
+state and need only the active Google Cloud credentials. GitLab CI explicitly
+adds the GitLab HTTP backend for the `update_app` job. The two states are
+separate until you migrate the manual state as described above.
 
 The `backend_tests` job requires a masked GitLab CI/CD variable named
 `TMDB_READ_ACCESS_TOKEN`. It is used only to import the test movie catalogue;
