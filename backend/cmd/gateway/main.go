@@ -36,7 +36,7 @@ func main() {
 
 	mux := http.NewServeMux()
 	gateway.RegisterRoutes(mux, config)
-	server := platform.NewHTTPServer(port, platform.RequestMetricsMiddleware(gateway.CorsMiddleware(mux)))
+	server := platform.NewHTTPServer(port, platform.RequestMetricsMiddleware(gateway.CorsMiddleware(mux), "gateway"))
 
 	platform.HandleErrors(platform.RunServers(server), ctx, server)
 }

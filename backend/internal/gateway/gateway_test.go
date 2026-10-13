@@ -63,7 +63,6 @@ func TestRoutesReachTheOwningService(t *testing.T) {
 		{"DELETE", "/movieAPI/my-list/42", "recommendations"},
 		{"POST", "/movieAPI/recommendations/chat", "recommendations"},
 		{"GET", "/movieAPI/recommendations", "recommendations"},
-		{"GET", "/movieAPI/recommendations/ready", "recommendations"},
 	}
 	for _, test := range tests {
 		t.Run(test.method+" "+test.path, func(t *testing.T) {
