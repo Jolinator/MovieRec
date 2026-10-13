@@ -102,26 +102,17 @@ update_app:
     DOCKER_HOST: tcp://docker:2375
     DOCKER_TLS_CERTDIR: ""
     IMAGE_TAG: "$CI_COMMIT_SHA"
+    GCP_REGION: "europe-west1"
+    GCP_ZONE: "europe-west1-b"
+    MOVIEREC_RESOURCE_NAME: "movierec"
   before_script:
     - apt-get update
-    - apt-get install -y --no-install-recommends ansible make docker.io curl unzip
-    - curl -fsSLo /tmp/terraform.zip https://releases.hashicorp.com/terraform/1.9.8/terraform_1.9.8_linux_amd64.zip
-    - unzip -o /tmp/terraform.zip -d /usr/local/bin
+    - apt-get install -y --no-install-recommends ansible make docker.io
     - test -n "$TF_VAR_project_id" || { echo 'Set protected CI/CD variable TF_VAR_project_id'; exit 2; }
     - test -n "$GCP_SERVICE_ACCOUNT_KEY" || { echo 'Set GCP_SERVICE_ACCOUNT_KEY as a protected GitLab file variable'; exit 2; }
     - export GOOGLE_APPLICATION_CREDENTIALS="$GCP_SERVICE_ACCOUNT_KEY"
     - gcloud auth activate-service-account --key-file="$GCP_SERVICE_ACCOUNT_KEY" --project="$TF_VAR_project_id"
-    - export TF_HTTP_ADDRESS="$CI_API_V4_URL/projects/$CI_PROJECT_ID/terraform/state/movierec"
-    - export TF_HTTP_LOCK_ADDRESS="$TF_HTTP_ADDRESS/lock"
-    - export TF_HTTP_UNLOCK_ADDRESS="$TF_HTTP_ADDRESS/lock"
-    - export TF_HTTP_USERNAME=gitlab-ci-token
-    - export TF_HTTP_PASSWORD="$CI_JOB_TOKEN"
-    - export TF_HTTP_LOCK_METHOD=POST
-    - export TF_HTTP_UNLOCK_METHOD=DELETE
-    - export TF_HTTP_RETRY_WAIT_MIN=5
-    - 'curl -sS -o /dev/null -w "Terraform state endpoint: %{http_code}\n" --user "$TF_HTTP_USERNAME:$TF_HTTP_PASSWORD" "$TF_HTTP_ADDRESS"'
-    - bash scripts/gcp/configure-gitlab-terraform-backend.sh
-    - terraform -chdir=deploy/gcp/terraform init -input=false
+    - export GCP_PROJECT_ID="$TF_VAR_project_id"
     - until docker info >/dev/null 2>&1; do sleep 1; done
   script:
     - make update-app IMAGE_TAG="$IMAGE_TAG" PUBLIC_HOST="$PUBLIC_HOST"

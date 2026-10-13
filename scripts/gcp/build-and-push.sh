@@ -3,28 +3,37 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
-TF_DIR="${REPO_ROOT}/deploy/gcp/terraform"
 IMAGE_TAG="${1:-$(date -u +%Y%m%d%H%M%S)}"
+PROJECT_ID="${GCP_PROJECT_ID:-${TF_VAR_project_id:-}}"
+REGION="${GCP_REGION:-europe-west1}"
+RESOURCE_NAME="${MOVIEREC_RESOURCE_NAME:-movierec}"
 
 if [[ ! "${IMAGE_TAG}" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]]; then
   printf 'Invalid Docker image tag: %s\n' "${IMAGE_TAG}" >&2
   exit 2
 fi
 
-for command in docker gcloud terraform; do
+for command in docker gcloud; do
   if ! command -v "${command}" >/dev/null 2>&1; then
     printf 'Required command not found: %s\n' "${command}" >&2
     exit 1
   fi
 done
 
-REGION="$(terraform -chdir="${TF_DIR}" output -raw region)"
-REGISTRY="$(terraform -chdir="${TF_DIR}" output -raw artifact_registry)"
+if [[ -z "${PROJECT_ID}" ]]; then
+  PROJECT_ID="$(gcloud config get-value project 2>/dev/null || true)"
+fi
 
-if [[ -z "${REGION}" || -z "${REGISTRY}" ]]; then
-  printf 'Terraform outputs for region and artifact_registry must be available.\n' >&2
+if [[ -z "${PROJECT_ID}" || "${PROJECT_ID}" == "(unset)" ]]; then
+  printf 'Set GCP_PROJECT_ID, TF_VAR_project_id, or an active gcloud project.\n' >&2
   exit 1
 fi
+if [[ -z "${REGION}" || -z "${RESOURCE_NAME}" ]]; then
+  printf 'GCP_REGION and MOVIEREC_RESOURCE_NAME must not be empty.\n' >&2
+  exit 1
+fi
+
+REGISTRY="${REGION}-docker.pkg.dev/${PROJECT_ID}/${RESOURCE_NAME}"
 
 printf 'Building and pushing MovieRec images with tag %s\n' "${IMAGE_TAG}"
 printf 'Registry: %s\n' "${REGISTRY}"

@@ -6,12 +6,18 @@ TF_PARALLELISM ?=
 TF_PARALLELISM_FLAG = $(if $(strip $(TF_PARALLELISM)),-parallelism=$(TF_PARALLELISM),)
 DOCKER_MAX_CONCURRENT_UPLOADS ?= 1
 GCP_SCRIPTS := scripts/gcp
+GCP_PROJECT_ID ?= $(TF_VAR_project_id)
+GCP_REGION ?= europe-west1
+GCP_ZONE ?= europe-west1-b
+MOVIEREC_RESOURCE_NAME ?= movierec
 IMAGE_TAG ?=
 PUBLIC_HOST ?=
 GPU_LLAMA_IMAGE ?= ghcr.io/ggml-org/llama.cpp:server-cuda-v0.4.1
 GPU_MACHINE_TYPE ?= g2-standard-4
 ANSIBLE_DIR := deploy/ansible
 ANSIBLE_PLAY := cd $(ANSIBLE_DIR) && ansible-playbook
+
+export GCP_PROJECT_ID GCP_REGION GCP_ZONE MOVIEREC_RESOURCE_NAME
 
 .PHONY: help cloud-shell-setup infra-config infra-init infra-fmt infra-validate infra-plan infra-apply \
         ssh-access cluster-bootstrap secrets-init secrets-passwords docker-push-limit docker-push-limit-reset build-push \
@@ -74,16 +80,14 @@ infra-apply: infra-validate
 	terraform -chdir=$(TF_DIR) apply $(TF_PARALLELISM_FLAG)
 
 ssh-access:
-	@APP_INSTANCE="$$(terraform -chdir=$(TF_DIR) output -raw app_instance_name 2>/dev/null)" || { \
-	  printf '%s\n' 'Terraform has no app_instance_name output. Run make infra-apply first and confirm it completed successfully.' >&2; exit 2; \
-	}; \
-	ZONE="$$(terraform -chdir=$(TF_DIR) output -raw zone 2>/dev/null)" || { \
-	  printf '%s\n' 'Terraform has no zone output. Run make infra-apply first and confirm it completed successfully.' >&2; exit 2; \
-	}; \
-	if [[ -z "$$APP_INSTANCE" || -z "$$ZONE" ]]; then \
-	  printf '%s\n' 'Terraform returned an empty instance name or zone. Check the Terraform state and outputs.' >&2; exit 2; \
+	@PROJECT_ID="$(GCP_PROJECT_ID)"; \
+	if [[ -z "$$PROJECT_ID" ]]; then PROJECT_ID="$$(gcloud config get-value project 2>/dev/null)"; fi; \
+	APP_INSTANCE="$(MOVIEREC_RESOURCE_NAME)-app"; \
+	ZONE="$(GCP_ZONE)"; \
+	if [[ -z "$$PROJECT_ID" || "$$PROJECT_ID" == '(unset)' || -z "$$APP_INSTANCE" || -z "$$ZONE" ]]; then \
+	  printf '%s\n' 'Set the GCP project, zone, and MovieRec resource name before connecting.' >&2; exit 2; \
 	fi; \
-	gcloud compute ssh "$$APP_INSTANCE" --zone="$$ZONE" --tunnel-through-iap --quiet --command=true
+	gcloud compute ssh "$$APP_INSTANCE" --project="$$PROJECT_ID" --zone="$$ZONE" --tunnel-through-iap --quiet --command=true
 
 cluster-bootstrap: ssh-access
 	$(ANSIBLE_PLAY) playbooks/cluster.yml

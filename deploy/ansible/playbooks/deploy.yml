@@ -16,10 +16,10 @@
           - image_tag is match('^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$')
           - web_host is match('^[A-Za-z0-9.-]+$')
           - gpu_llama_image is match('^[A-Za-z0-9./_-]+:[A-Za-z0-9_.-]+$')
-          - not (gpu_overlay | bool) or (terraform_gpu_enabled | bool)
+          - not (gpu_overlay | bool) or (model_gpu_enabled | bool)
         fail_msg: >-
           Set a valid image_tag (make deploy IMAGE_TAG=...), a DNS name or IPv4 address as the public host,
-          and for the GPU overlay set model_gpu_enabled = true in terraform.tfvars and run make infra-apply.
+          and for the GPU overlay use a model VM provisioned with GPU support.
 
     - name: Install envsubst
       ansible.builtin.apt:

@@ -80,45 +80,29 @@ download model files.
 
 Before using the job:
 
-1. Enable Terraform/OpenTofu state storage for this project on the self-managed
-   GitLab instance. The CI state is stored as `movierec` in the project's GitLab
-   Terraform state backend. CI uses its job token to read the Terraform outputs.
-2. If the infrastructure was created manually in Cloud Shell, migrate its
-   local Terraform state to GitLab. Without the state, `make update-app`
-   cannot find the Artifact Registry, VM names, or IAP connection details.
-   From the repository root, source the helper below in Bash. It reads the
-   project path from the `origin` Git remote, looks up the numeric project ID
-   through GitLab's API, and prompts for your GitLab username and API token
-   every time it is sourced. The token prompt is hidden. Use a token with
-   `api` scope.
-   Then generate the backend block and run `terraform init -migrate-state`.
-   Confirm the copy and preserve a secure backup of the local state until you
-   have checked Terraform outputs from GitLab.
-
-   ```sh
-   source scripts/gcp/export-gitlab-terraform-env.sh
-   bash scripts/gcp/configure-gitlab-terraform-backend.sh
-   terraform -chdir=deploy/gcp/terraform init -migrate-state
-   ```
-
-3. Configure protected GitLab CI/CD variables for the `master` branch:
+1. Configure protected GitLab CI/CD variables for the `master` branch:
    - `TF_VAR_project_id`: the Google Cloud project ID.
    - `GCP_SERVICE_ACCOUNT_KEY`: a **file** variable containing a JSON key for a
-     dedicated service account that can push to Artifact Registry and connect to
-     the app VM through IAP. Keep the variable protected and limit who can
-     change protected variables. This job currently uses a service-account key;
-     Workload Identity Federation can replace it in a later hardening step.
+     dedicated service account that can push to Artifact Registry, describe the
+     three Compute Engine instances, and connect to the app VM through IAP. Keep
+     the variable protected and limit who can change protected variables. This
+     job currently uses a service-account key; Workload Identity Federation can
+     replace it in a later hardening step.
+   - `GCP_REGION`, `GCP_ZONE`, and `MOVIEREC_RESOURCE_NAME`, if they differ from
+     the defaults `europe-west1`, `europe-west1-b`, and `movierec`. These values
+     must match the infrastructure provisioned by Terraform.
    - `PUBLIC_HOST`, if the deployment should use a DNS name instead of the
      default IP based `nip.io` hostname.
    - `MOVIEREC_SSH_USER`, if Ansible should connect as a specific SSH user.
-4. Protect the `production` environment in GitLab so only intended maintainers
-   can start the manual deployment. Keep the project private because Terraform
-   state and CI variables can contain sensitive information.
+2. Protect the `production` environment in GitLab so only intended maintainers
+   can start the manual deployment.
 
-Manual Cloud Shell Make targets and direct Terraform CLI commands use local
-state and need only the active Google Cloud credentials. GitLab CI explicitly
-adds the GitLab HTTP backend for the `update_app` job. The two states are
-separate until you migrate the manual state as described above.
+The `update_app` job does not initialize Terraform or access Terraform state.
+It builds the Artifact Registry path from the project ID and configuration
+variables, then uses `gcloud` to read the configured VM instances for Ansible.
+GitLab-managed Terraform state is optional and is only needed if you want
+Terraform commands in different environments to share state. Manual Cloud Shell
+Terraform commands can continue using their local state.
 
 The `backend_tests` and `apachebench_stress` jobs require a masked GitLab CI/CD
 variable named `TMDB_READ_ACCESS_TOKEN`. It is used only to import the test
