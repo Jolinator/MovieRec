@@ -100,3 +100,8 @@
   font: inherit;
   font-weight: 700;
 }
+
+.loadMoreSentinel {
+  min-height: 1px;
+  width: 100%;
+}
