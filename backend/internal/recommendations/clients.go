@@ -24,6 +24,20 @@ type GenerationClient struct {
 	client     *http.Client
 }
 
+type embeddingResponse struct {
+	Data []struct {
+		Embedding []float32 `json:"embedding"`
+	} `json:"data"`
+}
+
+type generationResponse struct {
+	Choices []struct {
+		Message struct {
+			Content string `json:"content"`
+		} `json:"message"`
+	} `json:"choices"`
+}
+
 func NewEmbeddingClient() *EmbeddingClient {
 	return &EmbeddingClient{url: strings.TrimRight(env("EMBEDDING_URL", "http://llama-embedding:8080"), "/"), model: env("EMBEDDING_MODEL", "bge-small-en-v1.5"), client: &http.Client{Timeout: 45 * time.Second}}
 }
@@ -48,17 +62,13 @@ func (c *EmbeddingClient) Embed(ctx context.Context, input string) (vector []flo
 		observability.ObserveModelRequest("embedding", c.model, "embed", result, started)
 	}()
 
-	body, _ := json.Marshal(map[string]any{"model": c.model, "input": input})
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.url+"/v1/embeddings", bytes.NewReader(body))
+	body := marshalEmbeddingRequest(c.model, input)
+	req, err := newInferenceRequest(ctx, c.url, "/v1/embeddings", body)
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	var response struct {
-		Data []struct {
-			Embedding []float32 `json:"embedding"`
-		} `json:"data"`
-	}
+	var response embeddingResponse
 	if err := doJSON(c.client, req, &response); err != nil {
 		return nil, fmt.Errorf("%w: embedding request failed: %v", common.ErrInferenceUnavailable, err)
 	}
@@ -92,28 +102,13 @@ func (c *GenerationClient) complete(ctx context.Context, system, user string, ma
 		observability.ObserveModelRequest("generation", c.model, "complete", result, started)
 	}()
 
-	body, _ := json.Marshal(map[string]any{
-		"model":                c.model,
-		"temperature":          0.7,
-		"max_tokens":           maxTokens,
-		"chat_template_kwargs": map[string]bool{"enable_thinking": false},
-		"messages": []map[string]string{
-			{"role": "system", "content": system},
-			{"role": "user", "content": user},
-		},
-	})
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.url+"/v1/chat/completions", bytes.NewReader(body))
+	body := marshalGenerationRequest(c.model, system, user, maxTokens)
+	req, err := newInferenceRequest(ctx, c.url, "/v1/chat/completions", body)
 	if err != nil {
 		return "", err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	var response struct {
-		Choices []struct {
-			Message struct {
-				Content string `json:"content"`
-			} `json:"message"`
-		} `json:"choices"`
-	}
+	var response generationResponse
 	if err := doJSON(c.client, req, &response); err != nil {
 		return "", fmt.Errorf("%w: generation request failed: %v", common.ErrInferenceUnavailable, err)
 	}
@@ -125,6 +120,29 @@ func (c *GenerationClient) complete(ctx context.Context, system, user string, ma
 		return "", fmt.Errorf("%w: generation endpoint returned an empty answer", common.ErrInferenceUnavailable)
 	}
 	return answer, nil
+}
+
+func newInferenceRequest(ctx context.Context, baseURL, path string, body []byte) (*http.Request, error) {
+	return http.NewRequestWithContext(ctx, http.MethodPost, baseURL+path, bytes.NewReader(body))
+}
+
+func marshalEmbeddingRequest(model, input string) []byte {
+	body, _ := json.Marshal(map[string]any{"model": model, "input": input})
+	return body
+}
+
+func marshalGenerationRequest(model, system, user string, maxTokens int) []byte {
+	body, _ := json.Marshal(map[string]any{
+		"model":                model,
+		"temperature":          0.7,
+		"max_tokens":           maxTokens,
+		"chat_template_kwargs": map[string]bool{"enable_thinking": false},
+		"messages": []map[string]string{
+			{"role": "system", "content": system},
+			{"role": "user", "content": user},
+		},
+	})
+	return body
 }
 
 type httpStatusError struct {
