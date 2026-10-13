@@ -2,6 +2,7 @@ SHELL := /usr/bin/env bash
 .SHELLFLAGS := -eu -o pipefail -c
 
 TF_DIR := deploy/gcp/terraform
+# May be exported in the shell to apply one Terraform concurrency limit to multiple targets.
 TF_PARALLELISM ?=
 TF_PARALLELISM_FLAG = $(if $(strip $(TF_PARALLELISM)),-parallelism=$(TF_PARALLELISM),)
 DOCKER_MAX_CONCURRENT_UPLOADS ?= 1
@@ -41,7 +42,7 @@ help:
 	  '  make deploy-gpu IMAGE_TAG=tag     Ansible: apply the CUDA generation model overlay (opt-in)' \
 	  '  make start                        Start all three existing VMs' \
 	  '  make stop                         Stop VMs; disks/IP/registry remain' \
-	  '  make destroy CONFIRM_DESTROY=1    Destroy Terraform resources and attached disks' \
+	  '  make destroy CONFIRM_DESTROY=1 [TF_PARALLELISM=n] Destroy Terraform resources and attached disks' \
 	  '' \
 	  'Ansible targets run kubectl on the app VM over IAP SSH; no local kubeconfig or tunnel is needed.'
 
@@ -162,5 +163,5 @@ stop:
 
 destroy:
 	@test "$(CONFIRM_DESTROY)" = 1 || { printf '%s\n' 'Refusing to destroy resources. Use: make destroy CONFIRM_DESTROY=1'; exit 2; }
-	terraform -chdir=$(TF_DIR) plan -destroy
-	terraform -chdir=$(TF_DIR) destroy
+	terraform -chdir=$(TF_DIR) plan -destroy $(TF_PARALLELISM_FLAG)
+	terraform -chdir=$(TF_DIR) destroy $(TF_PARALLELISM_FLAG)
