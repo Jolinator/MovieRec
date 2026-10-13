@@ -13,7 +13,7 @@ ANSIBLE_DIR := deploy/ansible
 ANSIBLE_PLAY := cd $(ANSIBLE_DIR) && ansible-playbook
 
 .PHONY: help cloud-shell-setup infra-config infra-init infra-fmt infra-validate infra-plan infra-apply \
-        ssh-access cluster-bootstrap secrets-init docker-push-limit docker-push-limit-reset build-push \
+        ssh-access cluster-bootstrap secrets-init secrets-passwords docker-push-limit docker-push-limit-reset build-push \
         k8s-config models deploy gpu-runtime gpu-setup deploy-gpu start stop destroy
 
 help:
@@ -26,6 +26,7 @@ help:
 	  '  make infra-apply [TF_PARALLELISM=n] Create/start resources (default: Terraform, 10 operations)' \
 	  '  make cluster-bootstrap             Ansible: join running database/model VMs to the app K3s server' \
 	  '  make secrets-init                 Prepare ignored cloud secret files and cryptographic keys' \
+	  '  make secrets-passwords            Generate matching random passwords for the three databases' \
 	  '  make docker-push-limit [DOCKER_MAX_CONCURRENT_UPLOADS=n] Limit layers uploaded per image push (requires sudo)' \
 	  '  make docker-push-limit-reset      Remove the Docker upload limit and restore its default (requires sudo)' \
 	  '  make build-push [IMAGE_TAG=tag]   Build/push images (does not start or stop VMs)' \
@@ -80,6 +81,9 @@ cluster-bootstrap: ssh-access
 
 secrets-init:
 	bash $(GCP_SCRIPTS)/init-secrets.sh
+
+secrets-passwords:
+	python3 $(GCP_SCRIPTS)/generate-db-passwords.py
 
 docker-push-limit:
 	sudo bash $(GCP_SCRIPTS)/set-docker-push-limit.sh "$(DOCKER_MAX_CONCURRENT_UPLOADS)"
