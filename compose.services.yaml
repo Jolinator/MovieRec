@@ -110,9 +110,6 @@ services:
       dockerfile: backend/Dockerfile
       args:
         SERVICE: movies
-    depends_on:
-      movies-postgres:
-        condition: service_healthy
     env_file:
       - ./secrets/movies.env
       - ./secrets/tmdb.env
