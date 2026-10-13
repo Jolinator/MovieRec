@@ -100,6 +100,7 @@ update_app:
     - export TF_HTTP_LOCK_METHOD=POST
     - export TF_HTTP_UNLOCK_METHOD=DELETE
     - export TF_HTTP_RETRY_WAIT_MIN=5
+    - 'curl -sS -o /dev/null -w "Terraform state endpoint: %{http_code}\n" --user "$TF_HTTP_USERNAME:$TF_HTTP_PASSWORD" "$TF_HTTP_ADDRESS"'
     - bash scripts/gcp/configure-gitlab-terraform-backend.sh
     - terraform -chdir=deploy/gcp/terraform init -input=false
     - until docker info >/dev/null 2>&1; do sleep 1; done
