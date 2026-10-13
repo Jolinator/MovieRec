@@ -2,7 +2,6 @@ SHELL := /usr/bin/env bash
 .SHELLFLAGS := -eu -o pipefail -c
 
 TF_DIR := deploy/gcp/terraform
-# May be exported in the shell to apply one Terraform concurrency limit to multiple targets.
 TF_PARALLELISM ?=
 TF_PARALLELISM_FLAG = $(if $(strip $(TF_PARALLELISM)),-parallelism=$(TF_PARALLELISM),)
 DOCKER_MAX_CONCURRENT_UPLOADS ?= 1
@@ -16,7 +15,7 @@ ANSIBLE_PLAY := cd $(ANSIBLE_DIR) && ansible-playbook
 
 .PHONY: help cloud-shell-setup infra-config infra-init infra-fmt infra-validate infra-plan infra-apply \
         ssh-access cluster-bootstrap secrets-init secrets-passwords docker-push-limit docker-push-limit-reset build-push \
-        k8s-config models deploy update-app gpu-enable gpu-infra-plan gpu-infra-apply gpu-runtime gpu-setup deploy-gpu start stop destroy
+        k8s-config models deploy update-app gpu-enable gpu-infra-plan gpu-infra-apply gpu-runtime gpu-setup deploy-gpu start stop destroy benchmark benchmark-stress
 
 help:
 	@printf '%s\n' \
@@ -42,6 +41,10 @@ help:
 	  '  make gpu-runtime                  Install NVIDIA drivers/runtime on the model VM (opt-in)' \
 	  '  make gpu-setup                    Ansible: install the Kubernetes GPU device plugin (opt-in)' \
 	  '  make deploy-gpu IMAGE_TAG=tag     Ansible: apply the CUDA generation model overlay (opt-in)' \
+	  '' \
+	  'Performance:' \
+	  '  make benchmark                    Run ApacheBench (AB_URL, AB_REQUESTS, AB_CONCURRENCY)' \
+	  '  make benchmark-stress             Run health, movies, large-page, and genres stress profiles' \
 	  '  make start                        Start all three existing VMs' \
 	  '  make stop                         Stop VMs; disks/IP/registry remain' \
 	  '  make destroy CONFIRM_DESTROY=1 [TF_PARALLELISM=n] Destroy Terraform resources and attached disks' \
@@ -134,6 +137,12 @@ gpu-setup: ssh-access
 deploy-gpu: ssh-access
 	@test -n "$(IMAGE_TAG)" || { printf '%s\n' 'Set IMAGE_TAG, for example: make deploy-gpu IMAGE_TAG=20261012'; exit 2; }
 	$(ANSIBLE_PLAY) playbooks/deploy.yml -e image_tag="$(IMAGE_TAG)" -e public_host="$(PUBLIC_HOST)" -e gpu_overlay=true -e gpu_llama_image="$(GPU_LLAMA_IMAGE)"
+
+benchmark:
+	bash scripts/apachebench.sh
+
+benchmark-stress:
+	bash scripts/apachebench-stress.sh
 
 start:
 	ZONE="$$(terraform -chdir=$(TF_DIR) output -raw zone)"; \
