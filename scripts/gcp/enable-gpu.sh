@@ -33,4 +33,4 @@ set_tfvar model_gpu_enabled true
 
 printf 'Enabled GPU settings in %s: model_machine_type=%s, model_gpu_enabled=true\n' \
   "${TFVARS}" "${GPU_MACHINE_TYPE}"
-printf '%s\n' 'Review the change with make infra-plan, then run make infra-apply before make gpu-runtime.'
+printf '%s\n' 'Review the model VM replacement with make gpu-infra-plan, then run make gpu-infra-apply before make gpu-runtime.'

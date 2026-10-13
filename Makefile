@@ -16,7 +16,7 @@ ANSIBLE_PLAY := cd $(ANSIBLE_DIR) && ansible-playbook
 
 .PHONY: help cloud-shell-setup infra-config infra-init infra-fmt infra-validate infra-plan infra-apply \
         ssh-access cluster-bootstrap secrets-init secrets-passwords docker-push-limit docker-push-limit-reset build-push \
-        k8s-config models deploy update-app gpu-enable gpu-runtime gpu-setup deploy-gpu start stop destroy
+        k8s-config models deploy update-app gpu-enable gpu-infra-plan gpu-infra-apply gpu-runtime gpu-setup deploy-gpu start stop destroy
 
 help:
 	@printf '%s\n' \
@@ -37,6 +37,8 @@ help:
 	  '  make deploy IMAGE_TAG=tag         Ansible: apply the Kustomize manifests and wait for rollouts' \
 	  '  make update-app IMAGE_TAG=tag     Build/push the app images, then deploy that tag' \
 	  '  make gpu-enable [GPU_MACHINE_TYPE=g2-standard-4] Set GPU Terraform options (opt-in)' \
+	  '  make gpu-infra-plan [TF_PARALLELISM=n] Plan replacement of the model VM with its GPU type' \
+	  '  make gpu-infra-apply [TF_PARALLELISM=n] Replace the model VM with its GPU type' \
 	  '  make gpu-runtime                  Install NVIDIA drivers/runtime on the model VM (opt-in)' \
 	  '  make gpu-setup                    Ansible: install the Kubernetes GPU device plugin (opt-in)' \
 	  '  make deploy-gpu IMAGE_TAG=tag     Ansible: apply the CUDA generation model overlay (opt-in)' \
@@ -119,6 +121,13 @@ update-app:
 
 gpu-enable:
 	bash $(GCP_SCRIPTS)/enable-gpu.sh "$(GPU_MACHINE_TYPE)"
+
+gpu-infra-plan: infra-validate
+	terraform -chdir=$(TF_DIR) plan -replace=google_compute_instance.model $(TF_PARALLELISM_FLAG)
+
+gpu-infra-apply: infra-validate
+	@printf '%s\n' 'This replaces the model VM to apply its GPU machine type and scheduling policy. The separate model data disk is retained.'
+	terraform -chdir=$(TF_DIR) apply -replace=google_compute_instance.model $(TF_PARALLELISM_FLAG)
 
 gpu-runtime:
 	bash $(GCP_SCRIPTS)/install-gpu-runtime.sh
