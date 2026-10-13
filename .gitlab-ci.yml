@@ -142,10 +142,17 @@ update_app:
     MOVIEREC_RESOURCE_NAME: "movierec"
   before_script:
     - apt-get update
-    - apt-get install -y --no-install-recommends ansible make docker.io
-    - test -x /usr/bin/docker || { echo 'docker.io did not install /usr/bin/docker'; exit 1; }
-    - ln -sf /usr/bin/docker /usr/local/bin/docker
-    - export PATH="/usr/bin:/usr/local/bin:$PATH"
+    - apt-get install -y --no-install-recommends ansible make curl
+    - |
+      case "$(dpkg --print-architecture)" in
+        amd64) docker_arch=x86_64 ;;
+        arm64) docker_arch=aarch64 ;;
+        *) echo "Unsupported architecture for Docker CLI: $(dpkg --print-architecture)" >&2; exit 1 ;;
+      esac
+      curl -fsSL "https://download.docker.com/linux/static/stable/${docker_arch}/docker-27.5.1.tgz" -o /tmp/docker.tgz
+      tar --extract --file /tmp/docker.tgz --strip-components 1 --directory /usr/local/bin/ --no-same-owner docker/docker
+      rm /tmp/docker.tgz
+    - export PATH="/usr/local/bin:$PATH"
     - command -v docker
     - docker --version
     - test -n "$TF_VAR_project_id" || { echo 'Set protected CI/CD variable TF_VAR_project_id'; exit 2; }
