@@ -12,7 +12,7 @@ PUBLIC_HOST ?=
 GPU_LLAMA_IMAGE ?= ghcr.io/ggml-org/llama.cpp:server-cuda-v0.4.1
 GPU_MACHINE_TYPE ?= g2-standard-4
 ANSIBLE_DIR := deploy/ansible
-ANSIBLE_PLAY := cd $(ANSIBLE_DIR) && ansible-playbook
+ANSIBLE_PLAY := cd $(ANSIBLE_DIR) && ansible-playbook -i inventory.py
 
 .PHONY: help cloud-shell-setup infra-config infra-init infra-fmt infra-validate infra-plan infra-apply \
         ssh-access cluster-bootstrap secrets-init secrets-passwords docker-push-limit docker-push-limit-reset build-push \
@@ -108,7 +108,7 @@ models: ssh-access
 
 deploy: ssh-access
 	@test -n "$(IMAGE_TAG)" || { printf '%s\n' 'Set IMAGE_TAG, for example: make deploy IMAGE_TAG=20261012'; exit 2; }
-	$(ANSIBLE_PLAY) playbooks/deploy.yml -e image_tag="$(IMAGE_TAG)" -e public_host="$(PUBLIC_HOST)"
+	$(ANSIBLE_PLAY) playbooks/deploy.yml -e image_tag="$(IMAGE_TAG)" -e public_host="$(PUBLIC_HOST)" -e gpu_overlay=false
 
 update-app:
 	@test -n "$(IMAGE_TAG)" || { printf '%s\n' 'Set IMAGE_TAG, for example: make update-app IMAGE_TAG=20261012'; exit 2; }

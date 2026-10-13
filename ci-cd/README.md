@@ -31,9 +31,10 @@ Registry as part of `make update-app`.
 The `update_app` job is a manual deployment from `master`. After the validation,
 test, and image-build stages pass, it runs
 `make update-app IMAGE_TAG=$CI_COMMIT_SHA`. It builds and pushes the images to
-Google Artifact Registry, then uses Ansible over IAP SSH to deploy them and wait
-for rollouts. It does not run Terraform apply, configure Kubernetes secrets, or
-download model files.
+Google Artifact Registry, then uses Ansible over IAP SSH to deploy them with the
+normal CPU Kubernetes overlay and wait for rollouts. It does not use the CUDA
+image or GPU overlay. It also does not run Terraform apply, configure Kubernetes
+secrets, or download model files.
 
 Before using the job:
 
