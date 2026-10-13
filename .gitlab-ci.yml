@@ -143,6 +143,8 @@ update_app:
   before_script:
     - apt-get update
     - apt-get install -y --no-install-recommends ansible make docker.io
+    - test -x /usr/bin/docker || { echo 'docker.io did not install /usr/bin/docker'; exit 1; }
+    - ln -sf /usr/bin/docker /usr/local/bin/docker
     - export PATH="/usr/bin:/usr/local/bin:$PATH"
     - command -v docker
     - docker --version
