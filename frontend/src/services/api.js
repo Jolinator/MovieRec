@@ -160,6 +160,7 @@ export async function chatRecommendations(message) {
 export async function getPersonalizedRecommendations() {
   const response = await fetch(`${API_BASE_URL}${PERSONALIZED_RECOMMENDATIONS_ENDPOINT}`, {
     credentials: 'include',
+    cache: 'no-store',
     headers: { Accept: 'application/json' },
   })
   return readResponse(response)
