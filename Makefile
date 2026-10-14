@@ -74,9 +74,8 @@ cloud-shell-setup:
 infra-config:
 	bash $(GCP_SCRIPTS)/configure-terraform.sh
 
-# Use Terraform's default local backend, ignoring stale cached backend settings.
 infra-init:
-	terraform -chdir=$(TF_DIR) init -reconfigure
+	terraform -chdir=$(TF_DIR) init
 
 infra-fmt:
 	terraform -chdir=$(TF_DIR) fmt
