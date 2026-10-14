@@ -58,7 +58,7 @@
     },
     {
       "id": 4,
-      "title": "Chat pipeline totals",
+      "title": "Recommendation pipeline totals",
       "type": "table",
       "datasource": {"type": "prometheus", "uid": "Prometheus"},
       "targets": [
@@ -68,6 +68,21 @@
           "format": "table",
           "instant": true,
           "refId": "A"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            },
+            "indexByName": {
+              "operation": 0,
+              "result": 1,
+              "Value": 2
+            }
+          }
         }
       ],
       "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},

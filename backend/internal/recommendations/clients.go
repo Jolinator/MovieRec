@@ -84,7 +84,7 @@ func (c *EmbeddingClient) WarmUp(ctx context.Context) error {
 }
 
 func (c *GenerationClient) Complete(ctx context.Context, system, user string) (string, error) {
-	return c.complete(ctx, system, user, 300, true)
+	return c.complete(ctx, system, user, 150, true)
 }
 
 func (c *GenerationClient) WarmUp(ctx context.Context) error {
