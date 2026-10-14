@@ -249,6 +249,29 @@ def validate_gpu_options(mode: str, gpu_type: str, machine_type: str, count: int
     return mode
 
 
+def terraform_flags(operation: str, model_only: str, auto_approve: str) -> str:
+    """Validate Make's Terraform switches and return flags for one operation."""
+    if model_only not in {"0", "1"}:
+        raise ValueError("MODEL_ONLY must be 0 or 1")
+    if auto_approve not in {"0", "1"}:
+        raise ValueError("TF_AUTO_APPROVE must be 0 or 1")
+
+    flags: list[str] = []
+    if model_only == "1":
+        flags.extend(
+            (
+                "-target=google_compute_instance.model",
+                "-target=google_compute_firewall.k3s_api",
+                "-target=google_compute_firewall.k3s_flannel",
+                "-target=google_compute_firewall.k3s_kubelet",
+            )
+        )
+    if operation == "apply" and auto_approve == "1":
+        flags.append("-auto-approve")
+
+    return " ".join(flags) or "none"
+
+
 def set_gpu_tfvars(mode: str, gpu_type: str, machine_type: str, count: int) -> None:
     """Persist an explicit GPU on/off choice in terraform.tfvars."""
     validate_gpu_options(mode, gpu_type, machine_type, count)
@@ -295,6 +318,13 @@ def main() -> None:
     set_gpu_parser.add_argument("--machine-type", default="")
     set_gpu_parser.add_argument("--count", type=int, default=1)
 
+    terraform_flags_parser = commands.add_parser(
+        "terraform-flags", help="validate Make's Terraform switches and print operation flags"
+    )
+    terraform_flags_parser.add_argument("--operation", choices=("plan", "apply"), required=True)
+    terraform_flags_parser.add_argument("--model-only", default="0")
+    terraform_flags_parser.add_argument("--auto-approve", default="0")
+
     args = parser.parse_args()
     if args.command == "make-vars":
         file_env = read_server_env()
@@ -322,6 +352,11 @@ def main() -> None:
     elif args.command == "set-gpu-vars":
         try:
             set_gpu_tfvars(args.mode, args.type, args.machine_type, args.count)
+        except ValueError as error:
+            parser.error(str(error))
+    elif args.command == "terraform-flags":
+        try:
+            print(terraform_flags(args.operation, args.model_only, args.auto_approve))
         except ValueError as error:
             parser.error(str(error))
     else:

@@ -20,17 +20,16 @@ GPU_COUNT ?= 1
 MODEL_ONLY ?= 0
 TF_AUTO_APPROVE ?= 0
 GPU_SET_VARS_ARGS = --mode "$(GPU)" $(if $(filter on,$(GPU)),--type "$(GPU_TYPE)" --machine-type "$(GPU_MACHINE_TYPE)" --count "$(GPU_COUNT)")
-MODEL_ONLY_TARGET_FLAGS = $(if $(filter 1,$(MODEL_ONLY)),-target=google_compute_instance.model -target=google_compute_firewall.k3s_api -target=google_compute_firewall.k3s_flannel -target=google_compute_firewall.k3s_kubelet,)
-TF_AUTO_APPROVE_FLAG = $(if $(filter 1,$(TF_AUTO_APPROVE)),-auto-approve,)
+TF_PLAN_FLAGS_RAW := $(shell $(GCP_CONFIG) terraform-flags --operation plan --model-only "$(MODEL_ONLY)" --auto-approve "$(TF_AUTO_APPROVE)" || echo invalid)
+TF_APPLY_FLAGS_RAW := $(shell $(GCP_CONFIG) terraform-flags --operation apply --model-only "$(MODEL_ONLY)" --auto-approve "$(TF_AUTO_APPROVE)" || echo invalid)
+ifneq ($(filter invalid,$(TF_PLAN_FLAGS_RAW) $(TF_APPLY_FLAGS_RAW)),)
+$(error Invalid Terraform options; MODEL_ONLY and TF_AUTO_APPROVE must each be 0 or 1)
+endif
+TF_PLAN_FLAGS = $(if $(filter none,$(TF_PLAN_FLAGS_RAW)),,$(TF_PLAN_FLAGS_RAW))
+TF_APPLY_FLAGS = $(if $(filter none,$(TF_APPLY_FLAGS_RAW)),,$(TF_APPLY_FLAGS_RAW))
 GPU_CONFIG_MODE := $(shell $(GCP_CONFIG) gpu-mode --mode "$(GPU)" --type "$(GPU_TYPE)" --machine-type "$(GPU_MACHINE_TYPE)" --count "$(GPU_COUNT)")
 ifneq ($(GPU_CONFIG_MODE),$(GPU))
 $(error Invalid GPU settings; check GPU, GPU_TYPE, GPU_MACHINE_TYPE, and GPU_COUNT)
-endif
-ifneq ($(filter 0 1,$(MODEL_ONLY)),$(MODEL_ONLY))
-$(error MODEL_ONLY must be 0 or 1)
-endif
-ifneq ($(filter 0 1,$(TF_AUTO_APPROVE)),$(TF_AUTO_APPROVE))
-$(error TF_AUTO_APPROVE must be 0 or 1)
 endif
 TF_VAR_region := $(GCP_REGION)
 TF_VAR_zone := $(GCP_ZONE)
@@ -110,7 +109,7 @@ infra-validate: infra-init infra-fmt
 
 infra-plan: infra-validate
 	$(GCP_CONFIG) set-gpu-vars $(GPU_SET_VARS_ARGS)
-	terraform -chdir=$(TF_DIR) plan $(TF_PARALLELISM_FLAG) $(MODEL_ONLY_TARGET_FLAGS)
+	terraform -chdir=$(TF_DIR) plan $(TF_PARALLELISM_FLAG) $(TF_PLAN_FLAGS)
 
 infra-apply: infra-validate
 	@if [ "$(MODEL_ONLY)" = 1 ]; then \
@@ -119,7 +118,7 @@ infra-apply: infra-validate
 	  printf '%s\n' 'Warning: this creates and starts cloud VMs plus disks, NAT, a public IP, and Artifact Registry resources; charges begin while VMs run and retained resources can still incur charges after make stop.'; \
 	fi
 	$(GCP_CONFIG) set-gpu-vars $(GPU_SET_VARS_ARGS)
-	terraform -chdir=$(TF_DIR) apply $(TF_PARALLELISM_FLAG) $(MODEL_ONLY_TARGET_FLAGS) $(TF_AUTO_APPROVE_FLAG)
+	terraform -chdir=$(TF_DIR) apply $(TF_PARALLELISM_FLAG) $(TF_APPLY_FLAGS)
 
 ssh-access:
 	@PROJECT_ID="$$(bash $(GCP_SCRIPTS)/gcp-context.sh project-id)"; \

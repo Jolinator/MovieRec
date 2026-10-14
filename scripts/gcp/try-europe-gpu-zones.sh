@@ -61,10 +61,10 @@ print_errors() {
   local log_file="$1"
   : >"${ERROR_FILE}"
   awk '
-    /^[[:space:]]*╷/ { in_block = 1; block = $0 ORS; next }
+    /^[[:space:]]*\342\225\267/ { in_block = 1; block = $0 ORS; next }
     in_block {
       block = block $0 ORS
-      if (/^[[:space:]]*╵/) {
+      if (/^[[:space:]]*\342\225\265/) {
         if (block ~ /Error:/) printf "%s", block
         in_block = 0
         block = ""
