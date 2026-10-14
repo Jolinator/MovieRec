@@ -100,6 +100,13 @@ Before using the job:
 2. Protect the `production` environment in GitLab so only intended maintainers
    can start the manual deployment.
 
+If you move the app/database VMs to another zone, update the GitLab CI/CD
+variable `GCP_ZONE` to that new app/database zone. The job derives its region
+from `GCP_ZONE`; the model VM can remain in its separate `model_zone`. If the
+Terraform move recreates Artifact Registry in the new region, run the deployment
+job (or build and push images there) so the new regional repository has the
+images before deployment.
+
 The `update_app` job does not initialize Terraform or access Terraform state.
 The Terraform state is local to the Cloud Shell checkout and is not available
 to GitLab. The job derives the region from the configured app/database zone,

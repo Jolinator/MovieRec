@@ -195,11 +195,29 @@ resource "google_compute_firewall" "k3s_kubelet" {
 }
 
 resource "google_artifact_registry_repository" "images" {
-  location      = var.region
-  repository_id = var.name
-  description   = "MovieRec container images"
-  format        = "DOCKER"
-  depends_on    = [google_project_service.required]
+  location                  = var.region
+  repository_id             = var.name
+  description               = "MovieRec container images"
+  format                    = "DOCKER"
+  cleanup_policy_dry_run    = false
+  depends_on                = [google_project_service.required]
+
+  cleanup_policies {
+    id     = "delete-old-versions"
+    action = "DELETE"
+    condition {
+      tag_state  = "ANY"
+      older_than = "1d"
+    }
+  }
+
+  cleanup_policies {
+    id     = "keep-recent-versions"
+    action = "KEEP"
+    most_recent_versions {
+      keep_count = var.artifact_registry_keep_count
+    }
+  }
 }
 
 # K3s on a self-managed VM does not automatically use Artifact Registry's
