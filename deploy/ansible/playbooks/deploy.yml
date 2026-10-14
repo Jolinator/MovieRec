@@ -7,6 +7,7 @@
   vars:
     web_host: "{{ public_host if public_host else public_ip ~ '.nip.io' }}"
     kustomize_dir: "{{ remote_dir }}/k8s/{{ 'overlays/gpu' if gpu_overlay | bool else 'base' }}"
+    gpu_overlay: "{{ (model_gpu_enabled | default(false) | bool) if gpu_mode == 'auto' else gpu_mode == 'on' }}"
   environment:
     KUBECONFIG: "{{ kubeconfig_path }}"
   tasks:

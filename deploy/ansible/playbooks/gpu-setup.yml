@@ -10,7 +10,7 @@
     - name: Require a GPU-enabled model VM
       ansible.builtin.assert:
         that: model_gpu_enabled | bool
-        fail_msg: Set model_gpu_enabled = true when provisioning the model VM, then run make infra-apply first.
+        fail_msg: Run make infra-apply GPU=on with your selected GPU_TYPE before installing the device plugin.
 
     - name: Apply the NVIDIA device plugin
       ansible.builtin.command: "{{ kubectl }} apply -f -"

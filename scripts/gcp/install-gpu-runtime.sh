@@ -19,7 +19,7 @@ done
 MODEL="${RESOURCE_NAME}-model"
 GPU_ENABLED="$(terraform -chdir="${TF_DIR}" output -raw model_gpu_enabled 2>/dev/null || true)"
 if [[ "${GPU_ENABLED}" != "true" ]]; then
-  printf 'Terraform model_gpu_enabled is not true. Run make gpu-enable, review with make infra-plan, then run make infra-apply.\n' >&2
+  printf 'The model VM has no GPU enabled. Run make infra-plan GPU=on GPU_TYPE=nvidia-tesla-t4, review the plan, then run make infra-apply with the same GPU options.\n' >&2
   exit 2
 fi
 
