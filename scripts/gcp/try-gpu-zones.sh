@@ -147,6 +147,7 @@ for candidate in "${candidates[@]}"; do
 
   : >"${LOG_FILE}"
   if make infra-apply MODEL_ONLY=1 TF_AUTO_APPROVE=1 GPU=auto >"${LOG_FILE}" 2>&1; then
+    printf 'Success: GPU VM created in %s with %s\n' "${zone}" "${gpu_type}"
     exit 0
   else
     apply_status=$?
