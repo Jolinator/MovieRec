@@ -51,6 +51,7 @@ spec:
       labels:
         app.kubernetes.io/name: nvidia-device-plugin
     spec:
+      runtimeClassName: nvidia
       nodeSelector:
         movierec.io/role: model
       tolerations:
