@@ -17,6 +17,7 @@ GPU ?= auto
 GPU_TYPE ?= nvidia-tesla-t4
 GPU_MACHINE_TYPE ?=
 GPU_COUNT ?= 1
+GPU_REGION ?= europe
 MODEL_ONLY ?= 0
 TF_AUTO_APPROVE ?= 0
 GPU_SET_VARS_ARGS = --mode "$(GPU)" $(if $(filter on,$(GPU)),--type "$(GPU_TYPE)" --machine-type "$(GPU_MACHINE_TYPE)" --count "$(GPU_COUNT)")
@@ -50,7 +51,7 @@ export TF_PARALLELISM
 
 .PHONY: help cloud-shell-setup infra-config infra-init infra-fmt infra-validate infra-plan infra-apply \
         ssh-access cluster-bootstrap secrets-init secrets-passwords docker-push-limit docker-push-limit-reset build-push \
-        k8s-config models deploy update-app gpu-runtime gpu-setup gpu-capacity-europe start stop destroy benchmark benchmark-stress
+        k8s-config models deploy update-app gpu-runtime gpu-setup gpu-capacity gpu-capacity-europe start stop destroy benchmark benchmark-stress
 
 help:
 	@printf '%s\n' \
@@ -80,7 +81,7 @@ help:
 	  '  Disable: deploy GPU=off first; then infra-plan GPU=off and infra-apply GPU=auto' \
 	  '  make gpu-runtime                  Install NVIDIA drivers/runtime on the model VM after infra-apply GPU=on' \
 	  '  make gpu-setup                    Install the Kubernetes GPU device plugin after gpu-runtime' \
-	  '  make gpu-capacity-europe          Try model-only T4/L4 applies in documented European zones until one succeeds' \
+	  '  make gpu-capacity [GPU_REGION=europe|us]  Try model-only T4/L4 applies in documented zones until one succeeds' \
 	  '' \
 	  'Performance:' \
 	  '  make benchmark                    Run ApacheBench (AB_URL, AB_REQUESTS, AB_CONCURRENCY)' \
@@ -168,8 +169,11 @@ gpu-runtime:
 gpu-setup: ssh-access
 	$(ANSIBLE_PLAY) playbooks/gpu-setup.yml
 
+gpu-capacity:
+	bash $(GCP_SCRIPTS)/try-gpu-zones.sh --region "$(GPU_REGION)"
+
 gpu-capacity-europe:
-	bash $(GCP_SCRIPTS)/try-europe-gpu-zones.sh
+	$(MAKE) gpu-capacity GPU_REGION=europe
 
 benchmark:
 	bash scripts/apachebench.sh
