@@ -90,9 +90,9 @@ Before using the job:
      the variable protected and limit who can change protected variables. This
      job currently uses a service-account key; Workload Identity Federation can
      replace it in a later hardening step.
-   - `GCP_REGION` and `GCP_ZONE` are required. Set them to the app/database
-     region and zone provisioned by Terraform; the deployment job has no
-     location defaults and fails if either value is missing or inconsistent.
+   - `GCP_ZONE` is required. Set it to the app/database zone provisioned by
+     Terraform. The deployment job derives `GCP_REGION` from this zone, so no
+     separate region variable is needed.
    - `MOVIEREC_RESOURCE_NAME`, if it differs from `movierec`.
    - `PUBLIC_HOST`, if the deployment should use a DNS name instead of the
      default IP based `nip.io` hostname.
@@ -101,11 +101,12 @@ Before using the job:
    can start the manual deployment.
 
 The `update_app` job does not initialize Terraform or access Terraform state.
-It builds the Artifact Registry path from the project ID and configuration
-variables, then uses `gcloud` to read the configured VM instances for Ansible.
-GitLab-managed Terraform state is optional and is only needed if you want
-Terraform commands in different environments to share state. Manual Cloud Shell
-Terraform commands can continue using their local state.
+The Terraform state is local to the Cloud Shell checkout and is not available
+to GitLab. The job derives the region from the configured app/database zone,
+builds the Artifact Registry path, then uses `gcloud` to read the configured VM
+instances for Ansible. GitLab-managed Terraform state is optional and is only
+needed if you want Terraform commands in different environments to share state.
+Manual Cloud Shell Terraform commands can continue using their local state.
 
 The `backend_tests` and `apachebench_stress` jobs require a masked GitLab CI/CD
 variable named `TMDB_READ_ACCESS_TOKEN`. It is used only to import the test

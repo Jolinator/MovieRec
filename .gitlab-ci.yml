@@ -144,18 +144,18 @@ update_app:
     - apt-get update
     - apt-get install -y --no-install-recommends ansible make curl
     - |
-      if [ -z "${GCP_REGION:-}" ]; then
-        echo 'Set the GitLab CI/CD variable GCP_REGION to the deployed app/database region.' >&2
-        exit 2
-      fi
       if [ -z "${GCP_ZONE:-}" ]; then
         echo 'Set the GitLab CI/CD variable GCP_ZONE to the deployed app/database zone.' >&2
         exit 2
       fi
       case "$GCP_ZONE" in
-        "$GCP_REGION"-*) ;;
+        *-[a-z])
+          GCP_REGION="${GCP_ZONE%-*}"
+          export GCP_REGION
+          printf 'Derived GCP_REGION=%s from GCP_ZONE=%s\n' "$GCP_REGION" "$GCP_ZONE"
+          ;;
         *)
-          echo "GCP_ZONE=$GCP_ZONE is not in GCP_REGION=$GCP_REGION." >&2
+          echo "GCP_ZONE=$GCP_ZONE is not a valid Google Cloud zone name." >&2
           exit 2
           ;;
       esac
