@@ -63,7 +63,7 @@ help:
 	  '  make infra-plan [GPU=on|off|auto] [GPU_TYPE=nvidia-tesla-t4] [MODEL_ONLY=1] [TF_PARALLELISM=n] Plan resources; default parallelism is 2' \
 	  '  make infra-apply [GPU=on|off|auto] [GPU_TYPE=nvidia-tesla-t4] [MODEL_ONLY=1] [TF_AUTO_APPROVE=1] Apply resources; GPU affects only model VM' \
 	  '  make ssh-machine MACHINE=app|database|model  SSH to a VM over IAP (interactive)' \
-	  '  make cluster-bootstrap             Ansible: join running database/model VMs to the app K3s server' \
+	  '  make cluster-bootstrap             Join worker VMs; automatically set up GPU runtime/plugin when GPU is enabled' \
 	  '  make secrets-init                 Create server.env, fill its project ID, and prepare secrets/keys' \
 	  '  make secrets-passwords            Generate matching random passwords for the three databases' \
 	  '  make docker-push-limit [DOCKER_MAX_CONCURRENT_UPLOADS=n] Limit layers uploaded per image push (requires sudo)' \
@@ -79,7 +79,7 @@ help:
 	  '  T4 is the default trial; L4 is a newer alternative. T4 support ends August 1, 2027; H100 Mega, H200, and B200 defaults use 8 GPUs' \
 	  '  To choose a GPU type, use GPU=on GPU_TYPE=... on infra-plan; GPU=auto keeps the saved choice' \
 	  '  GPU steps, examples, and provisioning caveats: readmes/step_by_step_deploy.md#optional-enable-gpu-generation' \
-	  '  Enable: infra-plan GPU=on GPU_TYPE=...; infra-apply; cluster-bootstrap; gpu-runtime; gpu-setup; deploy GPU=auto' \
+	  '  Enable: infra-plan GPU=on GPU_TYPE=...; infra-apply; cluster-bootstrap; deploy GPU=auto' \
 	  '  Disable: deploy GPU=off first; then infra-plan GPU=off and infra-apply GPU=auto' \
 	  '  make gpu-runtime                  Install NVIDIA drivers/runtime on the model VM after infra-apply GPU=on' \
 	  '  make gpu-setup                    Install the Kubernetes GPU device plugin after gpu-runtime' \
@@ -139,6 +139,7 @@ ssh-machine:
 
 cluster-bootstrap: ssh-access
 	$(ANSIBLE_PLAY) playbooks/cluster.yml
+	bash $(GCP_SCRIPTS)/setup-gpu-if-enabled.sh "$(GPU)"
 
 secrets-init:
 	bash $(GCP_SCRIPTS)/init-secrets.sh

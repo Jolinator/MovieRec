@@ -3,7 +3,6 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
-TF_DIR="${REPO_ROOT}/deploy/gcp/terraform"
 ZONE="${GCP_ZONE:-}"
 RESOURCE_NAME="${MOVIEREC_RESOURCE_NAME:-}"
 
@@ -13,7 +12,7 @@ if [[ -z "${ZONE}" || -z "${RESOURCE_NAME}" ]]; then
 fi
 PROJECT_ID="$(bash "${SCRIPT_DIR}/gcp-context.sh" project-id)"
 
-for command in gcloud terraform; do
+for command in gcloud python3; do
   command -v "${command}" >/dev/null 2>&1 || { printf 'Required command not found: %s\n' "${command}" >&2; exit 1; }
 done
 MODEL="${RESOURCE_NAME}-model"
@@ -29,9 +28,10 @@ if [[ "${#MODEL_ZONES[@]}" -ne 1 ]]; then
   exit 2
 fi
 MODEL_ZONE="${MODEL_ZONES[0]}"
-GPU_ENABLED="$(terraform -chdir="${TF_DIR}" output -raw model_gpu_enabled 2>/dev/null || true)"
+inventory_json="$(python3 "${REPO_ROOT}/deploy/ansible/inventory.py" --list)"
+GPU_ENABLED="$(printf '%s\n' "${inventory_json}" | python3 -c 'import json, sys; print("true" if json.load(sys.stdin)["all"]["vars"]["model_gpu_enabled"] else "false")')"
 if [[ "${GPU_ENABLED}" != "true" ]]; then
-  printf 'The model VM has no GPU enabled. Run make infra-plan GPU=on GPU_TYPE=nvidia-tesla-t4, review the plan, then run make infra-apply with the same GPU options.\n' >&2
+  printf 'The model VM metadata reports GPU disabled. Enable GPU hardware before installing the NVIDIA runtime.\n' >&2
   exit 2
 fi
 
@@ -39,6 +39,13 @@ printf 'Installing NVIDIA drivers and the container toolkit on %s. A reboot may 
 gcloud compute ssh "${MODEL}" --project="${PROJECT_ID}" --zone="${MODEL_ZONE}" --tunnel-through-iap --quiet --command='sudo bash -s' <<'REMOTE'
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
+GPU_RUNTIME_MARKER=/var/lib/rancher/k3s/agent/.movierec-gpu-runtime-ready
+if [[ -f "${GPU_RUNTIME_MARKER}" ]] && command -v nvidia-smi >/dev/null 2>&1 && \
+  nvidia-smi >/dev/null 2>&1 && command -v nvidia-ctk >/dev/null 2>&1; then
+  echo 'NVIDIA drivers and container toolkit are already ready.'
+  exit 0
+fi
+
 apt-get update
 apt-get install -y ca-certificates curl gnupg ubuntu-drivers-common
 ubuntu-drivers install
@@ -58,12 +65,13 @@ fi
 if systemctl list-unit-files k3s-agent.service 2>/dev/null | grep -q '^k3s-agent.service'; then
   systemctl restart k3s-agent
 else
-  echo 'K3s is not installed yet; run make cluster-bootstrap, then rerun make gpu-runtime.'
+  echo 'K3s agent is not installed; run make cluster-bootstrap before GPU setup.' >&2
+  exit 1
 fi
 
-if command -v nvidia-smi >/dev/null 2>&1; then
-  nvidia-smi || echo 'nvidia-smi could not load the driver yet; reboot this VM and rerun make gpu-runtime.'
-else
-  echo 'Reboot the model VM to load the NVIDIA driver, then rerun make gpu-runtime.'
+if ! command -v nvidia-smi >/dev/null 2>&1 || ! nvidia-smi; then
+  echo 'NVIDIA driver is not ready. Reboot the model VM, then rerun make cluster-bootstrap.' >&2
+  exit 1
 fi
+touch "${GPU_RUNTIME_MARKER}"
 REMOTE
