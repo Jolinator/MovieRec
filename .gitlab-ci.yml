@@ -1,7 +1,6 @@
 stages:
   - validate
   - test
-  - build
   - deploy
 
 workflow:
@@ -101,7 +100,7 @@ apachebench_stress:
     - ./ci-cd/run-apachebench-stress.sh
 
 docker_images:
-  stage: build
+  stage: validate
   image: docker:27.5.1-cli
   services:
     - name: docker:27.5.1-dind

@@ -1,7 +1,7 @@
 # GitLab CI/CD
 
-The pipeline validates and tests changes, then builds images. A separate manual
-job can deploy the app from `master`:
+The pipeline runs source validation and Docker image builds in parallel, then
+tests changes. A separate manual job can deploy the app from `master`:
 
 - `backend_validation` checks Go formatting and runs `go vet`.
 - `frontend_validation` installs the locked npm dependencies and runs the production build.
@@ -16,9 +16,10 @@ job can deploy the app from `master`:
 - `apachebench_stress` is a separate Docker-in-Docker job that starts a fresh
   gateway, backend-service, and database stack, waits for it to become ready,
   then runs the ApacheBench stress profiles.
-- `docker_images` builds one image per backend service (`gateway`, `auth`,
-  `movies`, `recommendations`, all from `backend/Dockerfile` with a `SERVICE`
-  build argument) and the frontend image, tagged with the commit SHA.
+- `docker_images` runs alongside validation and builds images for the backend
+  services (`gateway`, `auth`, `movies`, and `recommendations`) from
+  `backend/Dockerfile` with a `SERVICE` build argument, plus the frontend image.
+  All images are tagged with the commit SHA.
 - `update_app` runs `make update-app` to rebuild those images for Google Artifact
   Registry and deploy them to the GCP cluster.
 
@@ -71,8 +72,8 @@ Registry as part of `make update-app`.
 
 ## Deploying the app to GCP
 
-The `update_app` job is a manual deployment from `master`. After the validation,
-test, and image-build stages pass, it runs
+The `update_app` job is a manual deployment from `master`. After the validation
+and test stages pass, it runs
 `make update-app IMAGE_TAG=$CI_COMMIT_SHA`. It builds and pushes the images to
 Google Artifact Registry, then uses Ansible over IAP SSH to deploy them with the
 normal CPU Kubernetes overlay and wait for rollouts. It does not use the CUDA
