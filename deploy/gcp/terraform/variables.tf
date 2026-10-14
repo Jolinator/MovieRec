@@ -100,8 +100,8 @@ variable "model_gpu_count" {
   default     = 1
 
   validation {
-    condition     = var.model_gpu_count >= 1 && var.model_gpu_count <= 4 && floor(var.model_gpu_count) == var.model_gpu_count
-    error_message = "model_gpu_count must be a whole number from 1 to 4."
+    condition     = contains([1, 2, 4], var.model_gpu_count)
+    error_message = "model_gpu_count must be 1, 2, or 4."
   }
 }
 

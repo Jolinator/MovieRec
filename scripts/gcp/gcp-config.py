@@ -235,8 +235,8 @@ def validate_gpu_options(mode: str, gpu_type: str, machine_type: str, count: int
     if base_type not in GPU_TYPE_MACHINE_PREFIXES:
         supported = ", ".join(sorted(GPU_TYPE_MACHINE_PREFIXES))
         raise ValueError(f"Unsupported GPU_TYPE '{gpu_type}'. Choose one of: {supported}")
-    if count < 1 or count > 4:
-        raise ValueError("GPU_COUNT must be a whole number from 1 to 4")
+    if count not in {1, 2, 4}:
+        raise ValueError("GPU_COUNT must be 1, 2, or 4")
     if base_type != "nvidia-tesla-t4" and count != 1:
         raise ValueError("GPU_COUNT applies only to N1-attached T4 GPUs; other types get their count from GPU_MACHINE_TYPE")
 

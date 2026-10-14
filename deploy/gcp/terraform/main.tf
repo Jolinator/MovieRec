@@ -75,7 +75,12 @@ locals {
   model_machine_type = var.model_gpu_enabled ? local.model_gpu_machine_type : (
     var.machine_type != null ? var.machine_type : local.model_cpu_machine_type
   )
-  model_gpu_uses_guest_accelerator = local.model_gpu_base_type == "nvidia-tesla-t4"
+  model_gpu_uses_guest_accelerator = local.model_gpu_base_type == "nvidia-tesla-t4" || (
+    endswith(var.model_gpu_type, "-vws") && contains(
+      ["nvidia-l4", "nvidia-rtx-pro-6000"],
+      local.model_gpu_base_type,
+    )
+  )
 }
 
 resource "google_compute_router" "movierec" {

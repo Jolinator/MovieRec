@@ -59,11 +59,13 @@ help:
 	  '  make models                       Ansible: download and verify the model files on the model VM' \
 	  '  make deploy IMAGE_TAG=tag [GPU=on|off|auto] Apply manifests and wait for rollouts' \
 	  '  make update-app IMAGE_TAG=tag [GPU=on|off|auto] Build/push images, then deploy that tag' \
-	  '  GPU_TYPE options: nvidia-tesla-t4 (default), nvidia-l4, nvidia-rtx-pro-6000, nvidia-h100-80gb, nvidia-h100-mega-80gb, nvidia-h200-141gb, nvidia-b200; append -vws for supported workstation variants' \
-	  '  GPU_MACHINE_TYPE overrides the selected GPU type default; for N1+T4, GPU_COUNT selects 1-4 GPUs' \
-	  '  T4 and L4 are lower-cost options; T4 support ends August 1, 2027. H100 Mega, H200, and B200 defaults use 8-GPU machines' \
+	  '  GPU_TYPE options: nvidia-tesla-t4 (default), nvidia-tesla-t4-vws, nvidia-l4, nvidia-l4-vws, nvidia-rtx-pro-6000, nvidia-rtx-pro-6000-vws' \
+	  '                   nvidia-h100-80gb, nvidia-h100-mega-80gb, nvidia-h200-141gb, nvidia-b200' \
+	  '  GPU_MACHINE_TYPE overrides the selected GPU type default; for N1+T4, GPU_COUNT selects 1, 2, or 4 GPUs' \
+	  '  T4 is the default trial; L4 is a newer alternative. T4 support ends August 1, 2027; H100 Mega, H200, and B200 defaults use 8 GPUs' \
 	  '  Explicit GPU=on/off on infra-plan or infra-apply is saved in terraform.tfvars; GPU=auto keeps that saved choice' \
-	  '  Enable: infra-plan GPU=on GPU_TYPE=...; infra-apply; gpu-runtime; gpu-setup; deploy GPU=auto' \
+	  '  GPU steps, examples, and provisioning caveats: readmes/step_by_step_deploy.md#optional-enable-gpu-generation' \
+	  '  Enable: infra-plan GPU=on GPU_TYPE=...; infra-apply; cluster-bootstrap; gpu-runtime; gpu-setup; deploy GPU=auto' \
 	  '  Disable: deploy GPU=off first; then infra-plan GPU=off and infra-apply GPU=auto' \
 	  '  make gpu-runtime                  Install NVIDIA drivers/runtime on the model VM after infra-apply GPU=on' \
 	  '  make gpu-setup                    Install the Kubernetes GPU device plugin after gpu-runtime' \
