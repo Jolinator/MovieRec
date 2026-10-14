@@ -18,14 +18,19 @@ GPU_TYPE ?= nvidia-tesla-t4
 GPU_MACHINE_TYPE ?=
 GPU_COUNT ?= 1
 MODEL_ONLY ?= 0
+TF_AUTO_APPROVE ?= 0
 GPU_SET_VARS_ARGS = --mode "$(GPU)" $(if $(filter on,$(GPU)),--type "$(GPU_TYPE)" --machine-type "$(GPU_MACHINE_TYPE)" --count "$(GPU_COUNT)")
 MODEL_ONLY_TARGET_FLAGS = $(if $(filter 1,$(MODEL_ONLY)),-target=google_compute_instance.model -target=google_compute_firewall.k3s_api -target=google_compute_firewall.k3s_flannel -target=google_compute_firewall.k3s_kubelet,)
+TF_AUTO_APPROVE_FLAG = $(if $(filter 1,$(TF_AUTO_APPROVE)),-auto-approve,)
 GPU_CONFIG_MODE := $(shell $(GCP_CONFIG) gpu-mode --mode "$(GPU)" --type "$(GPU_TYPE)" --machine-type "$(GPU_MACHINE_TYPE)" --count "$(GPU_COUNT)")
 ifneq ($(GPU_CONFIG_MODE),$(GPU))
 $(error Invalid GPU settings; check GPU, GPU_TYPE, GPU_MACHINE_TYPE, and GPU_COUNT)
 endif
 ifneq ($(filter 0 1,$(MODEL_ONLY)),$(MODEL_ONLY))
 $(error MODEL_ONLY must be 0 or 1)
+endif
+ifneq ($(filter 0 1,$(TF_AUTO_APPROVE)),$(TF_AUTO_APPROVE))
+$(error TF_AUTO_APPROVE must be 0 or 1)
 endif
 TF_VAR_region := $(GCP_REGION)
 TF_VAR_zone := $(GCP_ZONE)
@@ -55,7 +60,7 @@ help:
 	  '  make infra-config                Set project_id from gcloud; use Terraform locations, falling back to GCP_REGION/GCP_ZONE' \
 	  '  make infra-init                   Initialize Terraform (local state in Cloud Shell)' \
 	  '  make infra-plan [GPU=on|off|auto] [GPU_TYPE=nvidia-tesla-t4] [MODEL_ONLY=1] [TF_PARALLELISM=n] Plan resources; default parallelism is 2' \
-	  '  make infra-apply [GPU=on|off|auto] [GPU_TYPE=nvidia-tesla-t4] [MODEL_ONLY=1] [TF_PARALLELISM=n] Apply resources; GPU affects only model VM' \
+	  '  make infra-apply [GPU=on|off|auto] [GPU_TYPE=nvidia-tesla-t4] [MODEL_ONLY=1] [TF_AUTO_APPROVE=1] Apply resources; GPU affects only model VM' \
 	  '  make cluster-bootstrap             Ansible: join running database/model VMs to the app K3s server' \
 	  '  make secrets-init                 Create server.env, fill its project ID, and prepare secrets/keys' \
 	  '  make secrets-passwords            Generate matching random passwords for the three databases' \
@@ -114,7 +119,7 @@ infra-apply: infra-validate
 	  printf '%s\n' 'Warning: this creates and starts cloud VMs plus disks, NAT, a public IP, and Artifact Registry resources; charges begin while VMs run and retained resources can still incur charges after make stop.'; \
 	fi
 	$(GCP_CONFIG) set-gpu-vars $(GPU_SET_VARS_ARGS)
-	terraform -chdir=$(TF_DIR) apply $(TF_PARALLELISM_FLAG) $(MODEL_ONLY_TARGET_FLAGS)
+	terraform -chdir=$(TF_DIR) apply $(TF_PARALLELISM_FLAG) $(MODEL_ONLY_TARGET_FLAGS) $(TF_AUTO_APPROVE_FLAG)
 
 ssh-access:
 	@PROJECT_ID="$$(bash $(GCP_SCRIPTS)/gcp-context.sh project-id)"; \
