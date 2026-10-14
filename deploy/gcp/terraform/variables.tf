@@ -34,6 +34,17 @@ variable "public_registry" {
   default     = false
 }
 
+variable "artifact_registry_keep_count" {
+  description = "Number of recent versions to retain for each Artifact Registry image package."
+  type        = number
+  default     = 10
+
+  validation {
+    condition     = var.artifact_registry_keep_count >= 1 && floor(var.artifact_registry_keep_count) == var.artifact_registry_keep_count
+    error_message = "artifact_registry_keep_count must be a positive integer."
+  }
+}
+
 variable "machine_type" {
   description = "Deprecated compatibility setting: use the role-specific machine type variables."
   type        = string
