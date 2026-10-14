@@ -144,10 +144,12 @@ update_app:
     - apt-get update
     - apt-get install -y --no-install-recommends ansible make curl
     - |
-      if [ -z "${GCP_ZONE:-}" ]; then
+      GCP_ZONE="$(printf '%s' "${GCP_ZONE:-}" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+      if [ -z "$GCP_ZONE" ]; then
         echo 'Set the GitLab CI/CD variable GCP_ZONE to the deployed app/database zone.' >&2
         exit 2
       fi
+      export GCP_ZONE
       case "$GCP_ZONE" in
         *-[a-z])
           GCP_REGION="${GCP_ZONE%-*}"
