@@ -120,7 +120,7 @@ def resolve(
             process_env.get("GCP_REGION"),
             file_env.get("TF_VAR_region"),
             process_env.get("TF_VAR_region"),
-            "europe-west1",
+            "europe-west4",
         )
 
     if name in ("GCP_ZONE", "TF_VAR_zone"):
@@ -130,7 +130,7 @@ def resolve(
             process_env.get("GCP_ZONE"),
             file_env.get("TF_VAR_zone"),
             process_env.get("TF_VAR_zone"),
-            "europe-west1-b",
+            "europe-west4-b",
         )
 
     if name == "TF_VAR_project_id":

@@ -91,7 +91,7 @@ Before using the job:
      job currently uses a service-account key; Workload Identity Federation can
      replace it in a later hardening step.
    - `GCP_REGION`, `GCP_ZONE`, and `MOVIEREC_RESOURCE_NAME`, if they differ from
-     the defaults `europe-west1`, `europe-west1-b`, and `movierec`. These values
+     the defaults `europe-west4`, `europe-west4-b`, and `movierec`. These values
      must match the infrastructure provisioned by Terraform.
    - `PUBLIC_HOST`, if the deployment should use a DNS name instead of the
      default IP based `nip.io` hostname.

@@ -10,7 +10,7 @@ ifeq ($(strip $(GCP_CONFIG_ENV)),)
 $(error Failed to load GCP settings with $(GCP_CONFIG))
 endif
 $(foreach setting,$(GCP_CONFIG_ENV),$(eval $(subst =,:=,$(setting))))
-TF_PARALLELISM ?=
+TF_PARALLELISM ?= 2
 TF_PARALLELISM_FLAG = $(if $(strip $(TF_PARALLELISM)),-parallelism=$(TF_PARALLELISM),)
 DOCKER_MAX_CONCURRENT_UPLOADS ?= 1
 GPU ?= auto
@@ -36,6 +36,7 @@ export TF_VAR_project_id
 endif
 export TF_VAR_region TF_VAR_zone TF_VAR_name
 export GCP_PROJECT_ID GCP_REGION GCP_ZONE MOVIEREC_RESOURCE_NAME
+export TF_PARALLELISM
 
 .PHONY: help cloud-shell-setup infra-config infra-init infra-fmt infra-validate infra-plan infra-apply \
         ssh-access cluster-bootstrap secrets-init secrets-passwords docker-push-limit docker-push-limit-reset build-push \
@@ -44,11 +45,11 @@ export GCP_PROJECT_ID GCP_REGION GCP_ZONE MOVIEREC_RESOURCE_NAME
 help:
 	@printf '%s\n' \
 	  'Cloud workflow:' \
-	  '  make cloud-shell-setup            Install Cloud Shell tools and optional IAP NumPy optimization' \
+	  '  make cloud-shell-setup            Install tools, limit Docker uploads to 2, and enable optional IAP NumPy optimization' \
 	  '  make infra-config                Set project_id from gcloud; use Terraform locations, falling back to GCP_REGION/GCP_ZONE' \
 	  '  make infra-init                   Initialize Terraform (local state in Cloud Shell)' \
-	  '  make infra-plan [GPU=on|off|auto] [GPU_TYPE=nvidia-tesla-t4] [TF_PARALLELISM=n] Plan resources; GPU affects only model VM' \
-	  '  make infra-apply [GPU=on|off|auto] [GPU_TYPE=nvidia-tesla-t4] [TF_PARALLELISM=n] Apply resources' \
+	  '  make infra-plan [GPU=on|off|auto] [GPU_TYPE=nvidia-tesla-t4] [TF_PARALLELISM=n] Plan resources; default parallelism is 2' \
+	  '  make infra-apply [GPU=on|off|auto] [GPU_TYPE=nvidia-tesla-t4] [TF_PARALLELISM=n] Apply resources; GPU affects only model VM' \
 	  '  make cluster-bootstrap             Ansible: join running database/model VMs to the app K3s server' \
 	  '  make secrets-init                 Create server.env, fill its project ID, and prepare secrets/keys' \
 	  '  make secrets-passwords            Generate matching random passwords for the three databases' \
@@ -81,6 +82,7 @@ help:
 
 cloud-shell-setup:
 	bash $(GCP_SCRIPTS)/setup-cloud-shell.sh
+	$(MAKE) docker-push-limit DOCKER_MAX_CONCURRENT_UPLOADS=2
 
 infra-config:
 	bash $(GCP_SCRIPTS)/configure-terraform.sh
