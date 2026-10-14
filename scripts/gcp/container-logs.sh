@@ -2,8 +2,6 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
-TF_DIR="${REPO_ROOT}/deploy/gcp/terraform"
 
 usage() {
   printf 'Usage: %s WORKLOAD_OR_RESOURCE [--container NAME] [--namespace NAME] [--tail LINES] [--follow]\n' "${0##*/}"
@@ -78,16 +76,6 @@ if [[ ! "${tail_lines}" =~ ^[0-9]+$ ]]; then
   exit 2
 fi
 
-for command in terraform gcloud; do
-  if ! command -v "${command}" >/dev/null 2>&1; then
-    printf 'Required command not found: %s\n' "${command}" >&2
-    exit 2
-  fi
-done
-
-app_instance="$(terraform -chdir="${TF_DIR}" output -raw app_instance_name)"
-app_zone="$(terraform -chdir="${TF_DIR}" output -raw zone)"
-
 remote_command="sudo k3s kubectl --namespace=${namespace} logs ${resource} --tail=${tail_lines}"
 if [[ -n "${container}" ]]; then
   remote_command+=" --container=${container}"
@@ -98,8 +86,4 @@ if [[ "${follow}" == "true" ]]; then
   remote_command+=" --follow"
 fi
 
-exec gcloud compute ssh "${app_instance}" \
-  --zone="${app_zone}" \
-  --tunnel-through-iap \
-  --quiet \
-  --command="${remote_command}"
+exec bash "${SCRIPT_DIR}/ssh-machine.sh" app --command "${remote_command}"
