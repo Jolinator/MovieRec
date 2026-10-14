@@ -50,7 +50,7 @@ export GCP_PROJECT_ID GCP_REGION GCP_ZONE MOVIEREC_RESOURCE_NAME
 export TF_PARALLELISM
 
 .PHONY: help cloud-shell-setup infra-config infra-init infra-fmt infra-validate infra-plan infra-apply \
-        ssh-access cluster-bootstrap secrets-init secrets-passwords set-region docker-push-limit docker-push-limit-reset build-push \
+        ssh-access ssh-machine cluster-bootstrap secrets-init secrets-passwords set-region docker-push-limit docker-push-limit-reset build-push \
         k8s-config models deploy update-app gpu-runtime gpu-setup gpu-capacity gpu-capacity-europe container-logs start stop destroy benchmark benchmark-stress
 
 help:
@@ -62,6 +62,7 @@ help:
 	  '  make infra-init                   Initialize Terraform (local state in Cloud Shell)' \
 	  '  make infra-plan [GPU=on|off|auto] [GPU_TYPE=nvidia-tesla-t4] [MODEL_ONLY=1] [TF_PARALLELISM=n] Plan resources; default parallelism is 2' \
 	  '  make infra-apply [GPU=on|off|auto] [GPU_TYPE=nvidia-tesla-t4] [MODEL_ONLY=1] [TF_AUTO_APPROVE=1] Apply resources; GPU affects only model VM' \
+	  '  make ssh-machine MACHINE=app|database|model  SSH to a VM over IAP (interactive)' \
 	  '  make cluster-bootstrap             Ansible: join running database/model VMs to the app K3s server' \
 	  '  make secrets-init                 Create server.env, fill its project ID, and prepare secrets/keys' \
 	  '  make secrets-passwords            Generate matching random passwords for the three databases' \
@@ -131,6 +132,10 @@ ssh-access:
 	  printf '%s\n' 'Set the GCP project, zone, and MovieRec resource name before connecting.' >&2; exit 2; \
 	fi; \
 	gcloud compute ssh "$$APP_INSTANCE" --project="$$PROJECT_ID" --zone="$$ZONE" --tunnel-through-iap --quiet --command=true
+
+ssh-machine:
+	@test -n "$(MACHINE)" || { printf '%s\n' 'Set MACHINE to app, database, or model.'; exit 2; }
+	bash $(GCP_SCRIPTS)/ssh-machine.sh "$(MACHINE)"
 
 cluster-bootstrap: ssh-access
 	$(ANSIBLE_PLAY) playbooks/cluster.yml
