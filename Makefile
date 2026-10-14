@@ -51,7 +51,7 @@ export TF_PARALLELISM
 
 .PHONY: help cloud-shell-setup infra-config infra-init infra-fmt infra-validate infra-plan infra-apply \
         ssh-access cluster-bootstrap secrets-init secrets-passwords set-region docker-push-limit docker-push-limit-reset build-push \
-        k8s-config models deploy update-app gpu-runtime gpu-setup gpu-capacity gpu-capacity-europe start stop destroy benchmark benchmark-stress
+        k8s-config models deploy update-app gpu-runtime gpu-setup gpu-capacity gpu-capacity-europe container-logs start stop destroy benchmark benchmark-stress
 
 help:
 	@printf '%s\n' \
@@ -83,6 +83,7 @@ help:
 	  '  make gpu-runtime                  Install NVIDIA drivers/runtime on the model VM after infra-apply GPU=on' \
 	  '  make gpu-setup                    Install the Kubernetes GPU device plugin after gpu-runtime' \
 	  '  make gpu-capacity [GPU_REGION=europe|us]  Try model-only T4/L4 applies in documented zones until one succeeds' \
+	  '  make container-logs WORKLOAD=name [CONTAINER=name] [NAMESPACE=movierec] [FOLLOW=1]  Read Kubernetes logs through the app VM' \
 	  '' \
 	  'Performance:' \
 	  '  make benchmark                    Run ApacheBench (AB_URL, AB_REQUESTS, AB_CONCURRENCY)' \
@@ -178,6 +179,14 @@ gpu-capacity:
 
 gpu-capacity-europe:
 	$(MAKE) gpu-capacity GPU_REGION=europe
+
+container-logs:
+	@test -n "$(WORKLOAD)" || { printf '%s\n' 'Set WORKLOAD, for example: make container-logs WORKLOAD=llama-generation'; exit 2; }
+	bash $(GCP_SCRIPTS)/container-logs.sh "$(WORKLOAD)" \
+	  $(if $(strip $(CONTAINER)),--container "$(CONTAINER)",) \
+	  $(if $(strip $(NAMESPACE)),--namespace "$(NAMESPACE)",) \
+	  $(if $(strip $(TAIL_LINES)),--tail "$(TAIL_LINES)",) \
+	  $(if $(filter 1 true yes,$(FOLLOW)),--follow,)
 
 benchmark:
 	bash scripts/apachebench.sh
