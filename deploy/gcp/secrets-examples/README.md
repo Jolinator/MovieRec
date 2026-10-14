@@ -1,6 +1,6 @@
 # Secret examples
 
-This directory contains text environment templates. `make secrets-init` copies `server.env.example` to `deploy/gcp/secrets/server.env` and fills `TF_VAR_project_id` from the active `gcloud` project. Key and certificate files are generated locally and should not be committed or stored as example credentials.
+This directory contains text environment templates. `make secrets-init` copies `server.env.example` to `deploy/gcp/secrets/server.env` and fills `TF_VAR_project_id` from the active `gcloud` project. The example sets the default region and zone to `europe-west4` and `europe-west4-b`. If `server.env` already exists, `secrets-init` preserves its region and zone; update them explicitly when moving an existing deployment. Key and certificate files are generated locally and should not be committed or stored as example credentials.
 
 `make secrets-init` creates or reuses these files under the ignored `deploy/gcp/secrets/` directory:
 

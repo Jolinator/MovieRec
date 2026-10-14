@@ -1,6 +1,10 @@
 project_id           = "your-project-id"
+region               = "europe-west4"
+zone                 = "europe-west4-b"
+model_zone           = null
 public_registry      = true
 app_machine_type     = "e2-standard-2"
 database_machine_type = "e2-standard-2"
-model_machine_type   = "e2-standard-2"
-model_gpu_enabled    = false
+model_cpu_machine_type = "e2-standard-2"
+model_gpu_enabled      = false
+model_gpu_type         = "nvidia-tesla-t4"

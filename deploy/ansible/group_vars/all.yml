@@ -13,4 +13,5 @@ remote_dir: /opt/movierec
 image_tag: ""
 public_host: ""
 gpu_overlay: false
+gpu_mode: auto
 gpu_llama_image: ghcr.io/ggml-org/llama.cpp:server-cuda-v0.4.1
