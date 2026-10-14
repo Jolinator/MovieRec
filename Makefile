@@ -1,19 +1,24 @@
 SHELL := /usr/bin/env bash
 .SHELLFLAGS := -eu -o pipefail -c
 
--include deploy/gcp/secrets/.env
+SERVER_ENV := deploy/gcp/secrets/server.env
+ifeq ($(wildcard $(SERVER_ENV)),)
+SERVER_ENV := deploy/gcp/secrets/.env
+endif
+-include $(SERVER_ENV)
 
 TF_DIR := deploy/gcp/terraform
 TF_PARALLELISM ?=
 TF_PARALLELISM_FLAG = $(if $(strip $(TF_PARALLELISM)),-parallelism=$(TF_PARALLELISM),)
+TF_LOCATION_ARGS = -var=region="$(GCP_REGION)" -var=zone="$(GCP_ZONE)"
 DOCKER_MAX_CONCURRENT_UPLOADS ?= 1
 GCP_SCRIPTS := scripts/gcp
 GCP_PROJECT_ID ?= $(TF_VAR_project_id)
-GCP_REGION ?= europe-west1
-GCP_ZONE ?= europe-west1-b
+GCP_REGION ?= $(if $(strip $(TF_VAR_region)),$(TF_VAR_region),europe-west1)
+GCP_ZONE ?= $(if $(strip $(TF_VAR_zone)),$(TF_VAR_zone),europe-west1-b)
 MOVIEREC_RESOURCE_NAME ?= movierec
-TF_VAR_region ?= $(GCP_REGION)
-TF_VAR_zone ?= $(GCP_ZONE)
+TF_VAR_region := $(GCP_REGION)
+TF_VAR_zone := $(GCP_ZONE)
 TF_VAR_name ?= $(MOVIEREC_RESOURCE_NAME)
 IMAGE_TAG ?=
 PUBLIC_HOST ?=
@@ -37,12 +42,12 @@ help:
 	@printf '%s\n' \
 	  'Cloud workflow:' \
 	  '  make cloud-shell-setup            Install Cloud Shell tools and optional IAP NumPy optimization' \
-	  '  make infra-config                Set project_id from gcloud; run before plan/apply' \
+	  '  make infra-config                Set project_id from gcloud and locations from GCP_REGION/GCP_ZONE' \
 	  '  make infra-init                   Initialize Terraform (local state in Cloud Shell)' \
 	  '  make infra-plan [TF_PARALLELISM=n] Validate/review plan (default: Terraform, 10 operations)' \
 	  '  make infra-apply [TF_PARALLELISM=n] Create/start resources (default: Terraform, 10 operations)' \
 	  '  make cluster-bootstrap             Ansible: join running database/model VMs to the app K3s server' \
-	  '  make secrets-init                 Prepare ignored cloud secret files and cryptographic keys' \
+	  '  make secrets-init                 Create server.env, fill its project ID, and prepare secrets/keys' \
 	  '  make secrets-passwords            Generate matching random passwords for the three databases' \
 	  '  make docker-push-limit [DOCKER_MAX_CONCURRENT_UPLOADS=n] Limit layers uploaded per image push (requires sudo)' \
 	  '  make docker-push-limit-reset      Remove the Docker upload limit and restore its default (requires sudo)' \
@@ -61,8 +66,8 @@ help:
 	  'Performance:' \
 	  '  make benchmark                    Run ApacheBench (AB_URL, AB_REQUESTS, AB_CONCURRENCY)' \
 	  '  make benchmark-stress             Run health, movies, large-page, and genres stress profiles' \
-	  '  make start                        Start all three existing VMs' \
-	  '  make stop                         Stop VMs; disks/IP/registry remain' \
+	  '  make start                        Start existing VMs directly via gcloud (no Terraform state needed)' \
+	  '  make stop                         Stop VMs directly via gcloud; disks/IP/registry remain' \
 	  '  make destroy CONFIRM_DESTROY=1 [TF_PARALLELISM=n] Destroy Terraform resources and attached disks' \
 	  '' \
 	  'Ansible targets run kubectl on the app VM over IAP SSH; no local kubeconfig or tunnel is needed.'
@@ -83,11 +88,11 @@ infra-validate: infra-init infra-fmt
 	terraform -chdir=$(TF_DIR) validate
 
 infra-plan: infra-validate
-	terraform -chdir=$(TF_DIR) plan $(TF_PARALLELISM_FLAG)
+	terraform -chdir=$(TF_DIR) plan $(TF_LOCATION_ARGS) $(TF_PARALLELISM_FLAG)
 
 infra-apply: infra-validate
 	@printf '%s\n' 'Warning: this creates and starts three cloud VMs plus disks, NAT, a public IP, and Artifact Registry resources; charges begin while VMs run and retained resources can still incur charges after make stop.'
-	terraform -chdir=$(TF_DIR) apply $(TF_PARALLELISM_FLAG)
+	terraform -chdir=$(TF_DIR) apply $(TF_LOCATION_ARGS) $(TF_PARALLELISM_FLAG)
 
 ssh-access:
 	@PROJECT_ID="$(GCP_PROJECT_ID)"; \
@@ -136,11 +141,11 @@ gpu-enable:
 	bash $(GCP_SCRIPTS)/enable-gpu.sh "$(GPU_MACHINE_TYPE)"
 
 gpu-infra-plan: infra-validate
-	terraform -chdir=$(TF_DIR) plan -replace=google_compute_instance.model $(TF_PARALLELISM_FLAG)
+	terraform -chdir=$(TF_DIR) plan -replace=google_compute_instance.model $(TF_LOCATION_ARGS) $(TF_PARALLELISM_FLAG)
 
 gpu-infra-apply: infra-validate
 	@printf '%s\n' 'This replaces the model VM to apply its GPU machine type and scheduling policy. The separate model data disk is retained.'
-	terraform -chdir=$(TF_DIR) apply -replace=google_compute_instance.model $(TF_PARALLELISM_FLAG)
+	terraform -chdir=$(TF_DIR) apply -replace=google_compute_instance.model $(TF_LOCATION_ARGS) $(TF_PARALLELISM_FLAG)
 
 gpu-runtime:
 	bash $(GCP_SCRIPTS)/install-gpu-runtime.sh
@@ -159,35 +164,47 @@ benchmark-stress:
 	bash scripts/apachebench-stress.sh
 
 start:
-	ZONE="$$(terraform -chdir=$(TF_DIR) output -raw zone)"; \
+	PROJECT_ID="$(GCP_PROJECT_ID)"; \
+	if [[ -z "$$PROJECT_ID" ]]; then PROJECT_ID="$$(gcloud config get-value project 2>/dev/null)"; fi; \
+	ZONE="$(GCP_ZONE)"; \
+	if [[ -z "$$PROJECT_ID" || "$$PROJECT_ID" == '(unset)' || -z "$$ZONE" || -z "$(MOVIEREC_RESOURCE_NAME)" ]]; then \
+	  printf '%s\n' 'Set the GCP project, zone, and MovieRec resource name before starting VMs.' >&2; exit 2; \
+	fi; \
 	STATUS=0; \
-	for INSTANCE in "$$(terraform -chdir=$(TF_DIR) output -raw app_instance_name)" "$$(terraform -chdir=$(TF_DIR) output -raw database_instance_name)" "$$(terraform -chdir=$(TF_DIR) output -raw model_instance_name)"; do \
-	  if ! INSTANCE_STATUS="$$(gcloud compute instances describe "$$INSTANCE" --zone="$$ZONE" --format='value(status)' 2>/dev/null)"; then \
+	for ROLE in app database model; do \
+	  INSTANCE="$(MOVIEREC_RESOURCE_NAME)-$$ROLE"; \
+	  if ! INSTANCE_STATUS="$$(gcloud compute instances describe "$$INSTANCE" --project="$$PROJECT_ID" --zone="$$ZONE" --format='value(status)' 2>/dev/null)"; then \
 	    printf '%s\n' "Could not read status for $$INSTANCE" >&2; STATUS=1; continue; \
 	  fi; \
 	  if [[ "$$INSTANCE_STATUS" == RUNNING || "$$INSTANCE_STATUS" == PROVISIONING || "$$INSTANCE_STATUS" == STAGING ]]; then \
 	    printf '%s\n' "$$INSTANCE already running (status: $$INSTANCE_STATUS)"; continue; \
 	  fi; \
-	  if ! gcloud compute instances start "$$INSTANCE" --zone="$$ZONE"; then \
+	  if ! gcloud compute instances start "$$INSTANCE" --project="$$PROJECT_ID" --zone="$$ZONE"; then \
 	    printf '%s\n' "Failed to start $$INSTANCE" >&2; STATUS=1; continue; \
 	  fi; \
-	  if ! gcloud compute instances describe "$$INSTANCE" --zone="$$ZONE" --format='value(status)'; then \
+	  if ! gcloud compute instances describe "$$INSTANCE" --project="$$PROJECT_ID" --zone="$$ZONE" --format='value(status)'; then \
 	    printf '%s\n' "Could not read status for $$INSTANCE" >&2; STATUS=1; \
 	  fi; \
 	done; \
 	exit "$$STATUS"
 
 stop:
-	ZONE="$$(terraform -chdir=$(TF_DIR) output -raw zone)"; \
+	PROJECT_ID="$(GCP_PROJECT_ID)"; \
+	if [[ -z "$$PROJECT_ID" ]]; then PROJECT_ID="$$(gcloud config get-value project 2>/dev/null)"; fi; \
+	ZONE="$(GCP_ZONE)"; \
+	if [[ -z "$$PROJECT_ID" || "$$PROJECT_ID" == '(unset)' || -z "$$ZONE" || -z "$(MOVIEREC_RESOURCE_NAME)" ]]; then \
+	  printf '%s\n' 'Set the GCP project, zone, and MovieRec resource name before stopping VMs.' >&2; exit 2; \
+	fi; \
 	STATUS=0; \
-	for INSTANCE in "$$(terraform -chdir=$(TF_DIR) output -raw app_instance_name)" "$$(terraform -chdir=$(TF_DIR) output -raw database_instance_name)" "$$(terraform -chdir=$(TF_DIR) output -raw model_instance_name)"; do \
-	  if ! INSTANCE_STATUS="$$(gcloud compute instances describe "$$INSTANCE" --zone="$$ZONE" --format='value(status)' 2>/dev/null)"; then \
+	for ROLE in app database model; do \
+	  INSTANCE="$(MOVIEREC_RESOURCE_NAME)-$$ROLE"; \
+	  if ! INSTANCE_STATUS="$$(gcloud compute instances describe "$$INSTANCE" --project="$$PROJECT_ID" --zone="$$ZONE" --format='value(status)' 2>/dev/null)"; then \
 	    printf '%s\n' "Could not read status for $$INSTANCE" >&2; STATUS=1; continue; \
 	  fi; \
 	  if [[ "$$INSTANCE_STATUS" == TERMINATED ]]; then \
 	    printf '%s\n' "$$INSTANCE is already stopped"; continue; \
 	  fi; \
-	  if ! gcloud compute instances stop "$$INSTANCE" --zone="$$ZONE"; then \
+	  if ! gcloud compute instances stop "$$INSTANCE" --project="$$PROJECT_ID" --zone="$$ZONE"; then \
 	    printf '%s\n' "Failed to stop $$INSTANCE; check its state because it may still be billing" >&2; STATUS=1; \
 	  fi; \
 	done; \
@@ -195,5 +212,5 @@ stop:
 
 destroy:
 	@test "$(CONFIRM_DESTROY)" = 1 || { printf '%s\n' 'Refusing to destroy resources. Use: make destroy CONFIRM_DESTROY=1'; exit 2; }
-	terraform -chdir=$(TF_DIR) plan -destroy $(TF_PARALLELISM_FLAG)
-	terraform -chdir=$(TF_DIR) destroy $(TF_PARALLELISM_FLAG)
+	terraform -chdir=$(TF_DIR) plan -destroy $(TF_LOCATION_ARGS) $(TF_PARALLELISM_FLAG)
+	terraform -chdir=$(TF_DIR) destroy $(TF_LOCATION_ARGS) $(TF_PARALLELISM_FLAG)

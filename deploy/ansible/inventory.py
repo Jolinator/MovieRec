@@ -31,8 +31,8 @@ def active_project():
 
 def deployment_config():
     project_id = active_project()
-    zone = os.environ.get("GCP_ZONE", "europe-west1-b")
-    region = os.environ.get("GCP_REGION", "europe-west1")
+    zone = os.environ.get("GCP_ZONE", "")
+    region = os.environ.get("GCP_REGION", "")
     resource_name = os.environ.get("MOVIEREC_RESOURCE_NAME", "movierec")
     if not zone or not region or not resource_name:
         sys.exit("GCP_ZONE, GCP_REGION, and MOVIEREC_RESOURCE_NAME must not be empty.")

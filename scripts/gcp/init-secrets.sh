@@ -6,14 +6,46 @@ REPO_ROOT="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
 SECRETS_DIR="${REPO_ROOT}/deploy/gcp/secrets"
 LOCAL_SECRETS_DIR="${REPO_ROOT}/secrets"
 EXAMPLES_DIR="${REPO_ROOT}/deploy/gcp/secrets-examples"
+SERVER_ENV="${SECRETS_DIR}/server.env"
+LEGACY_SERVER_ENV="${SECRETS_DIR}/.env"
+SERVER_ENV_EXAMPLE="${EXAMPLES_DIR}/server.env.example"
 
 if ! command -v openssl >/dev/null 2>&1; then
   printf 'Required command not found: openssl\n' >&2
   exit 1
 fi
 
+if ! command -v gcloud >/dev/null 2>&1; then
+  printf 'Required command not found: gcloud (needed to fill TF_VAR_project_id in server.env).\n' >&2
+  exit 1
+fi
+
+PROJECT_ID="$(gcloud config get-value project 2>/dev/null || true)"
+if [[ -z "${PROJECT_ID}" || "${PROJECT_ID}" == "(unset)" ]]; then
+  printf 'No active Google Cloud project is configured. Select one with: gcloud config set project PROJECT_ID\n' >&2
+  exit 1
+fi
+
 mkdir -p "${SECRETS_DIR}/tls"
 chmod 700 "${SECRETS_DIR}" "${SECRETS_DIR}/tls"
+
+if [[ ! -e "${SERVER_ENV}" ]]; then
+  if [[ -e "${LEGACY_SERVER_ENV}" ]]; then
+    mv "${LEGACY_SERVER_ENV}" "${SERVER_ENV}"
+    printf 'Renamed the existing server settings file to %s.\n' "${SERVER_ENV}"
+  else
+    cp "${SERVER_ENV_EXAMPLE}" "${SERVER_ENV}"
+    printf 'Created %s from its example.\n' "${SERVER_ENV}"
+  fi
+fi
+
+if grep -Eq '^[[:space:]]*TF_VAR_project_id[[:space:]]*=' "${SERVER_ENV}"; then
+  sed -i -E "s|^[[:space:]]*TF_VAR_project_id[[:space:]]*=.*|TF_VAR_project_id=${PROJECT_ID}|" "${SERVER_ENV}"
+else
+  printf 'TF_VAR_project_id=%s\n' "${PROJECT_ID}" >> "${SERVER_ENV}"
+fi
+chmod 600 "${SERVER_ENV}"
+printf 'Set TF_VAR_project_id to the active gcloud project in %s.\n' "${SERVER_ENV}"
 
 for service in auth movies recommendations tmdb; do
   target="${SECRETS_DIR}/${service}.env"

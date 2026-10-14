@@ -12,9 +12,15 @@ if ! command -v gcloud >/dev/null 2>&1; then
 fi
 
 PROJECT_ID="$(gcloud config get-value project 2>/dev/null)"
+REGION="${GCP_REGION:-}"
+ZONE="${GCP_ZONE:-}"
 if [[ -z "${PROJECT_ID}" || "${PROJECT_ID}" == "(unset)" ]]; then
   printf 'No active Google Cloud project is configured.\n' >&2
   printf 'Select one with: gcloud config set project PROJECT_ID\n' >&2
+  exit 1
+fi
+if [[ -z "${REGION}" || -z "${ZONE}" ]]; then
+  printf 'Set GCP_REGION and GCP_ZONE before configuring Terraform.\n' >&2
   exit 1
 fi
 
@@ -24,12 +30,20 @@ if [[ ! -e "${TFVARS}" ]]; then
 fi
 
 chmod 600 "${TFVARS}"
-sed -i "s/^project_id[[:space:]]*=.*/project_id = \"${PROJECT_ID}\"/" "${TFVARS}"
 
-if ! grep -q '^project_id[[:space:]]*=' "${TFVARS}"; then
-  printf 'terraform.tfvars does not contain a project_id setting: %s\n' "${TFVARS}" >&2
-  exit 1
-fi
+set_tfvar() {
+  local key="$1"
+  local value="$2"
+  if grep -Eq "^[[:space:]]*${key}[[:space:]]*=" "${TFVARS}"; then
+    sed -i -E "s|^[[:space:]]*${key}[[:space:]]*=.*|${key} = \"${value}\"|" "${TFVARS}"
+  else
+    printf '%s = "%s"\n' "${key}" "${value}" >> "${TFVARS}"
+  fi
+}
 
-printf 'Terraform project_id set to %s in %s\n' "${PROJECT_ID}" "${TFVARS}"
+set_tfvar project_id "${PROJECT_ID}"
+set_tfvar region "${REGION}"
+set_tfvar zone "${ZONE}"
+
+printf 'Terraform project_id, region, and zone set from the active GCP project and GCP_REGION/GCP_ZONE in %s\n' "${TFVARS}"
 printf 'Review the remaining Terraform settings before running make infra-plan.\n'

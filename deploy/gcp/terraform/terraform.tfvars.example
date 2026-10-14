@@ -1,6 +1,4 @@
 project_id           = "your-project-id"
-region               = "europe-west1"
-zone                 = "europe-west1-b"
 public_registry      = true
 app_machine_type     = "e2-standard-2"
 database_machine_type = "e2-standard-2"

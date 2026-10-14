@@ -4,13 +4,23 @@ set -euo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
 TF_DIR="${REPO_ROOT}/deploy/gcp/terraform"
+ZONE="${GCP_ZONE:-}"
+RESOURCE_NAME="${MOVIEREC_RESOURCE_NAME:-}"
+PROJECT_ID="${GCP_PROJECT_ID:-${TF_VAR_project_id:-}}"
+
+if [[ -z "${ZONE}" || -z "${RESOURCE_NAME}" ]]; then
+  printf 'Set GCP_ZONE and MOVIEREC_RESOURCE_NAME before installing the GPU runtime.\n' >&2
+  exit 2
+fi
 
 for command in gcloud terraform; do
   command -v "${command}" >/dev/null 2>&1 || { printf 'Required command not found: %s\n' "${command}" >&2; exit 1; }
 done
-ZONE="$(terraform -chdir="${TF_DIR}" output -raw zone)"
-MODEL="$(terraform -chdir="${TF_DIR}" output -raw model_instance_name)"
-[[ -n "${ZONE}" && -n "${MODEL}" ]] || { printf 'Terraform outputs are incomplete; run infra-apply first.\n' >&2; exit 1; }
+MODEL="${RESOURCE_NAME}-model"
+if [[ -z "${PROJECT_ID}" ]]; then
+  PROJECT_ID="$(gcloud config get-value project 2>/dev/null || true)"
+fi
+[[ -n "${PROJECT_ID}" && "${PROJECT_ID}" != "(unset)" ]] || { printf 'Set GCP_PROJECT_ID or select an active project with gcloud config set project.\n' >&2; exit 1; }
 GPU_ENABLED="$(terraform -chdir="${TF_DIR}" output -raw model_gpu_enabled 2>/dev/null || true)"
 if [[ "${GPU_ENABLED}" != "true" ]]; then
   printf 'Terraform model_gpu_enabled is not true. Run make gpu-enable, review with make infra-plan, then run make infra-apply.\n' >&2
@@ -18,7 +28,7 @@ if [[ "${GPU_ENABLED}" != "true" ]]; then
 fi
 
 printf 'Installing NVIDIA drivers and the container toolkit on %s. A reboot may be required.\n' "${MODEL}"
-gcloud compute ssh "${MODEL}" --zone="${ZONE}" --tunnel-through-iap --quiet --command='sudo bash -s' <<'REMOTE'
+gcloud compute ssh "${MODEL}" --project="${PROJECT_ID}" --zone="${ZONE}" --tunnel-through-iap --quiet --command='sudo bash -s' <<'REMOTE'
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
 apt-get update

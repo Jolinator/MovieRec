@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
 IMAGE_TAG="${1:-$(date -u +%Y%m%d%H%M%S)}"
 PROJECT_ID="${GCP_PROJECT_ID:-${TF_VAR_project_id:-}}"
-REGION="${GCP_REGION:-europe-west1}"
+REGION="${GCP_REGION:-}"
 RESOURCE_NAME="${MOVIEREC_RESOURCE_NAME:-movierec}"
 
 if [[ ! "${IMAGE_TAG}" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]]; then

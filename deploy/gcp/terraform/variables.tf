@@ -4,14 +4,12 @@ variable "project_id" {
 }
 
 variable "region" {
-  type    = string
-  default = "europe-west1"
+  type = string
 }
 
 variable "zone" {
   description = "All three VMs and their persistent disks use this zone."
   type        = string
-  default     = "europe-west1-b"
 }
 
 variable "name" {
