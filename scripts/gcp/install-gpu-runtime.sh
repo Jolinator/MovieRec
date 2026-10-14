@@ -6,21 +6,17 @@ REPO_ROOT="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
 TF_DIR="${REPO_ROOT}/deploy/gcp/terraform"
 ZONE="${GCP_ZONE:-}"
 RESOURCE_NAME="${MOVIEREC_RESOURCE_NAME:-}"
-PROJECT_ID="${GCP_PROJECT_ID:-${TF_VAR_project_id:-}}"
 
 if [[ -z "${ZONE}" || -z "${RESOURCE_NAME}" ]]; then
   printf 'Set GCP_ZONE and MOVIEREC_RESOURCE_NAME before installing the GPU runtime.\n' >&2
   exit 2
 fi
+PROJECT_ID="$(bash "${SCRIPT_DIR}/gcp-context.sh" project-id)"
 
 for command in gcloud terraform; do
   command -v "${command}" >/dev/null 2>&1 || { printf 'Required command not found: %s\n' "${command}" >&2; exit 1; }
 done
 MODEL="${RESOURCE_NAME}-model"
-if [[ -z "${PROJECT_ID}" ]]; then
-  PROJECT_ID="$(gcloud config get-value project 2>/dev/null || true)"
-fi
-[[ -n "${PROJECT_ID}" && "${PROJECT_ID}" != "(unset)" ]] || { printf 'Set GCP_PROJECT_ID or select an active project with gcloud config set project.\n' >&2; exit 1; }
 GPU_ENABLED="$(terraform -chdir="${TF_DIR}" output -raw model_gpu_enabled 2>/dev/null || true)"
 if [[ "${GPU_ENABLED}" != "true" ]]; then
   printf 'Terraform model_gpu_enabled is not true. Run make gpu-enable, review with make infra-plan, then run make infra-apply.\n' >&2

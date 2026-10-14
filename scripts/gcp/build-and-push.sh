@@ -4,7 +4,6 @@ set -euo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
 IMAGE_TAG="${1:-$(date -u +%Y%m%d%H%M%S)}"
-PROJECT_ID="${GCP_PROJECT_ID:-${TF_VAR_project_id:-}}"
 REGION="${GCP_REGION:-}"
 RESOURCE_NAME="${MOVIEREC_RESOURCE_NAME:-movierec}"
 
@@ -20,14 +19,7 @@ for command in docker gcloud; do
   fi
 done
 
-if [[ -z "${PROJECT_ID}" ]]; then
-  PROJECT_ID="$(gcloud config get-value project 2>/dev/null || true)"
-fi
-
-if [[ -z "${PROJECT_ID}" || "${PROJECT_ID}" == "(unset)" ]]; then
-  printf 'Set GCP_PROJECT_ID, TF_VAR_project_id, or an active gcloud project.\n' >&2
-  exit 1
-fi
+PROJECT_ID="$(bash "${SCRIPT_DIR}/gcp-context.sh" project-id)"
 if [[ -z "${REGION}" || -z "${RESOURCE_NAME}" ]]; then
   printf 'GCP_REGION and MOVIEREC_RESOURCE_NAME must not be empty.\n' >&2
   exit 1
