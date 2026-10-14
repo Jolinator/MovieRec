@@ -242,6 +242,7 @@ export default function Home({ onLoginClick, onRequireLogin, onLogout, onHomeCli
         onSearchClick={onSearchClick}
         onAuthClick={handleAuthAction}
         onRecommendationClick={openRecommendations}
+        onNavigate={() => setIsChatOpen(false)}
       />
 
       <main className={styles.content}>

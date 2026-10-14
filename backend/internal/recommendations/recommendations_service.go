@@ -149,7 +149,7 @@ func (s *Service) generateRecommendations(ctx context.Context, userID uuid.UUID)
 		return "empty", nil
 	}
 
-	resultIDs, err := s.embeddings.SearchSimilarExcluding(ctx, profile, ids, 3)
+	resultIDs, err := s.embeddings.SearchSimilarExcluding(ctx, profile, ids, 9)
 	if err != nil {
 		return s.refreshFailure(userID, "search", err)
 	}
@@ -208,8 +208,12 @@ func (s *Service) Recommendations(ctx context.Context, userID uuid.UUID) (respon
 	if err != nil {
 		return PersonalizedRecommendationsResponse{}, err
 	}
-	if cacheNeedsRefresh(cache) {
-		s.RequestRefresh(context.Background(), userID)
+	if s.shouldRefreshRecommendations(ctx, userID, cache) {
+		if cache.Status != "pending" {
+			s.RequestRefresh(context.Background(), userID)
+		} else {
+			go s.RefreshForUser(context.Background(), userID)
+		}
 		return preparingRecommendations(), nil
 	}
 	movies, err := s.cache.LoadMovies(ctx, userID, s.catalog)
@@ -222,6 +226,21 @@ func (s *Service) Recommendations(ctx context.Context, userID uuid.UUID) (respon
 func cacheNeedsRefresh(cache recommendationCache) bool {
 	return cache.Status == "missing" ||
 		(cache.RequestedAt != nil && (cache.GeneratedAt == nil || cache.GeneratedAt.Before(*cache.RequestedAt)))
+}
+
+func (s *Service) shouldRefreshRecommendations(ctx context.Context, userID uuid.UUID, cache recommendationCache) bool {
+	if cache.Status == "pending" || cacheNeedsRefresh(cache) {
+		return true
+	}
+	if cache.Status != "empty" {
+		return false
+	}
+
+	movieIDs, err := s.lists.ListByUserID(ctx, userID)
+	if err != nil {
+		return false
+	}
+	return len(movieIDs) > 0
 }
 
 func preparingRecommendations() PersonalizedRecommendationsResponse {

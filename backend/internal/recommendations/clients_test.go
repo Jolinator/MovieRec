@@ -139,7 +139,7 @@ func TestCompleteSuccessTrimsAnswerAndSendsMessages(t *testing.T) {
 			Messages  []map[string]string `json:"messages"`
 		}
 		_ = json.NewDecoder(r.Body).Decode(&body)
-		if body.Model != "m" || body.MaxTokens != 300 || len(body.Messages) != 2 ||
+		if body.Model != "m" || body.MaxTokens != 150 || len(body.Messages) != 2 ||
 			body.Messages[0]["role"] != "system" || body.Messages[0]["content"] != "sys" ||
 			body.Messages[1]["role"] != "user" || body.Messages[1]["content"] != "usr" {
 			t.Errorf("body = %+v", body)

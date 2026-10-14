@@ -41,12 +41,12 @@
     },
     {
       "id": 2,
-      "title": "Cumulative requests by service and route",
+      "title": "Backend requests by service and route",
       "type": "timeseries",
       "datasource": {"type": "prometheus", "uid": "Prometheus"},
       "targets": [
         {
-          "expr": "sum by (service, method, route, status_class) (movierec_http_requests_total{service=~\"$service\",method!=\"OPTIONS\"})",
+          "expr": "sum by (service, method, route, status_class) (movierec_http_requests_total{service=~\"$service\",service!=\"gateway\",method!=\"OPTIONS\"})",
           "legendFormat": "{{service}} · {{method}} {{route}} · {{status_class}}",
           "refId": "A"
         }

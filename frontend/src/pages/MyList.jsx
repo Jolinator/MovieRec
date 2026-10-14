@@ -88,6 +88,7 @@ export default function MyList({ onHomeClick, onLoginClick, onLogout, onSearchCl
         onMyListClick={() => {}}
         onSearchClick={onSearchClick}
         onRecommendationClick={openRecommendations}
+        onNavigate={() => setIsChatOpen(false)}
         onAuthClick={() => {
           if (username) {
             setIsLogoutBannerOpen(true)

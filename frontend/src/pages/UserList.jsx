@@ -94,6 +94,7 @@ export default function UserList({ user, onHomeClick, onMyListClick, onSearchCli
         onMyListClick={onMyListClick}
         onSearchClick={onSearchClick}
         onRecommendationClick={() => setIsChatOpen(true)}
+        onNavigate={() => setIsChatOpen(false)}
         onAuthClick={() => username ? setIsLogoutBannerOpen(true) : onLoginClick()}
       />
       <main className={styles.content}>
