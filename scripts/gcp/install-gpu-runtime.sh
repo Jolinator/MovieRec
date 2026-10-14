@@ -35,13 +35,20 @@ if [[ "${GPU_ENABLED}" != "true" ]]; then
   exit 2
 fi
 
-printf 'Installing NVIDIA drivers and the container toolkit on %s. A reboot may be required.\n' "${MODEL}"
-gcloud compute ssh "${MODEL}" --project="${PROJECT_ID}" --zone="${MODEL_ZONE}" --tunnel-through-iap --quiet --command='sudo bash -s' <<'REMOTE'
+printf 'Installing NVIDIA drivers and the container toolkit on %s.\n' "${MODEL}"
+model_ssh() {
+  gcloud compute ssh "${MODEL}" --project="${PROJECT_ID}" --zone="${MODEL_ZONE}" --tunnel-through-iap --quiet "$@"
+}
+
+remote_status=0
+if model_ssh --command='sudo bash -s' <<'REMOTE'
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
 GPU_RUNTIME_MARKER=/var/lib/rancher/k3s/agent/.movierec-gpu-runtime-ready
 if [[ -f "${GPU_RUNTIME_MARKER}" ]] && command -v nvidia-smi >/dev/null 2>&1 && \
-  nvidia-smi >/dev/null 2>&1 && command -v nvidia-ctk >/dev/null 2>&1; then
+  nvidia-smi >/dev/null 2>&1 && command -v nvidia-ctk >/dev/null 2>&1 && \
+  command -v nvidia-container-runtime >/dev/null 2>&1 && \
+  grep -q nvidia /var/lib/rancher/k3s/agent/etc/containerd/config.toml; then
   echo 'NVIDIA drivers and container toolkit are already ready.'
   exit 0
 fi
@@ -51,10 +58,9 @@ apt-get install -y ca-certificates curl gnupg ubuntu-drivers-common
 ubuntu-drivers install
 
 if ! command -v nvidia-ctk >/dev/null 2>&1; then
-  distribution="$(. /etc/os-release; echo "${ID}${VERSION_ID}")"
   curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | \
     gpg --batch --yes --dearmor --output /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
-  curl -fsSL "https://nvidia.github.io/libnvidia-container/${distribution}/libnvidia-container.list" | \
+  curl -fsSL https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | \
     sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' \
     > /etc/apt/sources.list.d/nvidia-container-toolkit.list
   apt-get update
@@ -69,9 +75,54 @@ else
   exit 1
 fi
 
-if ! command -v nvidia-smi >/dev/null 2>&1 || ! nvidia-smi; then
-  echo 'NVIDIA driver is not ready. Reboot the model VM, then rerun make cluster-bootstrap.' >&2
+if ! command -v nvidia-container-runtime >/dev/null 2>&1; then
+  echo 'NVIDIA container runtime was not installed.' >&2
   exit 1
+fi
+if ! grep -q nvidia /var/lib/rancher/k3s/agent/etc/containerd/config.toml; then
+  echo 'K3s did not detect the NVIDIA runtime in its containerd configuration.' >&2
+  exit 1
+fi
+
+if ! command -v nvidia-smi >/dev/null 2>&1 || ! nvidia-smi; then
+  echo 'MOVIDREC_GPU_REBOOT_REQUIRED'
+  exit 42
 fi
 touch "${GPU_RUNTIME_MARKER}"
 REMOTE
+then
+  :
+else
+  remote_status=$?
+fi
+
+if [[ "${remote_status}" -eq 42 ]]; then
+  printf 'NVIDIA driver needs a reboot; rebooting %s and waiting for it to return.\n' "${MODEL}"
+  model_ssh --command='sudo reboot' >/dev/null 2>&1 || true
+
+  model_ready=false
+  for ((attempt = 1; attempt <= 60; attempt++)); do
+    if model_ssh --command='sudo nvidia-smi >/dev/null 2>&1' >/dev/null 2>&1; then
+      model_ready=true
+      break
+    fi
+    sleep 10
+  done
+
+  if [[ "${model_ready}" != true ]]; then
+    printf 'The model VM did not report a working NVIDIA driver within 10 minutes. Check %s and rerun cluster-bootstrap.\n' "${MODEL}" >&2
+    exit 1
+  fi
+
+  model_ssh --command='sudo bash -s' <<'VERIFY'
+set -euo pipefail
+GPU_RUNTIME_MARKER=/var/lib/rancher/k3s/agent/.movierec-gpu-runtime-ready
+nvidia-smi
+command -v nvidia-ctk >/dev/null
+command -v nvidia-container-runtime >/dev/null
+grep -q nvidia /var/lib/rancher/k3s/agent/etc/containerd/config.toml
+touch "${GPU_RUNTIME_MARKER}"
+VERIFY
+elif [[ "${remote_status}" -ne 0 ]]; then
+  exit "${remote_status}"
+fi
