@@ -138,13 +138,27 @@ update_app:
     DOCKER_TLS_CERTDIR: ""
     CLOUDSDK_PYTHON_SITEPACKAGES: "1"
     IMAGE_TAG: "$CI_COMMIT_SHA"
-    GCP_REGION: "europe-west4"
-    GCP_ZONE: "europe-west4-b"
     MOVIEREC_RESOURCE_NAME: "movierec"
     MOVIEREC_SSH_USER: "root"
   before_script:
     - apt-get update
     - apt-get install -y --no-install-recommends ansible make curl
+    - |
+      if [ -z "${GCP_REGION:-}" ]; then
+        echo 'Set the GitLab CI/CD variable GCP_REGION to the deployed app/database region.' >&2
+        exit 2
+      fi
+      if [ -z "${GCP_ZONE:-}" ]; then
+        echo 'Set the GitLab CI/CD variable GCP_ZONE to the deployed app/database zone.' >&2
+        exit 2
+      fi
+      case "$GCP_ZONE" in
+        "$GCP_REGION"-*) ;;
+        *)
+          echo "GCP_ZONE=$GCP_ZONE is not in GCP_REGION=$GCP_REGION." >&2
+          exit 2
+          ;;
+      esac
     - |
       gcloud_python="$(gcloud info --format='value(basic.python_location)')"
       if [ -z "$gcloud_python" ] || [ ! -x "$gcloud_python" ]; then

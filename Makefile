@@ -50,7 +50,7 @@ export GCP_PROJECT_ID GCP_REGION GCP_ZONE MOVIEREC_RESOURCE_NAME
 export TF_PARALLELISM
 
 .PHONY: help cloud-shell-setup infra-config infra-init infra-fmt infra-validate infra-plan infra-apply \
-        ssh-access cluster-bootstrap secrets-init secrets-passwords docker-push-limit docker-push-limit-reset build-push \
+        ssh-access cluster-bootstrap secrets-init secrets-passwords set-region docker-push-limit docker-push-limit-reset build-push \
         k8s-config models deploy update-app gpu-runtime gpu-setup gpu-capacity gpu-capacity-europe start stop destroy benchmark benchmark-stress
 
 help:
@@ -58,6 +58,7 @@ help:
 	  'Cloud workflow:' \
 	  '  make cloud-shell-setup            Install tools, limit Docker uploads to 2, and enable optional IAP NumPy optimization' \
 	  '  make infra-config                Set project_id from gcloud; use Terraform locations, falling back to GCP_REGION/GCP_ZONE' \
+	  '  make set-region TARGET_REGION=... TARGET_ZONE=... [TARGET_MODEL_ZONE=...]  Update server.env and Terraform locations; does not apply changes' \
 	  '  make infra-init                   Initialize Terraform (local state in Cloud Shell)' \
 	  '  make infra-plan [GPU=on|off|auto] [GPU_TYPE=nvidia-tesla-t4] [MODEL_ONLY=1] [TF_PARALLELISM=n] Plan resources; default parallelism is 2' \
 	  '  make infra-apply [GPU=on|off|auto] [GPU_TYPE=nvidia-tesla-t4] [MODEL_ONLY=1] [TF_AUTO_APPROVE=1] Apply resources; GPU affects only model VM' \
@@ -135,6 +136,9 @@ cluster-bootstrap: ssh-access
 
 secrets-init:
 	bash $(GCP_SCRIPTS)/init-secrets.sh
+
+set-region:
+	bash $(GCP_SCRIPTS)/set-region.sh --region "$(TARGET_REGION)" --zone "$(TARGET_ZONE)" $(if $(strip $(TARGET_MODEL_ZONE)),--model-zone "$(TARGET_MODEL_ZONE)",)
 
 secrets-passwords:
 	python3 $(GCP_SCRIPTS)/generate-db-passwords.py

@@ -90,9 +90,10 @@ Before using the job:
      the variable protected and limit who can change protected variables. This
      job currently uses a service-account key; Workload Identity Federation can
      replace it in a later hardening step.
-   - `GCP_REGION`, `GCP_ZONE`, and `MOVIEREC_RESOURCE_NAME`, if they differ from
-     the defaults `europe-west4`, `europe-west4-b`, and `movierec`. These values
-     must match the infrastructure provisioned by Terraform.
+   - `GCP_REGION` and `GCP_ZONE` are required. Set them to the app/database
+     region and zone provisioned by Terraform; the deployment job has no
+     location defaults and fails if either value is missing or inconsistent.
+   - `MOVIEREC_RESOURCE_NAME`, if it differs from `movierec`.
    - `PUBLIC_HOST`, if the deployment should use a DNS name instead of the
      default IP based `nip.io` hostname.
    - `MOVIEREC_SSH_USER`, if Ansible should connect as a specific SSH user.
