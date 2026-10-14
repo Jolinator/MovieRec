@@ -37,26 +37,53 @@ def deployment_config():
     if not zone or not region or not resource_name:
         sys.exit("GCP_ZONE, GCP_REGION, and MOVIEREC_RESOURCE_NAME must not be empty.")
 
-    def describe_instance(role):
+    def describe_instance(role, instance_zone):
         name = f"{resource_name}-{role}"
         result = subprocess.run(
             [
                 "gcloud", "compute", "instances", "describe", name,
-                f"--project={project_id}", f"--zone={zone}", "--format=json", "--quiet",
+                f"--project={project_id}", f"--zone={instance_zone}", "--format=json", "--quiet",
             ],
             capture_output=True,
             text=True,
         )
         if result.returncode != 0:
             sys.exit(
-                f"Could not describe GCP instance {name} in {zone}:\n{result.stderr}"
+                f"Could not describe GCP instance {name} in {instance_zone}:\n{result.stderr}"
             )
         try:
             return json.loads(result.stdout)
         except json.JSONDecodeError as error:
             sys.exit(f"gcloud returned invalid instance data for {name}: {error}")
 
-    instances = {role: describe_instance(role) for role in ("app", "database", "model")}
+    model_name = f"{resource_name}-model"
+    model_locations = subprocess.run(
+        [
+            "gcloud", "compute", "instances", "list",
+            f"--project={project_id}", f"--filter=name={model_name}",
+            "--format=value(zone)", "--quiet",
+        ],
+        capture_output=True,
+        text=True,
+    )
+    if model_locations.returncode != 0:
+        sys.exit(f"Could not find the model VM zone:\n{model_locations.stderr}")
+    model_zones = [
+        location.strip().rsplit("/", 1)[-1]
+        for location in model_locations.stdout.splitlines()
+        if location.strip()
+    ]
+    if len(model_zones) != 1:
+        sys.exit(
+            f"Expected one GCP VM named {model_name}, found {len(model_zones)}. "
+            "Resolve duplicate or missing model VMs before running Ansible."
+        )
+
+    zones = {"app": zone, "database": zone, "model": model_zones[0]}
+    instances = {
+        role: describe_instance(role, zones[role])
+        for role in ("app", "database", "model")
+    }
     app = instances["app"]
     interfaces = app.get("networkInterfaces", [])
     if not interfaces or not interfaces[0].get("networkIP"):
@@ -86,6 +113,7 @@ def deployment_config():
         "project_id": project_id,
         "region": region,
         "zone": zone,
+        "model_zone": zones["model"],
         "app_instance_name": instances["app"]["name"],
         "database_instance_name": instances["database"]["name"],
         "model_instance_name": instances["model"]["name"],
@@ -98,12 +126,6 @@ def deployment_config():
 
 def build_inventory():
     out = deployment_config()
-    iap_proxy = (
-        "-o ProxyCommand='gcloud compute start-iap-tunnel %h 22 "
-        f"--project={out['project_id']} --listen-on-stdin "
-        f"--zone={out['zone']} --verbosity=warning' "
-        "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o CheckHostIP=no"
-    )
     ssh_user = os.environ.get("MOVIEREC_SSH_USER") or getpass.getuser()
     key_file = os.path.expanduser("~/.ssh/google_compute_engine")
 
@@ -117,6 +139,13 @@ def build_inventory():
             "ansible_host": name,
             "node_role": role,
             "node_label": f"movierec.io/role={role}",
+            "ansible_ssh_common_args": (
+                "-o ProxyCommand='gcloud compute start-iap-tunnel %h 22 "
+                f"--project={out['project_id']} --listen-on-stdin "
+                f"--zone={out['model_zone'] if role == 'model' else out['zone']} "
+                "--verbosity=warning' "
+                "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o CheckHostIP=no"
+            ),
         }
         for role, name in roles.items()
     }
@@ -126,7 +155,6 @@ def build_inventory():
             "vars": {
                 "ansible_user": ssh_user,
                 "ansible_ssh_private_key_file": key_file,
-                "ansible_ssh_common_args": iap_proxy,
                 "app_private_ip": out["app_private_ip"],
                 "public_ip": out["public_ip"],
                 "artifact_registry": out["artifact_registry"],

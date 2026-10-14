@@ -17,9 +17,15 @@ GPU ?= auto
 GPU_TYPE ?= nvidia-tesla-t4
 GPU_MACHINE_TYPE ?=
 GPU_COUNT ?= 1
+MODEL_ONLY ?= 0
+GPU_SET_VARS_ARGS = --mode "$(GPU)" $(if $(filter on,$(GPU)),--type "$(GPU_TYPE)" --machine-type "$(GPU_MACHINE_TYPE)" --count "$(GPU_COUNT)")
+MODEL_ONLY_TARGET_FLAGS = $(if $(filter 1,$(MODEL_ONLY)),-target=google_compute_instance.model -target=google_compute_firewall.k3s_api -target=google_compute_firewall.k3s_flannel -target=google_compute_firewall.k3s_kubelet,)
 GPU_CONFIG_MODE := $(shell $(GCP_CONFIG) gpu-mode --mode "$(GPU)" --type "$(GPU_TYPE)" --machine-type "$(GPU_MACHINE_TYPE)" --count "$(GPU_COUNT)")
 ifneq ($(GPU_CONFIG_MODE),$(GPU))
 $(error Invalid GPU settings; check GPU, GPU_TYPE, GPU_MACHINE_TYPE, and GPU_COUNT)
+endif
+ifneq ($(filter 0 1,$(MODEL_ONLY)),$(MODEL_ONLY))
+$(error MODEL_ONLY must be 0 or 1)
 endif
 TF_VAR_region := $(GCP_REGION)
 TF_VAR_zone := $(GCP_ZONE)
@@ -40,7 +46,7 @@ export TF_PARALLELISM
 
 .PHONY: help cloud-shell-setup infra-config infra-init infra-fmt infra-validate infra-plan infra-apply \
         ssh-access cluster-bootstrap secrets-init secrets-passwords docker-push-limit docker-push-limit-reset build-push \
-        k8s-config models deploy update-app gpu-runtime gpu-setup start stop destroy benchmark benchmark-stress
+        k8s-config models deploy update-app gpu-runtime gpu-setup gpu-capacity-europe start stop destroy benchmark benchmark-stress
 
 help:
 	@printf '%s\n' \
@@ -48,8 +54,8 @@ help:
 	  '  make cloud-shell-setup            Install tools, limit Docker uploads to 2, and enable optional IAP NumPy optimization' \
 	  '  make infra-config                Set project_id from gcloud; use Terraform locations, falling back to GCP_REGION/GCP_ZONE' \
 	  '  make infra-init                   Initialize Terraform (local state in Cloud Shell)' \
-	  '  make infra-plan [GPU=on|off|auto] [GPU_TYPE=nvidia-tesla-t4] [TF_PARALLELISM=n] Plan resources; default parallelism is 2' \
-	  '  make infra-apply [GPU=on|off|auto] [GPU_TYPE=nvidia-tesla-t4] [TF_PARALLELISM=n] Apply resources; GPU affects only model VM' \
+	  '  make infra-plan [GPU=on|off|auto] [GPU_TYPE=nvidia-tesla-t4] [MODEL_ONLY=1] [TF_PARALLELISM=n] Plan resources; default parallelism is 2' \
+	  '  make infra-apply [GPU=on|off|auto] [GPU_TYPE=nvidia-tesla-t4] [MODEL_ONLY=1] [TF_PARALLELISM=n] Apply resources; GPU affects only model VM' \
 	  '  make cluster-bootstrap             Ansible: join running database/model VMs to the app K3s server' \
 	  '  make secrets-init                 Create server.env, fill its project ID, and prepare secrets/keys' \
 	  '  make secrets-passwords            Generate matching random passwords for the three databases' \
@@ -64,12 +70,13 @@ help:
 	  '                   nvidia-h100-80gb, nvidia-h100-mega-80gb, nvidia-h200-141gb, nvidia-b200' \
 	  '  GPU_MACHINE_TYPE overrides the selected GPU type default; for N1+T4, GPU_COUNT selects 1, 2, or 4 GPUs' \
 	  '  T4 is the default trial; L4 is a newer alternative. T4 support ends August 1, 2027; H100 Mega, H200, and B200 defaults use 8 GPUs' \
-	  '  Explicit GPU=on/off on infra-plan or infra-apply is saved in terraform.tfvars; GPU=auto keeps that saved choice' \
+	  '  To choose a GPU type, use GPU=on GPU_TYPE=... on infra-plan; GPU=auto keeps the saved choice' \
 	  '  GPU steps, examples, and provisioning caveats: readmes/step_by_step_deploy.md#optional-enable-gpu-generation' \
 	  '  Enable: infra-plan GPU=on GPU_TYPE=...; infra-apply; cluster-bootstrap; gpu-runtime; gpu-setup; deploy GPU=auto' \
 	  '  Disable: deploy GPU=off first; then infra-plan GPU=off and infra-apply GPU=auto' \
 	  '  make gpu-runtime                  Install NVIDIA drivers/runtime on the model VM after infra-apply GPU=on' \
 	  '  make gpu-setup                    Install the Kubernetes GPU device plugin after gpu-runtime' \
+	  '  make gpu-capacity-europe          Try model-only T4/L4 applies in documented European zones until one succeeds' \
 	  '' \
 	  'Performance:' \
 	  '  make benchmark                    Run ApacheBench (AB_URL, AB_REQUESTS, AB_CONCURRENCY)' \
@@ -97,13 +104,17 @@ infra-validate: infra-init infra-fmt
 	terraform -chdir=$(TF_DIR) validate
 
 infra-plan: infra-validate
-	$(GCP_CONFIG) set-gpu-vars --mode "$(GPU)" --type "$(GPU_TYPE)" --machine-type "$(GPU_MACHINE_TYPE)" --count "$(GPU_COUNT)"
-	terraform -chdir=$(TF_DIR) plan $(TF_PARALLELISM_FLAG)
+	$(GCP_CONFIG) set-gpu-vars $(GPU_SET_VARS_ARGS)
+	terraform -chdir=$(TF_DIR) plan $(TF_PARALLELISM_FLAG) $(MODEL_ONLY_TARGET_FLAGS)
 
 infra-apply: infra-validate
-	@printf '%s\n' 'Warning: this creates and starts three cloud VMs plus disks, NAT, a public IP, and Artifact Registry resources; charges begin while VMs run and retained resources can still incur charges after make stop.'
-	$(GCP_CONFIG) set-gpu-vars --mode "$(GPU)" --type "$(GPU_TYPE)" --machine-type "$(GPU_MACHINE_TYPE)" --count "$(GPU_COUNT)"
-	terraform -chdir=$(TF_DIR) apply $(TF_PARALLELISM_FLAG)
+	@if [ "$(MODEL_ONLY)" = 1 ]; then \
+	  printf '%s\n' 'Model-only apply: Terraform targets the model VM, its network dependencies, and K3s firewall rules; app/database VMs are not targeted.'; \
+	else \
+	  printf '%s\n' 'Warning: this creates and starts cloud VMs plus disks, NAT, a public IP, and Artifact Registry resources; charges begin while VMs run and retained resources can still incur charges after make stop.'; \
+	fi
+	$(GCP_CONFIG) set-gpu-vars $(GPU_SET_VARS_ARGS)
+	terraform -chdir=$(TF_DIR) apply $(TF_PARALLELISM_FLAG) $(MODEL_ONLY_TARGET_FLAGS)
 
 ssh-access:
 	@PROJECT_ID="$$(bash $(GCP_SCRIPTS)/gcp-context.sh project-id)"; \
@@ -152,6 +163,9 @@ gpu-runtime:
 
 gpu-setup: ssh-access
 	$(ANSIBLE_PLAY) playbooks/gpu-setup.yml
+
+gpu-capacity-europe:
+	bash $(GCP_SCRIPTS)/try-europe-gpu-zones.sh
 
 benchmark:
 	bash scripts/apachebench.sh

@@ -33,3 +33,7 @@ output "region" {
 output "zone" {
   value = var.zone
 }
+
+output "model_zone" {
+  value = local.model_zone
+}

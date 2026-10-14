@@ -8,8 +8,15 @@ variable "region" {
 }
 
 variable "zone" {
-  description = "All three VMs and their persistent disks use this zone."
+  description = "Zone for the app/database VMs and their persistent disks."
   type        = string
+}
+
+variable "model_zone" {
+  description = "Zone for the model VM and its data disk. Defaults to zone when unset."
+  type        = string
+  default     = null
+  nullable    = true
 }
 
 variable "name" {

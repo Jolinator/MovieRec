@@ -17,6 +17,18 @@ for command in gcloud terraform; do
   command -v "${command}" >/dev/null 2>&1 || { printf 'Required command not found: %s\n' "${command}" >&2; exit 1; }
 done
 MODEL="${RESOURCE_NAME}-model"
+mapfile -t MODEL_ZONES < <(
+  gcloud compute instances list \
+    --project="${PROJECT_ID}" \
+    --filter="name=${MODEL}" \
+    --format='value(zone)' \
+    --quiet | awk -F/ 'NF { print $NF }'
+)
+if [[ "${#MODEL_ZONES[@]}" -ne 1 ]]; then
+  printf 'Expected one model VM named %s, found %s.\n' "${MODEL}" "${#MODEL_ZONES[@]}" >&2
+  exit 2
+fi
+MODEL_ZONE="${MODEL_ZONES[0]}"
 GPU_ENABLED="$(terraform -chdir="${TF_DIR}" output -raw model_gpu_enabled 2>/dev/null || true)"
 if [[ "${GPU_ENABLED}" != "true" ]]; then
   printf 'The model VM has no GPU enabled. Run make infra-plan GPU=on GPU_TYPE=nvidia-tesla-t4, review the plan, then run make infra-apply with the same GPU options.\n' >&2
@@ -24,7 +36,7 @@ if [[ "${GPU_ENABLED}" != "true" ]]; then
 fi
 
 printf 'Installing NVIDIA drivers and the container toolkit on %s. A reboot may be required.\n' "${MODEL}"
-gcloud compute ssh "${MODEL}" --project="${PROJECT_ID}" --zone="${ZONE}" --tunnel-through-iap --quiet --command='sudo bash -s' <<'REMOTE'
+gcloud compute ssh "${MODEL}" --project="${PROJECT_ID}" --zone="${MODEL_ZONE}" --tunnel-through-iap --quiet --command='sudo bash -s' <<'REMOTE'
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
 apt-get update

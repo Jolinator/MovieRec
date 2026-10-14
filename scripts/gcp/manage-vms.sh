@@ -20,7 +20,24 @@ fi
 STATUS=0
 for ROLE in app database model; do
   INSTANCE="${RESOURCE_NAME}-${ROLE}"
-  if ! INSTANCE_STATUS="$(gcloud compute instances describe "${INSTANCE}" --project="${PROJECT_ID}" --zone="${ZONE}" --format='value(status)' 2>/dev/null)"; then
+  INSTANCE_ZONE="${ZONE}"
+  if [[ "${ROLE}" == model ]]; then
+    mapfile -t MODEL_ZONES < <(
+      gcloud compute instances list \
+        --project="${PROJECT_ID}" \
+        --filter="name=${INSTANCE}" \
+        --format='value(zone)' \
+        --quiet | awk -F/ 'NF { print $NF }'
+    )
+    if [[ "${#MODEL_ZONES[@]}" -ne 1 ]]; then
+      printf 'Expected one model VM named %s, found %s\n' "${INSTANCE}" "${#MODEL_ZONES[@]}" >&2
+      STATUS=1
+      continue
+    fi
+    INSTANCE_ZONE="${MODEL_ZONES[0]}"
+  fi
+
+  if ! INSTANCE_STATUS="$(gcloud compute instances describe "${INSTANCE}" --project="${PROJECT_ID}" --zone="${INSTANCE_ZONE}" --format='value(status)' 2>/dev/null)"; then
     printf 'Could not read status for %s\n' "${INSTANCE}" >&2
     STATUS=1
     continue
@@ -31,12 +48,12 @@ for ROLE in app database model; do
       printf '%s already running (status: %s)\n' "${INSTANCE}" "${INSTANCE_STATUS}"
       continue
     fi
-    if ! gcloud compute instances start "${INSTANCE}" --project="${PROJECT_ID}" --zone="${ZONE}"; then
+    if ! gcloud compute instances start "${INSTANCE}" --project="${PROJECT_ID}" --zone="${INSTANCE_ZONE}"; then
       printf 'Failed to start %s\n' "${INSTANCE}" >&2
       STATUS=1
       continue
     fi
-    if ! gcloud compute instances describe "${INSTANCE}" --project="${PROJECT_ID}" --zone="${ZONE}" --format='value(status)'; then
+    if ! gcloud compute instances describe "${INSTANCE}" --project="${PROJECT_ID}" --zone="${INSTANCE_ZONE}" --format='value(status)'; then
       printf 'Could not read status for %s\n' "${INSTANCE}" >&2
       STATUS=1
     fi
@@ -45,7 +62,7 @@ for ROLE in app database model; do
       printf '%s is already stopped\n' "${INSTANCE}"
       continue
     fi
-    if ! gcloud compute instances stop "${INSTANCE}" --project="${PROJECT_ID}" --zone="${ZONE}"; then
+    if ! gcloud compute instances stop "${INSTANCE}" --project="${PROJECT_ID}" --zone="${INSTANCE_ZONE}"; then
       printf 'Failed to stop %s; check its state because it may still be billing\n' "${INSTANCE}" >&2
       STATUS=1
     fi
