@@ -98,21 +98,9 @@ fi
 
 if [[ "${remote_status}" -eq 42 ]]; then
   printf 'NVIDIA driver needs a reboot; rebooting %s and waiting for it to return.\n' "${MODEL}"
-  model_ssh --command='sudo reboot' >/dev/null 2>&1 || true
-
-  model_ready=false
-  for ((attempt = 1; attempt <= 60; attempt++)); do
-    if model_ssh --command='sudo nvidia-smi >/dev/null 2>&1' >/dev/null 2>&1; then
-      model_ready=true
-      break
-    fi
-    sleep 10
-  done
-
-  if [[ "${model_ready}" != true ]]; then
-    printf 'The model VM did not report a working NVIDIA driver within 10 minutes. Check %s and rerun cluster-bootstrap.\n' "${MODEL}" >&2
-    exit 1
-  fi
+  bash "${SCRIPT_DIR}/reboot-machine.sh" model \
+    --wait-command 'sudo nvidia-smi >/dev/null 2>&1' \
+    --timeout-seconds 600
 
   model_ssh --command='sudo bash -s' <<'VERIFY'
 set -euo pipefail
