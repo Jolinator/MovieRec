@@ -8,6 +8,7 @@ import { getSession } from './services/api'
 vi.mock('./services/api', () => ({
   getSession: vi.fn(),
   logout: vi.fn(),
+  setUnauthorizedHandler: vi.fn(() => vi.fn()),
 }))
 
 vi.mock('./pages/Home', () => ({
