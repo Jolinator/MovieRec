@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"backend/internal/common"
@@ -117,13 +118,18 @@ func (r *UserRepository) SearchByUsername(ctx context.Context, query string, lim
 		return nil, common.ErrAuthDatabaseUnavailable
 	}
 
+	literalQuery := strings.NewReplacer("!", "!!", "%", "!%", "_", "!_").Replace(query)
 	rows, err := r.db.Query(ctx, `
 		SELECT id, username, created_at
 		FROM users
-		WHERE username ILIKE '%' || $1 || '%'
-		ORDER BY username
-		LIMIT $2
-	`, query, limit)
+		WHERE username ILIKE $2 ESCAPE '!'
+		ORDER BY CASE
+			WHEN lower(username) = lower($1) THEN 0
+			WHEN username ILIKE $3 ESCAPE '!' THEN 1
+			ELSE 2
+		END, username
+		LIMIT $4
+	`, query, "%"+literalQuery+"%", literalQuery+"%", limit)
 	if err != nil {
 		return nil, fmt.Errorf("%w: search users: %v", common.ErrUserPersistence, err)
 	}

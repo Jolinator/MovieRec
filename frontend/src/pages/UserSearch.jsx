@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import ErrorPopup from '../components/ErrorPopup'
 import LogoutBanner from '../components/LogoutBanner'
 import Sidebar from '../components/Sidebar'
@@ -17,24 +17,85 @@ export default function UserSearch({ onHomeClick, onMyListClick, onSearchClick, 
   const [isLogoutBannerOpen, setIsLogoutBannerOpen] = useState(false)
   const [hasSearched, setHasSearched] = useState(false)
   const [isChatOpen, setIsChatOpen] = useState(false)
+  const searchRequestId = useRef(0)
+  const debounceTimer = useRef(null)
+  const queryValue = useRef('')
+
+  const runSearch = useCallback(async (searchQuery) => {
+    const normalizedQuery = searchQuery.trim()
+    if (!normalizedQuery) {
+      setUsers([])
+      setHasSearched(false)
+      setIsLoading(false)
+      return
+    }
+    if (normalizedQuery !== queryValue.current.trim()) {
+      return
+    }
+
+    const requestId = ++searchRequestId.current
+    setIsLoading(true)
+    setError('')
+    setHasSearched(true)
+    try {
+      const results = await searchUsers(normalizedQuery)
+      if (requestId === searchRequestId.current) {
+        setUsers(results)
+      }
+    } catch (requestError) {
+      if (requestId === searchRequestId.current) {
+        setUsers([])
+        setError(requestError instanceof Error ? requestError.message : 'Unable to search users.')
+      }
+    } finally {
+      if (requestId === searchRequestId.current) {
+        setIsLoading(false)
+      }
+    }
+  }, [])
+
+  useEffect(() => {
+    const normalizedQuery = query.trim()
+    clearTimeout(debounceTimer.current)
+
+    if (!normalizedQuery) {
+      setUsers([])
+      setHasSearched(false)
+      setIsLoading(false)
+      setError('')
+      return undefined
+    }
+
+    debounceTimer.current = setTimeout(() => runSearch(normalizedQuery), 300)
+    return () => {
+      clearTimeout(debounceTimer.current)
+      searchRequestId.current += 1
+    }
+  }, [query, runSearch])
+
+  useEffect(() => () => {
+    clearTimeout(debounceTimer.current)
+    searchRequestId.current += 1
+  }, [])
 
   function openRecommendations() {
     setIsChatOpen(true)
   }
 
-  async function handleSearch(event) {
+  function handleSearch(event) {
     event.preventDefault()
-    setIsLoading(true)
+    clearTimeout(debounceTimer.current)
+    runSearch(query)
+  }
+
+  function handleQueryChange(nextQuery) {
+    searchRequestId.current += 1
+    queryValue.current = nextQuery
+    setQuery(nextQuery)
+    setUsers([])
+    setHasSearched(false)
+    setIsLoading(false)
     setError('')
-    setHasSearched(true)
-    try {
-      setUsers(await searchUsers(query.trim()))
-    } catch (requestError) {
-      setUsers([])
-      setError(requestError instanceof Error ? requestError.message : 'Unable to search users.')
-    } finally {
-      setIsLoading(false)
-    }
   }
 
   async function confirmLogout() {
@@ -65,15 +126,19 @@ export default function UserSearch({ onHomeClick, onMyListClick, onSearchClick, 
         <section className={styles.intro}>
           <p className={styles.eyebrow}>Community</p>
           <h2>Search users</h2>
-          <p>Find what your friends are watching!.</p>
+          <p>Find people by username. Results update as you type.</p>
         </section>
         <UserSearchBar
           value={query}
-          onChange={setQuery}
+          onChange={handleQueryChange}
           onSubmit={handleSearch}
           isLoading={isLoading}
         />
-        {hasSearched && users.length === 0 && !isLoading && <p>No users found.</p>}
+        {query.trim() && isLoading && <p role="status">Searching users...</p>}
+        {query.trim() && !isLoading && hasSearched && users.length > 0 && (
+          <p role="status">Found {users.length} {users.length === 1 ? 'user' : 'users'}.</p>
+        )}
+        {hasSearched && users.length === 0 && !isLoading && !error && <p>No users found.</p>}
         {users.map((user) => (
           <UserSearchResult key={user.id} user={user} onClick={onUserSelect} />
         ))}

@@ -73,23 +73,24 @@ case "${machine}" in
     ;;
 esac
 
-for command in terraform gcloud; do
-  if ! command -v "${command}" >/dev/null 2>&1; then
-    printf 'Required command not found: %s\n' "${command}" >&2
-    exit 2
-  fi
-done
+if ! command -v gcloud >/dev/null 2>&1; then
+  printf 'Required command not found: gcloud\n' >&2
+  exit 2
+fi
 
 if ! project_id="$(bash "${SCRIPT_DIR}/gcp-context.sh" project-id)"; then
   exit 1
 fi
 instance=""
 zone=""
-if output="$(terraform -chdir="${TF_DIR}" output -raw "${instance_output}" 2>/dev/null)" && [[ -n "${output}" ]]; then
-  instance="${output}"
-fi
-if output="$(terraform -chdir="${TF_DIR}" output -raw "${zone_output}" 2>/dev/null)" && [[ -n "${output}" ]]; then
-  zone="${output}"
+# Terraform outputs are optional; CI can use the gleaned instance name and zone below.
+if command -v terraform >/dev/null 2>&1; then
+  if output="$(terraform -chdir="${TF_DIR}" output -raw "${instance_output}" 2>/dev/null)" && [[ -n "${output}" ]]; then
+    instance="${output}"
+  fi
+  if output="$(terraform -chdir="${TF_DIR}" output -raw "${zone_output}" 2>/dev/null)" && [[ -n "${output}" ]]; then
+    zone="${output}"
+  fi
 fi
 
 if [[ -z "${instance}" || -z "${zone}" ]]; then

@@ -92,13 +92,16 @@ export async function signup({ username, password }) {
   return readResponse(response)
 }
 
-export async function getMovies({ limit = 20, offset = 0, genreId } = {}) {
+export async function getMovies({ limit = 20, offset = 0, genreId, search } = {}) {
   const params = new URLSearchParams({
     limit: String(limit),
     offset: String(offset),
   })
   if (genreId !== null && genreId !== undefined) {
     params.set('genre', String(genreId))
+  }
+  if (search?.trim()) {
+    params.set('search', search.trim())
   }
   const response = await fetch(`${API_BASE_URL}${MOVIES_ENDPOINT}?${params}`, {
     headers: { Accept: 'application/json' },

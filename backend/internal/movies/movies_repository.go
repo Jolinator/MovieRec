@@ -149,22 +149,35 @@ func scanMovie(row pgx.CollectableRow) (Movie, error) {
 	return movie, err
 }
 
-func (r *MovieRepository) List(ctx context.Context, limit, offset int, genreID *int) (movies []Movie, err error) {
+func (r *MovieRepository) List(ctx context.Context, limit, offset int, genreID *int, search string) (movies []Movie, err error) {
 	defer trackMovieDatabaseOperation("list_movies", time.Now(), &err)
 	if !r.db_status.Available() {
 		return []Movie{}, common.ErrMoviesDatabaseUnavailable
 	}
 
-	query := `SELECT ` + movieColumns + ` FROM movies `
+	query := `SELECT ` + movieColumns + ` FROM movies`
 	args := []any{limit, offset}
+	conditions := make([]string, 0, 2)
 	if genreID != nil {
-		query += `
-		JOIN movie_genres ON movie_genres.movie_id = movies.id
-		WHERE movie_genres.genre_id = $3
-		`
+		query += ` JOIN movie_genres ON movie_genres.movie_id = movies.id`
 		args = append(args, *genreID)
+		conditions = append(conditions, fmt.Sprintf("movie_genres.genre_id = $%d", len(args)))
 	}
-	query += `ORDER BY average_rating DESC, tmdb_id LIMIT $1 OFFSET $2`
+	if search = strings.TrimSpace(search); search != "" {
+		literalSearch := strings.NewReplacer("!", "!!", "%", "!%", "_", "!_").Replace(search)
+		args = append(args, "%"+literalSearch+"%")
+		conditions = append(conditions, fmt.Sprintf("movies.title ILIKE $%d ESCAPE '!'", len(args)))
+		args = append(args, literalSearch+"%")
+		prefixArg := len(args)
+		query += " WHERE " + strings.Join(conditions, " AND ")
+		query += fmt.Sprintf(" ORDER BY CASE WHEN movies.title ILIKE $%d ESCAPE '!' THEN 0 ELSE 1 END, average_rating DESC, tmdb_id", prefixArg)
+	} else {
+		if len(conditions) > 0 {
+			query += " WHERE " + strings.Join(conditions, " AND ")
+		}
+		query += ` ORDER BY average_rating DESC, tmdb_id`
+	}
+	query += ` LIMIT $1 OFFSET $2`
 
 	rows, err := r.db.Query(ctx, query, args...)
 	if err != nil {

@@ -26,6 +26,7 @@ type MoviePagination struct {
 	Limit   int
 	Offset  int
 	GenreID *int
+	Search  string
 }
 
 func NewMovieService(repository *MovieRepository) *MovieService {
@@ -71,7 +72,7 @@ func parseMoviePagination(query url.Values) (MoviePagination, error) {
 	if err != nil {
 		return MoviePagination{}, err
 	}
-	pagination := MoviePagination{Limit: limit, Offset: offset}
+	pagination := MoviePagination{Limit: limit, Offset: offset, Search: strings.TrimSpace(query.Get("search"))}
 	if value := query.Get("genre"); value != "" {
 		parsed, err := strconv.Atoi(value)
 		if err != nil || parsed <= 0 {
@@ -91,7 +92,7 @@ func (s *MovieService) List(ctx context.Context, pagination MoviePagination) ([]
 		return nil, err
 	}
 
-	movies, err := s.repository.List(ctx, pagination.Limit, pagination.Offset, pagination.GenreID)
+	movies, err := s.repository.List(ctx, pagination.Limit, pagination.Offset, pagination.GenreID, pagination.Search)
 	if err != nil {
 		return nil, fmt.Errorf("list movies: %w", err)
 	}

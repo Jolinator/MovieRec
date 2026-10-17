@@ -14,6 +14,8 @@ export default function Home({ onLoginClick, onRequireLogin, onLogout, onHomeCli
   const pageSize = 99
   const [error, setError] = useState('')
   const [movies, setMovies] = useState([])
+  const [movieSearch, setMovieSearch] = useState('')
+  const [activeMovieSearch, setActiveMovieSearch] = useState('')
   const [genres, setGenres] = useState([])
   const [selectedGenreId, setSelectedGenreId] = useState(null)
   const [isLoadingMovies, setIsLoadingMovies] = useState(true)
@@ -31,6 +33,7 @@ export default function Home({ onLoginClick, onRequireLogin, onLogout, onHomeCli
   const [recommendationStatus, setRecommendationStatus] = useState('idle')
   const [recommendationReloadKey, setRecommendationReloadKey] = useState(0)
   const loadMoreRef = useRef(null)
+  const movieQueryGenerationRef = useRef(0)
 
   function openRecommendations() {
     if (!username) {
@@ -162,13 +165,19 @@ export default function Home({ onLoginClick, onRequireLogin, onLogout, onHomeCli
 
   useEffect(() => {
     let isCurrentRequest = true
+    const requestGeneration = ++movieQueryGenerationRef.current
     setIsLoadingMovies(true)
+    setIsLoadingMore(false)
     setMoviesLoadFailed(false)
     setLoadMoreFailed(false)
     setMovies([])
     setHasMoreMovies(true)
 
-    getMovies({ limit: pageSize, genreId: selectedGenreId }).then((loadedMovies) => {
+    getMovies({
+      limit: pageSize,
+      genreId: selectedGenreId,
+      ...(activeMovieSearch ? { search: activeMovieSearch } : {}),
+    }).then((loadedMovies) => {
       if (!isCurrentRequest) {
         return
       }
@@ -188,7 +197,7 @@ export default function Home({ onLoginClick, onRequireLogin, onLogout, onHomeCli
     return () => {
       isCurrentRequest = false
     }
-  }, [movieRetryCount, selectedGenreId])
+  }, [activeMovieSearch, movieRetryCount, selectedGenreId])
 
   const loadMoreMovies = useCallback(async () => {
     if (isLoadingMovies || isLoadingMore || !hasMoreMovies) {
@@ -197,20 +206,41 @@ export default function Home({ onLoginClick, onRequireLogin, onLogout, onHomeCli
 
     setIsLoadingMore(true)
     setLoadMoreFailed(false)
+    const requestGeneration = movieQueryGenerationRef.current
     try {
       const loadedMovies = await getMovies({
         limit: pageSize,
         offset: movies.length,
         genreId: selectedGenreId,
+        ...(activeMovieSearch ? { search: activeMovieSearch } : {}),
       })
+      if (requestGeneration !== movieQueryGenerationRef.current) {
+        return
+      }
       setMovies((currentMovies) => [...currentMovies, ...loadedMovies])
       setHasMoreMovies(loadedMovies.length === pageSize)
     } catch {
-      setLoadMoreFailed(true)
+      if (requestGeneration === movieQueryGenerationRef.current) {
+        setLoadMoreFailed(true)
+      }
     } finally {
-      setIsLoadingMore(false)
+      if (requestGeneration === movieQueryGenerationRef.current) {
+        setIsLoadingMore(false)
+      }
     }
-  }, [hasMoreMovies, isLoadingMore, isLoadingMovies, movies.length, selectedGenreId])
+  }, [activeMovieSearch, hasMoreMovies, isLoadingMore, isLoadingMovies, movies.length, selectedGenreId])
+
+  function handleMovieSearch(event) {
+    event.preventDefault()
+    const search = movieSearch.trim()
+    setMovieSearch(search)
+    setActiveMovieSearch(search)
+  }
+
+  function clearMovieSearch() {
+    setMovieSearch('')
+    setActiveMovieSearch('')
+  }
 
   useEffect(() => {
     const loadMoreElement = loadMoreRef.current
@@ -263,7 +293,29 @@ export default function Home({ onLoginClick, onRequireLogin, onLogout, onHomeCli
         )}
         <section className={styles.intro}>
           <p className={styles.eyebrow}>Discover your next favourite</p>
-          <h2>Popular movies</h2>
+          <h2>{activeMovieSearch ? `Results for "${activeMovieSearch}"` : 'Popular movies'}</h2>
+          <form className={styles.movieSearch} role="search" onSubmit={handleMovieSearch}>
+            <label className={styles.movieSearchLabel} htmlFor="movie-search">Search movies</label>
+            <div className={styles.movieSearchControls}>
+              <input
+                id="movie-search"
+                className={styles.movieSearchInput}
+                type="search"
+                value={movieSearch}
+                onChange={(event) => setMovieSearch(event.target.value)}
+                placeholder="Search by movie title"
+                autoComplete="off"
+              />
+              <button className={styles.movieSearchButton} type="submit" disabled={!movieSearch.trim()}>
+                Search
+              </button>
+              {(movieSearch || activeMovieSearch) && (
+                <button className={styles.clearMovieSearchButton} type="button" onClick={clearMovieSearch}>
+                  Clear
+                </button>
+              )}
+            </div>
+          </form>
           <GenreFilter
             genres={genres}
             selectedGenreId={selectedGenreId}
@@ -285,7 +337,11 @@ export default function Home({ onLoginClick, onRequireLogin, onLogout, onHomeCli
           </div>
         ) : (
           <>
-            <MovieGrid movies={movies} onSelect={setSelectedMovie} />
+            {movies.length === 0 && activeMovieSearch ? (
+              <p className={styles.noMoviesFound}>No movies found for "{activeMovieSearch}".</p>
+            ) : (
+              <MovieGrid movies={movies} onSelect={setSelectedMovie} />
+            )}
             <div ref={loadMoreRef} className={styles.loadMoreSentinel} aria-hidden="true" />
             {isLoadingMore && <p>Loading more movies...</p>}
             {loadMoreFailed && (

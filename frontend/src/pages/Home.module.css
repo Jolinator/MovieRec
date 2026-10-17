@@ -84,6 +84,65 @@
   text-transform: uppercase;
 }
 
+.movieSearch {
+  max-width: 760px;
+  margin-top: 24px;
+}
+
+.movieSearchLabel {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.movieSearchControls {
+  display: flex;
+  gap: 10px;
+}
+
+.movieSearchInput {
+  flex: 1;
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+
+.movieSearchInput:focus-visible {
+  outline: 2px solid var(--lavender);
+  outline-offset: 2px;
+}
+
+.movieSearchButton,
+.clearMovieSearchButton {
+  padding: 12px 18px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--teal);
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+}
+
+.movieSearchButton:disabled {
+  cursor: not-allowed;
+  opacity: .6;
+}
+
+.clearMovieSearchButton {
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.noMoviesFound {
+  color: var(--muted);
+}
+
 .movieLoadError {
   color: var(--muted);
   text-align: center;
