@@ -50,7 +50,7 @@ help:
 	  '  make infra-apply [GPU=on|off|auto] [GPU_TYPE=nvidia-tesla-t4] [MODEL_ONLY=1] [TF_AUTO_APPROVE=1] Initialize, format, validate, and apply; GPU affects only model VM' \
 	  '  make ssh-machine MACHINE=app|database|model  SSH to a VM over IAP (interactive)' \
 	  '  make grafana                         Open deployed Grafana through IAP (requires applied infrastructure and a deployed Grafana workload)' \
-	  '  make grafana-stop                    Stop this local user's tracked Grafana tunnels' \
+	  '  make grafana-stop                    Stop this local user'\''s tracked Grafana tunnels' \
 	  '  make pause-app                       Scale website and model workloads to zero; keep VMs, databases and monitoring running' \
 	  '  make resume-app                      Restore website and model workloads to one replica' \
 	  '  make reboot MACHINE=app|database|model|all   Reboot one VM or all sequentially over IAP' \
