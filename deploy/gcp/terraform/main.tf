@@ -86,6 +86,7 @@ locals {
   )
   model_zone   = var.model_zone != null && var.model_zone != "" ? var.model_zone : var.zone
   model_region = regex("^(.+)-[^-]+$", local.model_zone)[0]
+  artifact_registry_region = var.artifact_registry_region != null && var.artifact_registry_region != "" ? var.artifact_registry_region : var.region
   model_gpu_uses_guest_accelerator = local.model_gpu_base_type == "nvidia-tesla-t4" || (
     endswith(var.model_gpu_type, "-vws") && contains(
       ["nvidia-l4", "nvidia-rtx-pro-6000"],
@@ -195,7 +196,7 @@ resource "google_compute_firewall" "k3s_kubelet" {
 }
 
 resource "google_artifact_registry_repository" "images" {
-  location                  = var.region
+  location                  = local.artifact_registry_region
   repository_id             = var.name
   description               = "MovieRec container images"
   format                    = "DOCKER"
@@ -237,6 +238,7 @@ resource "google_compute_disk" "app_data" {
   type = "pd-balanced"
   zone = var.zone
   size = var.app_data_disk_gb
+  snapshot = var.app_data_disk_snapshot
 }
 
 resource "google_compute_disk" "database_data" {
@@ -244,6 +246,7 @@ resource "google_compute_disk" "database_data" {
   type = "pd-balanced"
   zone = var.zone
   size = var.database_data_disk_gb
+  snapshot = var.database_data_disk_snapshot
 }
 
 resource "google_compute_disk" "model_data" {
@@ -251,6 +254,7 @@ resource "google_compute_disk" "model_data" {
   type = "pd-balanced"
   zone = local.model_zone
   size = var.model_data_disk_gb
+  snapshot = var.model_data_disk_snapshot
 }
 
 resource "google_compute_instance" "app" {
@@ -262,7 +266,8 @@ resource "google_compute_instance" "app" {
 
   boot_disk {
     initialize_params {
-      image = "ubuntu-os-cloud/ubuntu-2404-lts-amd64"
+      image    = var.app_boot_disk_snapshot == null ? "ubuntu-os-cloud/ubuntu-2404-lts-amd64" : null
+      snapshot = var.app_boot_disk_snapshot
       size  = 50
       type  = "pd-balanced"
     }
@@ -275,6 +280,7 @@ resource "google_compute_instance" "app" {
 
   network_interface {
     subnetwork = google_compute_subnetwork.movierec.id
+    network_ip = var.app_private_ip
     access_config {
       nat_ip = google_compute_address.movierec.address
     }
@@ -310,7 +316,8 @@ resource "google_compute_instance" "database" {
 
   boot_disk {
     initialize_params {
-      image = "ubuntu-os-cloud/ubuntu-2404-lts-amd64"
+      image    = var.database_boot_disk_snapshot == null ? "ubuntu-os-cloud/ubuntu-2404-lts-amd64" : null
+      snapshot = var.database_boot_disk_snapshot
       size  = 30
       type  = "pd-balanced"
     }
@@ -354,9 +361,10 @@ resource "google_compute_instance" "model" {
 
   boot_disk {
     initialize_params {
-      image = "ubuntu-os-cloud/ubuntu-2404-lts-amd64"
-      size  = var.model_gpu_enabled ? 50 : 30
-      type  = "pd-balanced"
+      image    = var.model_boot_disk_snapshot == null ? "ubuntu-os-cloud/ubuntu-2404-lts-amd64" : null
+      snapshot = var.model_boot_disk_snapshot
+      size     = var.model_gpu_enabled ? 50 : 30
+      type     = "pd-balanced"
     }
   }
 

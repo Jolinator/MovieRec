@@ -161,6 +161,8 @@ update_app:
           exit 2
           ;;
       esac
+      GCP_ARTIFACT_REGISTRY_REGION="${GCP_ARTIFACT_REGISTRY_REGION:-$GCP_REGION}"
+      export GCP_ARTIFACT_REGISTRY_REGION
     - |
       gcloud_python="$(gcloud info --format='value(basic.python_location)')"
       if [ -z "$gcloud_python" ] || [ ! -x "$gcloud_python" ]; then

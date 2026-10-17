@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 
 usage() {
-  printf 'Usage: %s {app|database|model} [--wait-command COMMAND] [--timeout-seconds SECONDS]\n' "${0##*/}"
+  printf 'Usage: %s {app|database|model|all} [--wait-command COMMAND] [--timeout-seconds SECONDS]\n' "${0##*/}"
   printf 'Reboots the VM through SSH, then waits for SSH and COMMAND to work again.\n'
 }
 
@@ -16,6 +16,13 @@ fi
 machine="$1"
 shift
 case "${machine}" in
+  all)
+    printf 'Rebooting model, database, then app, waiting for each VM before continuing.\n'
+    for role in model database app; do
+      bash "${BASH_SOURCE[0]}" "${role}" "$@"
+    done
+    exit 0
+    ;;
   app|database|model) ;;
   *)
     printf 'Unknown machine role: %s\n' "${machine}" >&2
