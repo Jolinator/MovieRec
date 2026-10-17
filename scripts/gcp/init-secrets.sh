@@ -28,6 +28,54 @@ python3 "${GCP_CONFIG}" set-server-env TF_VAR_project_id "${PROJECT_ID}"
 chmod 600 "${SERVER_ENV}"
 printf 'Set TF_VAR_project_id to the active gcloud project in %s.\n' "${SERVER_ENV}"
 
+RESOURCE_NAME="$(python3 "${GCP_CONFIG}" make-vars | awk -F= '$1 == "MOVIEREC_RESOURCE_NAME" { print $2; exit }')"
+ACTIVE_ZONE="$(gcloud config get-value compute/zone 2>/dev/null || true)"
+mapfile -t APP_ZONES < <(
+  gcloud compute instances list \
+    --project="${PROJECT_ID}" \
+    --filter="name=${RESOURCE_NAME}-app" \
+    --format='value(zone.basename())' 2>/dev/null || true
+)
+
+ZONE=""
+ZONE_SOURCE=""
+if (( ${#APP_ZONES[@]} == 1 )); then
+  ZONE="${APP_ZONES[0]}"
+  ZONE_SOURCE="the ${RESOURCE_NAME}-app VM"
+elif (( ${#APP_ZONES[@]} > 1 )); then
+  for preferred_zone in "${ACTIVE_ZONE}" "${GCP_ZONE:-}"; do
+    if [[ -z "${preferred_zone}" || "${preferred_zone}" == "(unset)" ]]; then
+      continue
+    fi
+    for candidate_zone in "${APP_ZONES[@]}"; do
+      if [[ "${candidate_zone}" == "${preferred_zone}" ]]; then
+        ZONE="${candidate_zone}"
+        ZONE_SOURCE="the configured zone matching a ${RESOURCE_NAME}-app VM"
+        break 2
+      fi
+    done
+  done
+  if [[ -z "${ZONE}" ]]; then
+    printf 'Found multiple %s-app VMs in different zones; set gcloud compute/zone to one of their zones and rerun make secrets-init.\n' "${RESOURCE_NAME}" >&2
+  fi
+elif [[ -n "${ACTIVE_ZONE}" && "${ACTIVE_ZONE}" != "(unset)" ]]; then
+  ZONE="${ACTIVE_ZONE}"
+  ZONE_SOURCE="gcloud compute/zone"
+elif [[ -n "${GCP_ZONE:-}" ]]; then
+  ZONE="${GCP_ZONE}"
+  ZONE_SOURCE="the existing GCP_ZONE setting"
+fi
+
+if [[ -n "${ZONE}" ]]; then
+  REGION="${ZONE%-*}"
+  python3 "${GCP_CONFIG}" set-server-env GCP_ZONE "${ZONE}"
+  python3 "${GCP_CONFIG}" set-server-env GCP_REGION "${REGION}"
+  printf 'Set GCP_ZONE=%s and GCP_REGION=%s from %s in %s.\n' \
+    "${ZONE}" "${REGION}" "${ZONE_SOURCE}" "${SERVER_ENV}"
+else
+  printf 'Could not discover GCP_ZONE. Set gcloud compute/zone (gcloud config set compute/zone ZONE) before make infra-config.\n' >&2
+fi
+
 for service in auth movies recommendations tmdb; do
   target="${SECRETS_DIR}/${service}.env"
   example="${EXAMPLES_DIR}/${service}.env.example"

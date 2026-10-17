@@ -73,7 +73,7 @@ help:
 	  '  make clear-databases CONFIRM_CLEAR_DATABASES=1  Erase and recreate the three PostgreSQL databases' \
 	  '  make clear-databases-reboot-all CONFIRM_CLEAR_DATABASES=1  Clear PostgreSQL data, then reboot every VM' \
 	  '  make cluster-bootstrap             Join worker VMs; automatically set up GPU runtime/plugin when GPU is enabled' \
-	  '  make secrets-init                 Create server.env, fill its project ID, and prepare secrets/keys' \
+	  '  make secrets-init                 Create server.env, resolve the app zone, and prepare secrets/keys' \
 	  '  make secrets-passwords            Generate matching random passwords for the three databases' \
 	  '  make docker-push-limit [DOCKER_MAX_CONCURRENT_UPLOADS=n] Limit layers uploaded per image push (requires sudo)' \
 	  '  make docker-push-limit-reset      Remove the Docker upload limit and restore its default (requires sudo)' \
