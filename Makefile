@@ -162,15 +162,17 @@ grafana:
 	$(SSH_ACCESS)
 	@grafana_local_port=$$((20000 + RANDOM % 20000)); \
 	grafana_remote_port=$$((40000 + RANDOM % 20000)); \
+	grafana_local_bind=127.0.0.1; \
 	if [[ -n "$${WEB_HOST:-}" ]]; then \
 	  [[ "$${WEB_HOST}" =~ ^[A-Za-z0-9.-]+$$ ]] || { printf '%s\n' 'WEB_HOST contains invalid characters.' >&2; exit 2; }; \
+	  grafana_local_bind=0.0.0.0; \
 	  printf 'Grafana: https://%s-%s/\n' "$${grafana_local_port}" "$${WEB_HOST}"; \
 	else \
 	  printf 'Open http://localhost:%s in a local browser.\n' "$${grafana_local_port}"; \
 	fi; \
 	printf '%s\n' 'Configuring stable Grafana proxy settings; this only rolls out Grafana if they changed.' 'Press Ctrl-C to close the tunnel.'; \
 	bash $(GCP_SCRIPTS)/ssh-machine.sh app \
-	  --ssh-flag="-L 127.0.0.1:$${grafana_local_port}:localhost:$${grafana_remote_port}" \
+	  --ssh-flag="-L $${grafana_local_bind}:$${grafana_local_port}:localhost:$${grafana_remote_port}" \
 	  --command="sudo k3s kubectl -n movierec set env deployment/grafana GF_SERVER_ROOT_URL=http://localhost:3000/ GF_SECURITY_CSRF_ADDITIONAL_HEADERS=X-Forwarded-Host 'GF_LIVE_ALLOWED_ORIGINS=https://*-cs-*.cloudshell.dev,http://localhost:*,http://127.0.0.1:*' GF_SECURITY_CSRF_TRUSTED_ORIGINS- && sudo k3s kubectl -n movierec rollout status deployment/grafana --timeout=5m && sudo k3s kubectl -n movierec port-forward service/grafana $${grafana_remote_port}:3000 --address 127.0.0.1"
 
 MOVIEREC_APP_DEPLOYMENTS := deployment/frontend deployment/gateway deployment/auth deployment/movies \
