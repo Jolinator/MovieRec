@@ -25,6 +25,10 @@ def read_results(path: Path) -> list[dict[str, float | str]]:
             {
                 "workload": row.get("workload", "baseline"),
                 "clients": float(row["clients"]),
+                "total_requests": float(row["total_requests"]),
+                "successful_requests": float(row["successful_requests"]),
+                "failed_requests": float(row["failed_requests"]),
+                "elapsed_seconds": float(row["elapsed_seconds"]),
                 "throughput_rps": float(row["throughput_rps"]),
                 "mean_latency_ms": float(row["mean_latency_ms"]),
                 "p50_latency_ms": float(row["p50_latency_ms"]),
@@ -37,28 +41,69 @@ def read_results(path: Path) -> list[dict[str, float | str]]:
 
 def plot_throughput(results: list[dict[str, float | str]], output_dir: Path) -> None:
     pyplot.figure()
-    for workload in sorted({row["workload"] for row in results}):
-        workload_rows = [row for row in results if row["workload"] == workload]
-        pyplot.plot(
-            [row["clients"] for row in workload_rows],
+    axes = pyplot.gca()
+    failure_axes = axes.twinx()
+    workloads = sorted({row["workload"] for row in results})
+    colors = pyplot.rcParams["axes.prop_cycle"].by_key()["color"]
+
+    for index, workload in enumerate(workloads):
+        workload_rows = sorted(
+            (row for row in results if row["workload"] == workload),
+            key=lambda row: row["clients"],
+        )
+        color = colors[index % len(colors)]
+        clients = [row["clients"] for row in workload_rows]
+        attempted_throughput = [
+            row["total_requests"] / row["elapsed_seconds"] for row in workload_rows
+        ]
+        failure_rates = [
+            100 * row["failed_requests"] / row["total_requests"]
+            for row in workload_rows
+        ]
+        axes.plot(
+            clients,
+            attempted_throughput,
+            linestyle="--",
+            color=color,
+            alpha=0.65,
+            label=f"{workload} attempted",
+        )
+        axes.plot(
+            clients,
             [row["throughput_rps"] for row in workload_rows],
             marker="o",
-            label=workload,
+            color=color,
+            label=f"{workload} successful",
         )
-    pyplot.xlabel("Concurrent clients")
-    pyplot.ylabel("Throughput (requests/second)")
-    pyplot.title("Throughput as client count increases")
-    pyplot.grid(True, alpha=0.3)
-    pyplot.legend()
-    pyplot.tight_layout()
-    pyplot.savefig(output_dir / "throughput_vs_clients.png", dpi=200)
-    pyplot.close()
+        failure_axes.plot(
+            clients,
+            failure_rates,
+            marker="x",
+            linestyle=":",
+            color=color,
+            label=f"{workload} failures",
+        )
+    axes.set_xlabel("Concurrent clients")
+    axes.set_ylabel("Request rate (requests/second)")
+    failure_axes.set_ylabel("Failed requests (%)")
+    axes.set_title("Throughput, offered load, and failures as clients increase")
+    axes.set_xscale("log", base=2)
+    axes.grid(True, alpha=0.3)
+    handles, labels = axes.get_legend_handles_labels()
+    failure_handles, failure_labels = failure_axes.get_legend_handles_labels()
+    axes.legend(handles + failure_handles, labels + failure_labels)
+    axes.figure.tight_layout()
+    axes.figure.savefig(output_dir / "throughput_vs_clients.png", dpi=200)
+    pyplot.close(axes.figure)
 
 
 def plot_latency(results: list[dict[str, float | str]], output_dir: Path) -> None:
     pyplot.figure()
     for workload in sorted({row["workload"] for row in results}):
-        workload_rows = [row for row in results if row["workload"] == workload]
+        workload_rows = sorted(
+            (row for row in results if row["workload"] == workload),
+            key=lambda row: row["clients"],
+        )
         clients = [row["clients"] for row in workload_rows]
         for key, percentile in (
             ("p50_latency_ms", "p50"),
@@ -74,6 +119,7 @@ def plot_latency(results: list[dict[str, float | str]], output_dir: Path) -> Non
     pyplot.xlabel("Concurrent clients")
     pyplot.ylabel("Latency (milliseconds)")
     pyplot.title("Latency as client count increases")
+    pyplot.xscale("log", base=2)
     pyplot.grid(True, alpha=0.3)
     pyplot.legend()
     pyplot.tight_layout()

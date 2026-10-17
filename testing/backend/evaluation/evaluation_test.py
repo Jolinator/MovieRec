@@ -10,12 +10,11 @@ from pathlib import Path
 from urllib.parse import urljoin
 
 import requests
-from dotenv import load_dotenv
 
 
 LOAD_TEST_DIR = Path(__file__).resolve().parent
-PROJECT_ROOT = LOAD_TEST_DIR.parents[2]
 DEFAULT_RESULTS_PATH = LOAD_TEST_DIR / "csv" / "results.csv"
+DEFAULT_BASE_URL = "https://34.116.153.224.nip.io"
 WORKLOADS = {
     "baseline": [
         ("/movieAPI/movies?limit=20&offset=0", 1),
@@ -57,6 +56,16 @@ def parse_args() -> argparse.Namespace:
         help="Workload to execute. Use baseline for a controlled single-endpoint test.",
     )
     parser.add_argument(
+        "--base-url",
+        default=DEFAULT_BASE_URL,
+        help=f"Gateway URL to evaluate (default: {DEFAULT_BASE_URL}).",
+    )
+    parser.add_argument(
+        "--insecure",
+        action="store_true",
+        help="Disable TLS certificate verification for deployments with self-signed certificates.",
+    )
+    parser.add_argument(
         "--path",
         help="Run a single custom endpoint instead of a predefined workload.",
     )
@@ -87,21 +96,19 @@ def parse_clients(value: str) -> list[int]:
     return clients
 
 
-def load_backend_url() -> str:
-    load_dotenv(PROJECT_ROOT / "secrets" / "ports.env")
-    host = os.getenv("BACKEND_HOST", "localhost")
-    port = os.getenv("BACKEND_PORT")
-    if not port:
-        raise ValueError("BACKEND_PORT is not set in secrets/ports.env")
-    return f"http://{host}:{port}"
+def load_backend_url(base_url: str) -> str:
+    normalized_url = base_url.strip().rstrip("/")
+    if not normalized_url.startswith(("http://", "https://")):
+        raise ValueError("--base-url must start with http:// or https://")
+    return normalized_url
 
 
-def wait_for_backend(backend_url: str, timeout: float) -> None:
+def wait_for_backend(backend_url: str, timeout: float, verify_tls: bool) -> None:
     deadline = time.monotonic() + timeout
     health_url = urljoin(backend_url.rstrip("/") + "/", "movieAPI/health")
     while time.monotonic() < deadline:
         try:
-            response = requests.get(health_url, timeout=2)
+            response = requests.get(health_url, timeout=2, verify=verify_tls)
             if response.ok:
                 return
         except requests.RequestException:
@@ -116,11 +123,13 @@ def login(
     username: str,
     password: str,
     timeout: float,
+    verify_tls: bool,
 ) -> None:
     response = session.post(
         urljoin(backend_url.rstrip("/") + "/", "movieAPI/login"),
         json={"userName": username, "password": password},
         timeout=timeout,
+        verify=verify_tls,
     )
     response.raise_for_status()
 
@@ -140,12 +149,13 @@ def run_client(
     timeout: float,
     start_barrier: threading.Barrier,
     credentials: tuple[str, str] | None,
+    verify_tls: bool,
 ) -> list[RequestResult]:
     results: list[RequestResult] = []
     with requests.Session() as session:
         session.headers.update({"Accept": "application/json", "Cache-Control": "no-cache"})
         if credentials:
-            login(session, backend_url, *credentials, timeout)
+            login(session, backend_url, *credentials, timeout, verify_tls)
         start_barrier.wait()
         for index in range(requests_per_client):
             request_url = urljoin(
@@ -154,7 +164,11 @@ def run_client(
             )
             started = time.perf_counter()
             try:
-                response = session.get(request_url, timeout=timeout)
+                response = session.get(
+                    request_url,
+                    timeout=timeout,
+                    verify=verify_tls,
+                )
                 response.raise_for_status()
                 succeeded = True
             except requests.RequestException:
@@ -175,6 +189,7 @@ def run_level(
     requests_per_client: int,
     timeout: float,
     credentials: tuple[str, str] | None,
+    verify_tls: bool,
 ) -> dict[str, float | int]:
     start_barrier = threading.Barrier(clients)
     started = time.perf_counter()
@@ -188,6 +203,7 @@ def run_level(
                 timeout,
                 start_barrier,
                 credentials,
+                verify_tls,
             )
             for _ in range(clients)
         ]
@@ -234,8 +250,8 @@ def main() -> None:
     if args.timeout <= 0:
         raise ValueError("--timeout must be positive")
 
-    backend_url = load_backend_url()
-    wait_for_backend(backend_url, args.timeout)
+    backend_url = load_backend_url(args.base_url)
+    wait_for_backend(backend_url, args.timeout, not args.insecure)
     if args.path:
         paths = [args.path]
         workload_name = "custom"
@@ -262,6 +278,7 @@ def main() -> None:
             args.requests_per_client,
             args.timeout,
             credentials,
+            not args.insecure,
         )
         row["workload"] = workload_name
         rows.append(row)
