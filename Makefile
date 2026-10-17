@@ -200,11 +200,13 @@ grafana: ssh-access
 	  grafana_root_url="http://localhost:$${grafana_local_port}/"; \
 	  printf 'Open %s in a local browser.\n' "$${grafana_root_url%/}"; \
 	fi; \
+	grafana_csrf_host="$${grafana_root_url#*://}"; \
+	grafana_csrf_host="$${grafana_csrf_host%/}"; \
 	printf '%s\n' "Setting Grafana root URL to $${grafana_root_url}." 'Press Ctrl-C to close the tunnel.'; \
 	gcloud compute ssh "$(MOVIEREC_RESOURCE_NAME)-app" \
 	  --project="$(GCP_PROJECT_ID)" --zone="$(GCP_ZONE)" --tunnel-through-iap --quiet \
 	  --ssh-flag="-L 127.0.0.1:$${grafana_local_port}:localhost:$${grafana_remote_port}" \
-	  --command="sudo k3s kubectl -n movierec set env deployment/grafana GF_SERVER_ROOT_URL=$$grafana_root_url && sudo k3s kubectl -n movierec rollout status deployment/grafana --timeout=5m && sudo k3s kubectl -n movierec port-forward service/grafana $${grafana_remote_port}:3000 --address 127.0.0.1"
+	  --command="sudo k3s kubectl -n movierec set env deployment/grafana GF_SERVER_ROOT_URL=$$grafana_root_url GF_SECURITY_CSRF_TRUSTED_ORIGINS=$$grafana_csrf_host && sudo k3s kubectl -n movierec rollout status deployment/grafana --timeout=5m && sudo k3s kubectl -n movierec port-forward service/grafana $${grafana_remote_port}:3000 --address 127.0.0.1"
 
 MOVIEREC_APP_DEPLOYMENTS := deployment/frontend deployment/gateway deployment/auth deployment/movies \
 	deployment/recommendations deployment/llama-embedding deployment/llama-generation
