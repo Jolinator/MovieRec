@@ -16,7 +16,7 @@ func TestImportLimit(t *testing.T) {
 		want    int
 		wantErr bool
 	}{
-		{"", 500, false}, {"10", 10, false}, {"0", 0, true}, {"-5", 0, true}, {"abc", 0, true},
+		{"", 5000, false}, {"10", 10, false}, {"0", 0, true}, {"-5", 0, true}, {"abc", 0, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.value, func(t *testing.T) {
