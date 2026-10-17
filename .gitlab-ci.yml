@@ -144,26 +144,6 @@ update_app:
     - apt-get update
     - apt-get install -y --no-install-recommends ansible make curl
     - |
-      GCP_ZONE="$(printf '%s' "${GCP_ZONE:-}" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
-      if [ -z "$GCP_ZONE" ]; then
-        echo 'Set the GitLab CI/CD variable GCP_ZONE to the deployed app/database zone.' >&2
-        exit 2
-      fi
-      export GCP_ZONE
-      case "$GCP_ZONE" in
-        *-[a-z])
-          GCP_REGION="${GCP_ZONE%-*}"
-          export GCP_REGION
-          printf 'Derived GCP_REGION=%s from GCP_ZONE=%s\n' "$GCP_REGION" "$GCP_ZONE"
-          ;;
-        *)
-          echo "GCP_ZONE=$GCP_ZONE is not a valid Google Cloud zone name." >&2
-          exit 2
-          ;;
-      esac
-      GCP_ARTIFACT_REGISTRY_REGION="${GCP_ARTIFACT_REGISTRY_REGION:-$GCP_REGION}"
-      export GCP_ARTIFACT_REGISTRY_REGION
-    - |
       gcloud_python="$(gcloud info --format='value(basic.python_location)')"
       if [ -z "$gcloud_python" ] || [ ! -x "$gcloud_python" ]; then
         echo 'Could not locate the Python interpreter used by gcloud; skipping optional NumPy install.' >&2
@@ -188,7 +168,11 @@ update_app:
     - test -n "$GCP_SERVICE_ACCOUNT_KEY" || { echo 'Set GCP_SERVICE_ACCOUNT_KEY as a protected GitLab file variable'; exit 2; }
     - export GOOGLE_APPLICATION_CREDENTIALS="$GCP_SERVICE_ACCOUNT_KEY"
     - gcloud auth activate-service-account --key-file="$GCP_SERVICE_ACCOUNT_KEY" --project="$TF_VAR_project_id"
+    - gcloud config set project "$TF_VAR_project_id" --quiet
     - export GCP_PROJECT_ID="$TF_VAR_project_id"
+    - mkdir -p deploy/gcp/secrets
+    - python3 scripts/gcp/gcp-config.py set-server-env MOVIEREC_RESOURCE_NAME "$MOVIEREC_RESOURCE_NAME"
+    - make glean-vars
     - |
       printf 'GCP project selected by CI: %s\n' "$TF_VAR_project_id"
       mkdir -p "$HOME/.ssh"
@@ -207,7 +191,13 @@ update_app:
         exit 1
       fi
   script:
-    - make update-app IMAGE_TAG="$IMAGE_TAG" PUBLIC_HOST="$PUBLIC_HOST"
+    - |
+      make update-app \
+        IMAGE_TAG="$IMAGE_TAG" \
+        GPU=auto \
+        PUBLIC_HOST="${PUBLIC_HOST:-}" \
+        GCP_PROJECT_ID="$GCP_PROJECT_ID" \
+        MOVIEREC_RESOURCE_NAME="$MOVIEREC_RESOURCE_NAME"
   rules:
     - if: '$CI_COMMIT_BRANCH == "master"'
       when: manual

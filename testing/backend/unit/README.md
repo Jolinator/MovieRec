@@ -1,24 +1,20 @@
 # Backend unit tests
 
-Go unit tests live next to the code (`backend/internal/<pkg>/*_test.go`) so they can
-exercise unexported code. This folder is the single entry point and output location.
+Go unit tests live beside the backend packages in <code>backend/internal/</code>. They use fakes and <code>httptest</code>; they do not require a database, network, or Docker.
 
-- Run all: `./ci-cd/test-backend-unit.sh`
-- Output: `coverage.out` (git-ignored)
-- Rules: no database, network or Docker; use `httptest` and fakes.
-- HTML coverage: `cd backend && go tool cover -html=../testing/backend/unit/coverage.out`
-- Repositories wrap `*pgxpool.Pool`, so DB-backed query code is covered by the integration tests instead.
+Run the complete unit suite from the repository root:
 
-| Package | Coverage |
-|---|---|
-| gateway | 96% |
-| platform | 97% |
-| httpx | 100% |
-| database | 63% |
-| recommendations | 53% |
-| movies | 53% |
-| auth | 52% |
-| **total** | **53%** |
+~~~bash
+./ci-cd/test-backend-unit.sh
+~~~
 
-- API/integration tests are separate: `testing/backend/tests` + `ci-cd/test-backend.sh`.
-- Throughput and latency evaluation: `testing/backend/evaluation/instructions.md`.
+The script runs <code>go test ./... -count=1</code> and writes coverage to <code>testing/backend/unit/coverage.out</code>. Open the HTML report with:
+
+~~~bash
+cd backend
+go tool cover -html=../testing/backend/unit/coverage.out
+~~~
+
+Integration tests are separate: <code>testing/backend/tests/</code> contains scenarios and <code>ci-cd/test-backend.sh</code> starts their Compose stack. The integration runner clears its test database volumes; do not run it against data you need to keep.
+
+For load evaluation, follow <code>testing/backend/evaluation/instructions.md</code>.

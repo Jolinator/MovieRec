@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Fill database password placeholders in deploy/gcp/secrets/*.env safely."""
+"""Generate matching database passwords in MovieRec secret env files."""
 
 from __future__ import annotations
 
+import argparse
 import os
 import secrets
 import stat
@@ -11,8 +12,8 @@ import tempfile
 from pathlib import Path
 
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-SECRETS_DIR = REPO_ROOT / "deploy" / "gcp" / "secrets"
+REPO_ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_SECRETS_DIR = REPO_ROOT / "deploy" / "gcp" / "secrets"
 PASSWORD_PAIRS = {
     "auth.env": ("POSTGRES_PASSWORD", "AUTH_DB_PASSWORD"),
     "movies.env": ("POSTGRES_PASSWORD", "MOVIES_DB_PASSWORD"),
@@ -25,7 +26,7 @@ def read_env(path: Path) -> tuple[list[str], dict[str, tuple[int, str]]]:
     try:
         lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
     except FileNotFoundError:
-        raise SystemExit(f"Missing {path}; run make secrets-init first.")
+        raise SystemExit(f"Missing {path}; create it from its example first.")
 
     assignments: dict[str, tuple[int, str]] = {}
     for index, line in enumerate(lines):
@@ -71,11 +72,20 @@ def is_unset(value: str) -> bool:
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--secrets-dir",
+        type=Path,
+        default=DEFAULT_SECRETS_DIR,
+        help="directory containing auth.env, movies.env, and recommendations.env",
+    )
+    secrets_dir = parser.parse_args().secrets_dir.expanduser().resolve()
+
     plans: list[tuple[Path, list[str], bool]] = []
     updated_services: list[str] = []
 
     for filename, (postgres_key, app_key) in PASSWORD_PAIRS.items():
-        path = SECRETS_DIR / filename
+        path = secrets_dir / filename
         lines, assignments = read_env(path)
         missing = [key for key in (postgres_key, app_key) if key not in assignments]
         if missing:
@@ -117,9 +127,15 @@ def main() -> int:
     else:
         print("Database passwords are already set and matched; no files changed.")
 
-    tmdb_path = SECRETS_DIR / "tmdb.env"
-    if tmdb_path.is_file() and "REPLACE_" in tmdb_path.read_text(encoding="utf-8"):
-        print("Set TMDB_READ_ACCESS_TOKEN in tmdb.env manually; it cannot be generated locally.")
+    tmdb_path = secrets_dir / "tmdb.env"
+    if tmdb_path.is_file():
+        token_values = [
+            line.partition("=")[2]
+            for line in tmdb_path.read_text(encoding="utf-8").splitlines()
+            if line.startswith("TMDB_READ_ACCESS_TOKEN=")
+        ]
+        if not token_values or is_unset(token_values[-1]):
+            print("Set TMDB_READ_ACCESS_TOKEN in tmdb.env manually; it cannot be generated locally.")
     return 0
 
 

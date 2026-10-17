@@ -34,7 +34,7 @@ def deployment_config():
     zone = os.environ.get("GCP_ZONE", "")
     region = os.environ.get("GCP_REGION", "")
     artifact_registry_region = os.environ.get("GCP_ARTIFACT_REGISTRY_REGION") or region
-    resource_name = os.environ.get("MOVIEREC_RESOURCE_NAME", "movierec")
+    resource_name = os.environ.get("MOVIEREC_RESOURCE_NAME", "")
     if not zone or not region or not resource_name:
         sys.exit("GCP_ZONE, GCP_REGION, and MOVIEREC_RESOURCE_NAME must not be empty.")
 
@@ -107,7 +107,7 @@ def deployment_config():
         if "key" in item
     }
     gpu_enabled = model_metadata.get(
-        "gpu_enabled", os.environ.get("MOVIEREC_MODEL_GPU_ENABLED", "false")
+        "gpu_enabled", os.environ.get("MOVIEREC_MODEL_GPU_ENABLED", "")
     ).lower() == "true"
 
     return {

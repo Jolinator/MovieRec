@@ -1,80 +1,26 @@
 #!/usr/bin/env bash
 set -euo pipefail
+umask 077
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
 SECRETS_DIR="${REPO_ROOT}/deploy/gcp/secrets"
 EXAMPLES_DIR="${REPO_ROOT}/deploy/gcp/secrets-examples"
 SERVER_ENV="${SECRETS_DIR}/server.env"
-SERVER_ENV_EXAMPLE="${EXAMPLES_DIR}/server.env.example"
-GCP_CONFIG="${SCRIPT_DIR}/gcp-config.py"
 
 if ! command -v openssl >/dev/null 2>&1; then
   printf 'Required command not found: openssl\n' >&2
   exit 1
 fi
 
-PROJECT_ID="$(bash "${SCRIPT_DIR}/gcp-context.sh" active-project-id)"
+if [[ ! -e "${SERVER_ENV}" ]]; then
+  printf 'Missing %s; run make glean-vars first.\n' "${SERVER_ENV}" >&2
+  exit 2
+fi
 
 mkdir -p "${SECRETS_DIR}/tls"
 chmod 700 "${SECRETS_DIR}" "${SECRETS_DIR}/tls"
-
-if [[ ! -e "${SERVER_ENV}" ]]; then
-  cp "${SERVER_ENV_EXAMPLE}" "${SERVER_ENV}"
-  printf 'Created %s from its example.\n' "${SERVER_ENV}"
-fi
-
-python3 "${GCP_CONFIG}" set-server-env TF_VAR_project_id "${PROJECT_ID}"
 chmod 600 "${SERVER_ENV}"
-printf 'Set TF_VAR_project_id to the active gcloud project in %s.\n' "${SERVER_ENV}"
-
-RESOURCE_NAME="$(python3 "${GCP_CONFIG}" make-vars | awk -F= '$1 == "MOVIEREC_RESOURCE_NAME" { print $2; exit }')"
-ACTIVE_ZONE="$(gcloud config get-value compute/zone 2>/dev/null || true)"
-mapfile -t APP_ZONES < <(
-  gcloud compute instances list \
-    --project="${PROJECT_ID}" \
-    --filter="name=${RESOURCE_NAME}-app" \
-    --format='value(zone.basename())' 2>/dev/null || true
-)
-
-ZONE=""
-ZONE_SOURCE=""
-if (( ${#APP_ZONES[@]} == 1 )); then
-  ZONE="${APP_ZONES[0]}"
-  ZONE_SOURCE="the ${RESOURCE_NAME}-app VM"
-elif (( ${#APP_ZONES[@]} > 1 )); then
-  for preferred_zone in "${ACTIVE_ZONE}" "${GCP_ZONE:-}"; do
-    if [[ -z "${preferred_zone}" || "${preferred_zone}" == "(unset)" ]]; then
-      continue
-    fi
-    for candidate_zone in "${APP_ZONES[@]}"; do
-      if [[ "${candidate_zone}" == "${preferred_zone}" ]]; then
-        ZONE="${candidate_zone}"
-        ZONE_SOURCE="the configured zone matching a ${RESOURCE_NAME}-app VM"
-        break 2
-      fi
-    done
-  done
-  if [[ -z "${ZONE}" ]]; then
-    printf 'Found multiple %s-app VMs in different zones; set gcloud compute/zone to one of their zones and rerun make secrets-init.\n' "${RESOURCE_NAME}" >&2
-  fi
-elif [[ -n "${ACTIVE_ZONE}" && "${ACTIVE_ZONE}" != "(unset)" ]]; then
-  ZONE="${ACTIVE_ZONE}"
-  ZONE_SOURCE="gcloud compute/zone"
-elif [[ -n "${GCP_ZONE:-}" ]]; then
-  ZONE="${GCP_ZONE}"
-  ZONE_SOURCE="the existing GCP_ZONE setting"
-fi
-
-if [[ -n "${ZONE}" ]]; then
-  REGION="${ZONE%-*}"
-  python3 "${GCP_CONFIG}" set-server-env GCP_ZONE "${ZONE}"
-  python3 "${GCP_CONFIG}" set-server-env GCP_REGION "${REGION}"
-  printf 'Set GCP_ZONE=%s and GCP_REGION=%s from %s in %s.\n' \
-    "${ZONE}" "${REGION}" "${ZONE_SOURCE}" "${SERVER_ENV}"
-else
-  printf 'Could not discover GCP_ZONE. Set gcloud compute/zone (gcloud config set compute/zone ZONE) before make infra-config.\n' >&2
-fi
 
 for service in auth movies recommendations tmdb; do
   target="${SECRETS_DIR}/${service}.env"
@@ -101,50 +47,6 @@ fi
 chmod 600 "${tmdb_env}"
 printf 'Set TMDB_IMPORT_LIMIT to 5000 in %s.\n' "${tmdb_env}"
 
-generate_tls_pair() {
-  openssl req -x509 -newkey rsa:2048 -nodes -days 365 \
-    -keyout "${SECRETS_DIR}/tls/server.key" \
-    -out "${SECRETS_DIR}/tls/server.crt" \
-    -subj "/CN=postgres"
-}
-
-generate_jwt_pair() {
-  openssl genrsa -out "${SECRETS_DIR}/jwt-private.pem" 2048
-  openssl rsa -in "${SECRETS_DIR}/jwt-private.pem" \
-    -pubout -out "${SECRETS_DIR}/jwt-public.pem"
-}
-
-ensure_key_pair() {
-  local label="$1"
-  local private_key="$2"
-  local public_key="$3"
-  local generated_message="$4"
-  local generator="$5"
-
-  if [[ -e "${private_key}" && ! -s "${public_key}" ]] || \
-     [[ -e "${public_key}" && ! -s "${private_key}" ]]; then
-    printf '%s are incomplete; restore the pair or remove both before retrying.\n' "${label}" >&2
-    exit 2
-  fi
-
-  if [[ ! -s "${private_key}" && ! -s "${public_key}" ]]; then
-    "${generator}"
-    printf '%s\n' "${generated_message}"
-  fi
-
-  chmod 600 "${private_key}" "${public_key}"
-}
-
-ensure_key_pair \
-  'PostgreSQL TLS files' \
-  "${SECRETS_DIR}/tls/server.key" "${SECRETS_DIR}/tls/server.crt" \
-  'Generated PostgreSQL TLS files.' \
-  generate_tls_pair
-
-ensure_key_pair \
-  'JWT key files' \
-  "${SECRETS_DIR}/jwt-private.pem" "${SECRETS_DIR}/jwt-public.pem" \
-  'Generated JWT signing keys.' \
-  generate_jwt_pair
+bash "${REPO_ROOT}/scripts/generate-secret-key-pairs.sh" "${SECRETS_DIR}"
 
 printf '\nReview %s/*.env and set the TMDB token before running make k8s-config.\n' "${SECRETS_DIR}"

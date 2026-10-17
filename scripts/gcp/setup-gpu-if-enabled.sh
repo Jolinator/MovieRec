@@ -4,7 +4,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
 INVENTORY="${REPO_ROOT}/deploy/ansible/inventory.py"
-GPU_MODE="${1:-auto}"
+ANSIBLE_DIR="${REPO_ROOT}/deploy/ansible"
+GPU_MODE="${1:-}"
 
 if (($# != 1)); then
   printf 'Usage: %s {auto|on|off}\n' "${0##*/}" >&2
@@ -41,4 +42,8 @@ fi
 
 printf 'GPU is enabled on the model VM; preparing the NVIDIA runtime and Kubernetes device plugin.\n'
 bash "${SCRIPT_DIR}/install-gpu-runtime.sh"
-make -C "${REPO_ROOT}" gpu-setup
+(
+  cd "${ANSIBLE_DIR}"
+  ANSIBLE_CONFIG="${ANSIBLE_DIR}/ansible.cfg" \
+    ansible-playbook -i inventory.py playbooks/gpu-setup.yml
+)

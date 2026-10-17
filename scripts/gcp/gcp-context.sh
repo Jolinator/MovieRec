@@ -32,10 +32,9 @@ resolve_project_id() {
 }
 
 case "${1:-}" in
-  active-project-id) active_project_id ;;
   project-id) resolve_project_id ;;
   *)
-    printf 'Usage: %s {active-project-id|project-id}\n' "$0" >&2
+    printf 'Usage: %s project-id\n' "$0" >&2
     exit 2
     ;;
 esac

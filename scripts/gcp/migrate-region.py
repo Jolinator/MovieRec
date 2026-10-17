@@ -42,8 +42,8 @@ def run(command: list[str], *, capture: bool = False) -> subprocess.CompletedPro
         raise
 
 
-def make_settings() -> dict[str, str]:
-    result = run([sys.executable, str(GCP_CONFIG), "make-vars"], capture=True)
+def deployment_settings() -> dict[str, str]:
+    result = run([sys.executable, str(GCP_CONFIG), "settings"], capture=True)
     return dict(line.split("=", 1) for line in result.stdout.splitlines() if "=" in line)
 
 
@@ -147,6 +147,7 @@ def remap_registry_in_terraform(
     )
 
     run([sys.executable, str(GCP_CONFIG), "set-tfvar", "artifact_registry_region", new_location])
+    run([sys.executable, str(GCP_CONFIG), "set-server-env", "GCP_ARTIFACT_REGISTRY_REGION", new_location])
     try:
         if old_reader_addresses:
             run(["terraform", f"-chdir={TF_DIR}", "state", "rm", *old_reader_addresses])
@@ -168,6 +169,7 @@ def remap_registry_in_terraform(
             if TF_REPOSITORY_ADDRESS in current_addresses:
                 run(["terraform", f"-chdir={TF_DIR}", "state", "rm", TF_REPOSITORY_ADDRESS])
             run([sys.executable, str(GCP_CONFIG), "set-tfvar", "artifact_registry_region", old_location])
+            run([sys.executable, str(GCP_CONFIG), "set-server-env", "GCP_ARTIFACT_REGISTRY_REGION", old_location])
             import_registry_state(project, old_location, repository, bool(old_reader_addresses))
         except (subprocess.CalledProcessError, OSError, ValueError) as rollback_error:
             print(
@@ -248,7 +250,7 @@ def disk_snapshot_source(instance: dict, role: str) -> list[tuple[str, str]]:
 
 def snapshot_name(resource_name: str, role: str, kind: str, stamp: str) -> str:
     suffix = f"-{role}-{kind}-{stamp}"
-    prefix = re.sub(r"[^a-z0-9-]", "-", resource_name.lower()).strip("-") or "movierec"
+    prefix = re.sub(r"[^a-z0-9-]", "-", resource_name.lower()).strip("-")
     return f"{prefix[: 63 - len(suffix)].rstrip('-')}{suffix}"
 
 
@@ -318,6 +320,10 @@ def update_migration_config(
         run([sys.executable, str(GCP_CONFIG), "set-tfvar", key, value])
     run([sys.executable, str(GCP_CONFIG), "set-server-env", "GCP_REGION", target_region])
     run([sys.executable, str(GCP_CONFIG), "set-server-env", "GCP_ZONE", target_zone])
+    run([
+        sys.executable, str(GCP_CONFIG), "set-server-env",
+        "GCP_ARTIFACT_REGISTRY_REGION", artifact_region or old_region,
+    ])
 
 
 def instance_zone(name: str, project: str) -> str:
@@ -359,11 +365,11 @@ def main() -> int:
         help="Destination zone for the VMs being moved",
     )
     parser.add_argument(
-        "--scope", choices=("app-db", "all"), default="app-db",
+        "--scope", choices=("app-db", "all"), required=True,
         help="Move only app/database, or the full cluster including the model VM",
     )
-    parser.add_argument("--image-tag", default="", help="Optional tag for the image build and deployment")
-    parser.add_argument("--public-host", default="", help="Optional custom hostname for the deployment")
+    parser.add_argument("--image-tag", help="Optional tag for the image build and deployment")
+    parser.add_argument("--public-host", help="Optional custom hostname for the deployment")
     args = parser.parse_args()
 
     for command in ("gcloud", "make", "terraform", "docker", "ansible-playbook"):
@@ -379,9 +385,9 @@ def main() -> int:
         parser.error(str(error))
 
     if not TFVARS.is_file() or not SERVER_ENV.is_file():
-        parser.error("Initialize configuration first with make secrets-init and make infra-config.")
+        parser.error("Initialize configuration first with make secrets-init.")
 
-    settings = make_settings()
+    settings = deployment_settings()
     configured_zone = settings.get("GCP_ZONE", "")
     configured_region = settings.get("GCP_REGION", "")
     if configured_zone != args.old_zone:
@@ -397,12 +403,14 @@ def main() -> int:
     project = settings.get("GCP_PROJECT_ID") or settings.get("TF_VAR_project_id") or os.environ.get("GCP_PROJECT_ID", "")
     if not project:
         project = run(["bash", str(REPO_ROOT / "scripts/gcp/gcp-context.sh"), "project-id"], capture=True).stdout.strip()
-    resource_name = settings.get("MOVIEREC_RESOURCE_NAME", "movierec")
+    resource_name = settings.get("MOVIEREC_RESOURCE_NAME", "")
     if not project:
         parser.error("Set GCP_PROJECT_ID or select the correct project with gcloud config set project.")
+    if not resource_name:
+        parser.error("Set MOVIEREC_RESOURCE_NAME in deploy/gcp/secrets/server.env.")
 
     try:
-        run(["make", "infra-init"])
+        run(["terraform", f"-chdir={TF_DIR}", "init"])
         tf_addresses = terraform_state_addresses()
     except (subprocess.CalledProcessError, OSError) as error:
         parser.error(f"Could not initialize or read Terraform state before migration: {error}")

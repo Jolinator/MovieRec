@@ -3,12 +3,12 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
-IMAGE_TAG="${1:-$(date -u +%Y%m%d%H%M%S)}"
+IMAGE_TAG="${1:-${IMAGE_TAG:-}}"
 REGION="${GCP_ARTIFACT_REGISTRY_REGION:-${GCP_REGION:-}}"
-RESOURCE_NAME="${MOVIEREC_RESOURCE_NAME:-movierec}"
+RESOURCE_NAME="${MOVIEREC_RESOURCE_NAME:-}"
 
 if [[ ! "${IMAGE_TAG}" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]]; then
-  printf 'Invalid Docker image tag: %s\n' "${IMAGE_TAG}" >&2
+  printf 'Set a valid IMAGE_TAG (for example, v1).\n' >&2
   exit 2
 fi
 
@@ -21,7 +21,7 @@ done
 
 PROJECT_ID="$(bash "${SCRIPT_DIR}/gcp-context.sh" project-id)"
 if [[ -z "${REGION}" || -z "${RESOURCE_NAME}" ]]; then
-  printf 'GCP_ARTIFACT_REGISTRY_REGION and MOVIEREC_RESOURCE_NAME must not be empty.\n' >&2
+  printf 'Set GCP_ARTIFACT_REGISTRY_REGION or GCP_REGION and MOVIEREC_RESOURCE_NAME in deploy/gcp/secrets/server.env.\n' >&2
   exit 1
 fi
 

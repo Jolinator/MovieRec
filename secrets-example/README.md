@@ -1,9 +1,17 @@
-# Local secret templates
+# Local Compose secrets
 
-These templates mirror the structure of the ignored local `secrets/` directory. Copy the `.env.example` files to `secrets/` and replace every placeholder with local values.
+The files in this directory are templates for the ignored local <code>secrets/</code> directory. They are for local development only; GCP deployment examples live under <code>deploy/gcp/secrets-examples/</code>.
 
-`tls/` and the PEM files are valid but publicly shared demo credentials generated only to demonstrate the file structure. Never use them for a real deployment. For local use, generate your own certificates and JWT key pair using the commands in `TODO.md`, or copy these files without the `.example` suffix only in an isolated throwaway environment.
+## Generate local files
 
-The local `ports.env.example` contains ports for the local Compose services. GCP firewall ports are configured separately in `deploy/ports.env.example`.
+Run this from the repository root:
 
-Cloud deployment secret templates are maintained in `deploy/gcp/secrets-examples/`.
+~~~bash
+bash scripts/init-local-secrets.sh
+~~~
+
+The script copies missing env templates, fills placeholder database passwords, and generates local TLS and JWT key pairs. Existing settings and complete key pairs are preserved. Incomplete key pairs stop the script so you can restore the missing file instead of silently replacing a key.
+
+Set <code>TMDB_READ_ACCESS_TOKEN</code> in <code>secrets/tmdb.env</code> manually. The token must be obtained from TMDB; the script leaves its placeholder unchanged.
+
+Start the Compose stack from the repository root with <code>docker compose up --build -d</code>. The first start downloads the model files. <code>docker compose down</code> keeps named volumes; <code>docker compose down -v</code> removes local database, model, and monitoring data.

@@ -40,7 +40,6 @@ resource "google_compute_address" "movierec" {
 }
 
 locals {
-  # Use deployment-specific ports, or the committed example in a clean checkout.
   ports_env_contents = try(
     file("${path.module}/../../ports.env"),
     file("${path.module}/../../ports.env.example"),

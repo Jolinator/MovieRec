@@ -6,7 +6,7 @@ REPO_ROOT="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
 TFVARS="${REPO_ROOT}/deploy/gcp/terraform/terraform.tfvars"
 GCP_CONFIG="${SCRIPT_DIR}/gcp-config.py"
 
-region="europe"
+region=""
 while (($#)); do
   case "$1" in
     --region)
@@ -22,15 +22,20 @@ while (($#)); do
       shift
       ;;
     -h|--help)
-      printf 'Usage: %s [--region europe|us]\n' "${0##*/}"
+      printf 'Usage: %s --region europe|us\n' "${0##*/}"
       exit 0
       ;;
     *)
-      printf 'Unknown argument: %s\nUsage: %s [--region europe|us]\n' "$1" "${0##*/}" >&2
+      printf 'Unknown argument: %s\nUsage: %s --region europe|us\n' "$1" "${0##*/}" >&2
       exit 2
       ;;
   esac
 done
+
+if [[ -z "${region}" ]]; then
+  printf 'Set --region to europe or us.\n' >&2
+  exit 2
+fi
 
 case "${region}" in
   europe)
@@ -102,7 +107,7 @@ case "${region}" in
 esac
 
 if [[ ! -f "${TFVARS}" ]]; then
-  printf 'Missing %s. Run make infra-config first, then rerun this script.\n' "${TFVARS}" >&2
+  printf 'Missing %s. Run make glean-vars first, then rerun this script.\n' "${TFVARS}" >&2
   exit 2
 fi
 

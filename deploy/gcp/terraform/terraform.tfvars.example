@@ -1,7 +1,17 @@
-project_id                   = "your-project-id"
-region                       = "europe-west4"
-zone                         = "europe-west4-b"
+# `make glean-vars` writes project_id, region, zone, and name from active GCP settings
+# and deploy/gcp/secrets/server.env.
+artifact_registry_region     = null
 model_zone                   = null
+app_private_ip               = null
+app_boot_disk_snapshot       = null
+database_boot_disk_snapshot = null
+model_boot_disk_snapshot     = null
+app_data_disk_snapshot       = null
+database_data_disk_snapshot = null
+model_data_disk_snapshot     = null
+machine_type                 = null
+model_machine_type           = null
+model_gpu_machine_type       = null
 public_registry              = true
 artifact_registry_keep_count = 10
 app_machine_type             = "e2-standard-2"
@@ -9,3 +19,7 @@ database_machine_type        = "e2-standard-2"
 model_cpu_machine_type       = "e2-standard-2"
 model_gpu_enabled            = false
 model_gpu_type               = "nvidia-tesla-t4"
+model_gpu_count              = 1
+app_data_disk_gb             = 20
+database_data_disk_gb        = 30
+model_data_disk_gb           = 20

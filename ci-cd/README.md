@@ -1,126 +1,37 @@
-# GitLab CI/CD
+# CI/CD
 
-The pipeline runs source validation and Docker image builds in parallel, then
-tests changes. A separate manual job can deploy the app from `master`:
+The GitLab pipeline validates and tests changes, builds container images, and provides a manual production deploy. Pipeline rules include merge requests targeting <code>master</code> or <code>CI/CD_testing</code>, and commits on those branches. The production deploy is available only as a manual job on <code>master</code>.
 
-- `backend_validation` checks Go formatting and runs `go vet`.
-- `frontend_validation` installs the locked npm dependencies and runs the production build.
-- `frontend_tests` installs the locked npm dependencies and runs the Vitest frontend
-  tests without requiring backend services.
-- `backend_tests` runs the integration scenarios from
-  `testing/backend/DockerTests/TestRunner.py`, which starts the required
-  Compose services and writes a test report. The job uses Docker-in-Docker,
-  installs Python dependencies from
-  `testing/backend/DockerTests/requirements.txt`, and prepares throwaway
-  Compose secrets from `secrets-example/`.
-- `apachebench_stress` is a separate Docker-in-Docker job that starts a fresh
-  gateway, backend-service, and database stack, waits for it to become ready,
-  then runs the ApacheBench stress profiles.
-- `docker_images` runs alongside validation and builds images for the backend
-  services (`gateway`, `auth`, `movies`, and `recommendations`) from
-  `backend/Dockerfile` with a `SERVICE` build argument, plus the frontend image.
-  All images are tagged with the commit SHA.
-- `update_app` runs `make update-app` to rebuild those images for Google Artifact
-  Registry and deploy them to the GCP cluster.
+## Jobs
 
-The frontend uses Vitest with React Testing Library. The tests cover API request
-contracts, login behavior, movie-grid rendering, and application navigation.
+| Stage | Job | Work |
+|---|---|---|
+| Validate | <code>backend_validation</code> | Checks Go formatting and runs <code>go vet ./...</code>. |
+| Validate | <code>frontend_validation</code> | Installs locked npm dependencies and creates the production build. |
+| Validate | <code>docker_images</code> | Builds the four Go service images and the frontend image with Docker-in-Docker; does not publish them. |
+| Test | <code>frontend_tests</code> | Runs the Vitest suite. |
+| Test | <code>backend_unit_tests</code> | Runs Go unit tests and saves <code>coverage.out</code> as an artifact. |
+| Test | <code>backend_tests</code> | Runs the backend integration scenarios against temporary Compose services. |
+| Test | <code>apachebench_stress</code> | Starts a temporary stack and runs the health, movie-list, large-page, and genre load profiles. |
+| Deploy | <code>update_app</code> | Manual deployment from <code>master</code>; builds/pushes the commit-tagged images and deploys them. |
 
-## Running ApacheBench
+The Docker-in-Docker test jobs need a GitLab runner configured for privileged Docker services. Integration and load-test jobs require a masked CI/CD variable named <code>TMDB_READ_ACCESS_TOKEN</code>. The setup script creates temporary test configuration and does not use the production secret directory.
 
-ApacheBench is an opt-in performance smoke test for a running gateway. Start
-the backend first, then run:
+## Manual GCP deployment
 
-```sh
-make benchmark
-```
+The <code>update_app</code> job assumes the GCP VMs, K3s cluster, Kubernetes Secrets, and model files already exist. It does not run Terraform, <code>make secrets-init</code>, <code>make k8s-config</code>, or <code>make models</code>. The image tag is the commit SHA.
 
-The default benchmark sends 1,000 requests to
-`http://localhost:8080/movieAPI/health` with 10 concurrent clients. Override
-the target and load without changing the script:
+Configure protected GitLab variables:
 
-```sh
-AB_URL=http://localhost:8080/movieAPI/movies \
-AB_REQUESTS=5000 AB_CONCURRENCY=50 make benchmark
-```
+- <code>TF_VAR_project_id</code>: project ID used to authenticate gcloud.
+- <code>GCP_SERVICE_ACCOUNT_KEY</code>: file variable with a service-account JSON key. Grant Artifact Registry push, Compute Engine instance list/read, and IAP SSH permissions.
+- Optional <code>GCP_ARTIFACT_REGISTRY_REGION</code>: set only if the registry is in a different region.
+- Optional <code>MOVIEREC_RESOURCE_NAME</code>, <code>MOVIEREC_SSH_USER</code>, and <code>PUBLIC_HOST</code>: override the job defaults or use a custom hostname.
 
-The command performs a `curl` readiness check before invoking `ab`. Install
-ApacheBench from the `apache2-utils` package when it is not already available.
-It waits up to five minutes by default; override that with `AB_READY_TIMEOUT`.
+Protect the <code>production</code> environment and the deployment variables. After authenticating, the job runs <code>make glean-vars</code> to discover the app VM zone and derive its region. No <code>GCP_ZONE</code> or <code>GCP_REGION</code> CI variable is needed. The optional registry-region override is retained when set; otherwise image publishing uses the discovered region.
 
-For a broader, read-only infrastructure load test, run:
+After a region migration, the next deploy discovers the new app VM zone automatically. Update the registry-region override only if the registry is in a different region. The <code>make set-region</code> workflow handles infrastructure migration, image deployment, and old MovieRec registry copies from Cloud Shell; the CI job itself does not manage Terraform state.
 
-```sh
-make benchmark-stress
-```
+## Performance commands
 
-It runs the existing health and movie-list profiles plus a 100-movie page
-profile and a high-concurrency genre-list profile. All profiles use
-`BACKEND_HOST` (or `AB_HOST`) and `BACKEND_PORT` when supplied, so the CI job
-targets its Docker gateway rather than the CI container itself. Every profile
-can be tuned with `AB_HEALTH_*`, `AB_MOVIES_*`, `AB_MOVIES_LARGE_PAGE_*`, or
-`AB_GENRES_*` request/concurrency variables.
-
-In CI, the integration runner first cleans up its temporary Compose services.
-The `backend_tests` wrapper then starts a fresh gateway, backend-service, and
-database stack, and waits for its databases and movie import to be ready before
-the stress profiles run.
-
-The `docker_images` job publishes no images; it builds them in GitLab CI. The
-manual GCP deployment job builds and pushes the same services to Google Artifact
-Registry as part of `make update-app`.
-
-## Deploying the app to GCP
-
-The `update_app` job is a manual deployment from `master`. After the validation
-and test stages pass, it runs
-`make update-app IMAGE_TAG=$CI_COMMIT_SHA`. It builds and pushes the images to
-Google Artifact Registry, then uses Ansible over IAP SSH to deploy them with the
-normal CPU Kubernetes overlay and wait for rollouts. It does not use the CUDA
-image or GPU overlay. It also does not run Terraform apply, configure Kubernetes
-secrets, or download model files.
-
-Before using the job:
-
-1. Configure protected GitLab CI/CD variables for the `master` branch:
-   - `TF_VAR_project_id`: the Google Cloud project ID.
-   - `GCP_SERVICE_ACCOUNT_KEY`: a **file** variable containing a JSON key for a
-     dedicated service account that can push to Artifact Registry, describe the
-     three Compute Engine instances, and connect to the app VM through IAP. Keep
-     the variable protected and limit who can change protected variables. This
-     job currently uses a service-account key; Workload Identity Federation can
-     replace it in a later hardening step.
-   - `GCP_ZONE` is required. Set it to the app/database zone provisioned by
-     Terraform. The deployment job derives `GCP_REGION` from this zone, so no
-     separate region variable is needed.
-   - `GCP_ARTIFACT_REGISTRY_REGION` is optional. Set it only when Artifact
-     Registry is intentionally in a different region from the app/database
-     VMs; otherwise it defaults to the region derived from `GCP_ZONE`.
-   - `MOVIEREC_RESOURCE_NAME`, if it differs from `movierec`.
-   - `PUBLIC_HOST`, if the deployment should use a DNS name instead of the
-     default IP based `nip.io` hostname.
-   - `MOVIEREC_SSH_USER`, if Ansible should connect as a specific SSH user.
-2. Protect the `production` environment in GitLab so only intended maintainers
-   can start the manual deployment.
-
-After moving the app/database VMs, update the GitLab CI/CD variable `GCP_ZONE`
-to their new zone. `make set-region` moves Artifact Registry to the target region
-and deletes every other regional copy of MovieRec's Docker repository after a
-successful deploy. Update or unset
-any existing `GCP_ARTIFACT_REGISTRY_REGION` override so CI uses the new region.
-With `SCOPE=app-db`, the model VM can remain in its separate `model_zone`. Use
-`SCOPE=all` to move it too when it is not already in the destination zone.
-
-The `update_app` job does not initialize Terraform or access Terraform state.
-The Terraform state is local to the Cloud Shell checkout and is not available
-to GitLab. The job derives the compute region from the configured app/database
-zone, builds the Artifact Registry path using `GCP_ARTIFACT_REGISTRY_REGION`
-when set, then uses `gcloud` to read the configured VM instances for Ansible.
-GitLab-managed Terraform state is optional and is only
-needed if you want Terraform commands in different environments to share state.
-Manual Cloud Shell Terraform commands can continue using their local state.
-
-The `backend_tests` and `apachebench_stress` jobs require a masked GitLab CI/CD
-variable named `TMDB_READ_ACCESS_TOKEN`. It is used only to import the test
-movie catalogue; the CI jobs create the remaining local test configuration
-automatically.
+For a running local gateway, <code>make benchmark</code> runs ApacheBench against the health endpoint by default. Override <code>AB_URL</code>, <code>AB_REQUESTS</code>, and <code>AB_CONCURRENCY</code> as needed. <code>make benchmark-stress</code> runs four read-only request profiles. The scripts accept <code>BACKEND_HOST</code>/<code>AB_HOST</code>, <code>BACKEND_PORT</code>, and the per-profile <code>AB_*</code> settings.

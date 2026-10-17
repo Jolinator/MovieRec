@@ -1,5 +1,5 @@
 ---
-# Installs the NVIDIA device plugin. Run make gpu-runtime first.
+# Installs the NVIDIA device plugin after cluster-bootstrap prepares the NVIDIA runtime.
 - name: Set up GPU scheduling
   hosts: app
   become: true

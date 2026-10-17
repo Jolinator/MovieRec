@@ -6,7 +6,7 @@ REPO_ROOT="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
 TF_DIR="${REPO_ROOT}/deploy/gcp/terraform"
 
 usage() {
-  printf 'Usage: %s {app|database|model} [--command COMMAND]\n' "${0##*/}"
+  printf 'Usage: %s {app|database|model} [--command COMMAND] [--ssh-flag FLAG ...]\n' "${0##*/}"
   printf 'Without --command, opens an interactive SSH session.\n'
 }
 
@@ -18,17 +18,40 @@ fi
 machine="$1"
 shift
 remote_command=""
-if (($#)); then
-  if (($# != 2)) || [[ "$1" != "--command" ]]; then
-    usage >&2
-    exit 2
-  fi
-  remote_command="$2"
-  if [[ -z "${remote_command}" ]]; then
-    printf 'Remote command cannot be empty.\n' >&2
-    exit 2
-  fi
-fi
+command_set=0
+ssh_flags=()
+while (($#)); do
+  case "$1" in
+    --command)
+      (($# >= 2)) || { usage >&2; exit 2; }
+      ((command_set == 0)) || { usage >&2; exit 2; }
+      remote_command="$2"
+      [[ -n "${remote_command}" ]] || { printf 'Remote command cannot be empty.\n' >&2; exit 2; }
+      command_set=1
+      shift 2
+      ;;
+    --command=*)
+      ((command_set == 0)) || { usage >&2; exit 2; }
+      remote_command="${1#*=}"
+      [[ -n "${remote_command}" ]] || { printf 'Remote command cannot be empty.\n' >&2; exit 2; }
+      command_set=1
+      shift
+      ;;
+    --ssh-flag)
+      (($# >= 2)) || { usage >&2; exit 2; }
+      ssh_flags+=("$2")
+      shift 2
+      ;;
+    --ssh-flag=*)
+      ssh_flags+=("${1#*=}")
+      shift
+      ;;
+    *)
+      usage >&2
+      exit 2
+      ;;
+  esac
+done
 
 case "${machine}" in
   app)
@@ -78,8 +101,11 @@ gcloud_args=(
   --tunnel-through-iap
   --quiet
 )
-if [[ -n "${remote_command}" ]]; then
+if ((command_set)); then
   gcloud_args+=(--command="${remote_command}")
 fi
+for ssh_flag in "${ssh_flags[@]}"; do
+  gcloud_args+=(--ssh-flag="${ssh_flag}")
+done
 
 exec gcloud "${gcloud_args[@]}"

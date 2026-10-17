@@ -4,11 +4,11 @@ set -euo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 
 usage() {
-  printf 'Usage: %s [WORKLOAD_OR_RESOURCE] [--container NAME] [--namespace NAME] [--tail LINES] [--follow]\n' "${0##*/}"
+  printf 'Usage: %s [WORKLOAD_OR_RESOURCE] --namespace NAME --tail LINES [--container NAME] [--follow]\n' "${0##*/}"
   printf 'When WORKLOAD is omitted, --container discovers a matching workload in the namespace.\n'
   printf 'A workload name without a resource kind is treated as a Deployment.\n'
-  printf 'Examples: %s llama-generation --container llama-server --follow\n' "${0##*/}"
-  printf '          %s --container recommendations --follow\n' "${0##*/}"
+  printf 'Examples: %s llama-generation --namespace movierec --tail 100 --container llama-server --follow\n' "${0##*/}"
+  printf '          %s --namespace movierec --tail 100 --container recommendations --follow\n' "${0##*/}"
   printf '          %s statefulset/movies-postgres --namespace movierec\n' "${0##*/}"
 }
 
@@ -19,9 +19,9 @@ if (($#)) && [[ "$1" != -* ]]; then
   shift
 fi
 
-namespace="movierec"
+namespace=""
 container=""
-tail_lines="100"
+tail_lines=""
 follow="false"
 
 while (($#)); do
@@ -56,6 +56,11 @@ while (($#)); do
       ;;
   esac
 done
+
+if [[ -z "${namespace}" || ! "${tail_lines}" =~ ^[1-9][0-9]*$ ]]; then
+  printf 'Set --namespace and a positive --tail value.\n' >&2
+  exit 2
+fi
 
 if [[ -z "${resource}" && -z "${container}" ]]; then
   printf 'Set a workload or a container name.\n' >&2

@@ -1,8 +1,7 @@
 terraform {
   required_version = ">= 1.5.0"
 
-  # Terraform provisions infrastructure. The CI deployment job discovers the
-  # provisioned GCP resources directly and does not initialize Terraform.
+  # CI discovers provisioned GCP resources directly and does not initialize Terraform.
 
   required_providers {
     google = {
