@@ -3,6 +3,8 @@ import MovieDetails from './MovieDetails'
 import { chatRecommendations } from '../services/api'
 import styles from './RecommendationChat.module.css'
 
+const EMPTY_MOVIE_IDS = new Set()
+
 function cleanReply(reply) {
   return reply
     .replace(/\*/g, '')
@@ -61,9 +63,9 @@ export default function RecommendationChat({
       <MovieDetails
         movie={selectedMovie}
         onClose={() => setSelectedMovie(null)}
-        onToggleList={() => onToggleList(selectedMovie)}
+        onToggleList={onToggleList ? () => onToggleList(selectedMovie) : undefined}
         isAddingToList={isAddingToList}
-        isInList={myListMovieIds.has(selectedMovie.tmdbId)}
+        isInList={(myListMovieIds ?? EMPTY_MOVIE_IDS).has(selectedMovie.tmdbId)}
       />
     )}
   </section>
