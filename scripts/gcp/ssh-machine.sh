@@ -84,12 +84,13 @@ if ! project_id="$(bash "${SCRIPT_DIR}/gcp-context.sh" project-id)"; then
   exit 1
 fi
 if ! instance="$(terraform -chdir="${TF_DIR}" output -raw "${instance_output}")" || [[ -z "${instance}" ]]; then
-  printf 'Could not read Terraform output %s from %s. Initialize/apply Terraform first.\n' \
+  printf 'Could not read Terraform output %s from %s; Terraform state may be missing or the VM may not have been provisioned.\n' \
     "${instance_output}" "${TF_DIR}" >&2
+  printf 'For a fresh deployment, run make infra-plan, review it, then make infra-apply. For an existing deployment, restore its Terraform state. make secrets-init prepares local configuration and secrets but does not provision VMs.\n' >&2
   exit 1
 fi
 if ! zone="$(terraform -chdir="${TF_DIR}" output -raw "${zone_output}")" || [[ -z "${zone}" ]]; then
-  printf 'Could not read Terraform output %s from %s. Initialize/apply Terraform first.\n' \
+  printf 'Could not read Terraform output %s from %s; Terraform state may be missing or the VM may not have been provisioned.\n' \
     "${zone_output}" "${TF_DIR}" >&2
   exit 1
 fi

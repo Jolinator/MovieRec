@@ -33,7 +33,7 @@ For a **fresh deployment**, no state or secret files need restoring. Gleaning us
    make secrets-init
    ~~~
 
-   This runs <code>make glean-vars</code>, writes the active project and VM settings to <code>server.env</code> and <code>terraform.tfvars</code>, copies missing secret examples, creates local TLS/JWT keys, and fills placeholder database passwords. If a model VM exists, it also records its zone and GPU configuration. It does not generate a TMDB token. Edit <code>deploy/gcp/secrets/tmdb.env</code> and set <code>TMDB_READ_ACCESS_TOKEN</code> before Kubernetes configuration.
+   This runs <code>make glean-vars</code>, writes project/zone values to <code>server.env</code> and <code>terraform.tfvars</code>, copies missing secret examples, creates local TLS/JWT keys, and fills placeholder database passwords. It does not initialize/apply Terraform or provision VMs. It also does not generate a TMDB token. Edit <code>deploy/gcp/secrets/tmdb.env</code> and set <code>TMDB_READ_ACCESS_TOKEN</code> before Kubernetes configuration.
 
 2. Review and provision the infrastructure:
 
@@ -72,8 +72,6 @@ For a **fresh deployment**, no state or secret files need restoring. Gleaning us
 ## GPU options
 
 CPU is the fresh-deployment default. GPU hardware is attached only to the model VM. The Terraform setting is saved in <code>deploy/gcp/terraform/terraform.tfvars</code>; the Make variable chooses whether to change or follow that setting.
-
-On an existing deployment, <code>make glean-vars</code> reads the model VM's machine type and accelerator details, then saves its zone, GPU type/count, and machine type. If the model VM is absent, it keeps the configured example/local defaults.
 
 | Setting | Meaning |
 |---|---|
@@ -120,8 +118,8 @@ All Make defaults are maintained in <code>deploy/gcp/secrets-examples/server.env
 |---|---|
 | <code>help</code> | Prints the command summary and GPU usage hints. |
 | <code>cloud-shell-setup</code> | Installs Micro, Terraform, and Ansible in Cloud Shell, applies the configured Docker upload limit, and enables optional IAP upload acceleration. |
-| <code>glean-vars</code> | Reads the active GCP project, discovers existing VM zones and model GPU settings, derives the app region, and saves settings for Make and Terraform. |
-| <code>secrets-init</code> | Runs gleaning, creates missing secret files and TLS/JWT keys, then fills placeholder database passwords. Restore old secrets first for an existing database. |
+| <code>glean-vars</code> | Reads the active GCP project, discovers the app VM zone when present, derives the region, and saves settings for Make and Terraform. |
+| <code>secrets-init</code> | Runs gleaning, creates missing secret files and TLS/JWT keys, then fills placeholder database passwords. It does not provision infrastructure. Restore old secrets first for an existing database. |
 | <code>secrets-passwords</code> | Manually fills placeholder database passwords; matching configured values are preserved. Usually run automatically by <code>secrets-init</code>. |
 | <code>infra-plan</code> | Initializes, formats, validates, and plans Terraform changes. <code>GPU=on</code> or <code>off</code> updates the saved GPU setting. |
 | <code>infra-apply</code> | Initializes, formats, validates, and applies Terraform changes. Review the plan first; <code>TF_AUTO_APPROVE=1</code> skips Terraform's confirmation prompt. |
@@ -135,7 +133,7 @@ All Make defaults are maintained in <code>deploy/gcp/secrets-examples/server.env
 | <code>artifact-registry-cleanup</code> | Lists Artifact Registry repositories outside the keep location and asks before deleting them. It applies to all repositories in the project, not only MovieRec. |
 | <code>gpu-capacity</code> | Prompts, then tries model-only T4/L4 Terraform applies in documented zones for <code>GPU_REGION=europe</code> or <code>us</code>. |
 | <code>ssh-machine</code> | Opens an interactive IAP SSH session to <code>MACHINE=app</code>, <code>database</code>, or <code>model</code>. |
-| <code>grafana</code> | Opens a temporary IAP tunnel to Grafana in a local browser. |
+| <code>grafana</code> | Opens a temporary IAP tunnel to the deployed Grafana workload. Apply infrastructure and deploy the cluster/workload first; for an existing deployment in a new checkout, restore its Terraform state. |
 | <code>container-logs</code> | Streams logs from a workload or finds its workload by <code>CONTAINER</code>; accepts <code>NAMESPACE</code>, <code>TAIL_LINES</code>, and <code>FOLLOW=1</code>. |
 | <code>pause-app</code> | Scales frontend/API/model workloads to zero while leaving databases and monitoring running. |
 | <code>resume-app</code> | Restores the frontend/API/model workloads to one replica. |

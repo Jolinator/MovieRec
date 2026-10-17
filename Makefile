@@ -49,14 +49,14 @@ help:
 	  '  make infra-plan [GPU=on|off|auto] [GPU_TYPE=nvidia-tesla-t4] [MODEL_ONLY=1] [TF_PARALLELISM=n] Initialize, format, validate, and plan; default parallelism is 2' \
 	  '  make infra-apply [GPU=on|off|auto] [GPU_TYPE=nvidia-tesla-t4] [MODEL_ONLY=1] [TF_AUTO_APPROVE=1] Initialize, format, validate, and apply; GPU affects only model VM' \
 	  '  make ssh-machine MACHINE=app|database|model  SSH to a VM over IAP (interactive)' \
-	  '  make grafana                         Open Grafana through IAP with a per-admin Cloud Shell preview tunnel' \
+	  '  make grafana                         Open deployed Grafana through IAP (requires applied infrastructure and a deployed Grafana workload)' \
 	  '  make pause-app                       Scale website and model workloads to zero; keep VMs, databases and monitoring running' \
 	  '  make resume-app                      Restore website and model workloads to one replica' \
 	  '  make reboot MACHINE=app|database|model|all   Reboot one VM or all sequentially over IAP' \
 	  '  make clear-databases CONFIRM_CLEAR_DATABASES=1  Erase and recreate the three PostgreSQL databases' \
 	  '  make clear-databases-reboot-all CONFIRM_CLEAR_DATABASES=1  Clear PostgreSQL data, then reboot every VM' \
 	  '  make cluster-bootstrap             Join worker VMs; automatically set up GPU runtime/plugin when GPU is enabled' \
-	  '  make secrets-init                 Discover GCP settings, configure Terraform, prepare secrets/keys, and fill missing DB passwords' \
+	  '  make secrets-init                 Discover GCP settings and prepare local secrets/keys; does not provision infrastructure' \
 	  '  make secrets-passwords            Fill placeholder DB passwords without rotating existing values' \
 	  '  make docker-push-limit [DOCKER_MAX_CONCURRENT_UPLOADS=n] Limit layers uploaded per image push (requires sudo)' \
 	  '  make docker-push-limit-reset      Remove the Docker upload limit and restore its default (requires sudo)' \
