@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"backend/internal/platform"
+
 	"github.com/golang-jwt/jwt/v5"
 )
 
