@@ -14,7 +14,7 @@ import (
 
 const (
 	tmdbDiscoverURL       = "https://api.themoviedb.org/3/discover/movie"
-	defaultTMDBMovieLimit = 500
+	defaultTMDBMovieLimit = 5000
 )
 
 type TMDBMovie struct {

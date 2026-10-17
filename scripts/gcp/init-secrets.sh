@@ -4,7 +4,6 @@ set -euo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
 SECRETS_DIR="${REPO_ROOT}/deploy/gcp/secrets"
-LOCAL_SECRETS_DIR="${REPO_ROOT}/secrets"
 EXAMPLES_DIR="${REPO_ROOT}/deploy/gcp/secrets-examples"
 SERVER_ENV="${SECRETS_DIR}/server.env"
 SERVER_ENV_EXAMPLE="${EXAMPLES_DIR}/server.env.example"
@@ -33,18 +32,26 @@ for service in auth movies recommendations tmdb; do
   target="${SECRETS_DIR}/${service}.env"
   example="${EXAMPLES_DIR}/${service}.env.example"
   if [[ ! -e "${target}" ]]; then
-    if [[ -f "${LOCAL_SECRETS_DIR}/${service}.env" ]]; then
-      cp "${LOCAL_SECRETS_DIR}/${service}.env" "${target}"
-      printf 'Copied configured local values into %s.\n' "${target}"
-    else
-      cp "${example}" "${target}"
-      printf 'Created %s from its example; replace its placeholder values before deployment.\n' "${target}"
-    fi
+    cp "${example}" "${target}"
+    printf 'Created %s from its GCP example; replace any placeholders before deployment.\n' "${target}"
   else
-    printf 'Keeping existing %s\n' "${target}"
+    if [[ "${service}" == tmdb ]]; then
+      printf 'Keeping existing %s; TMDB_IMPORT_LIMIT will be set to 5000.\n' "${target}"
+    else
+      printf 'Keeping existing %s\n' "${target}"
+    fi
   fi
   chmod 600 "${target}"
 done
+
+tmdb_env="${SECRETS_DIR}/tmdb.env"
+if grep -q '^TMDB_IMPORT_LIMIT=' "${tmdb_env}"; then
+  sed -i 's/^TMDB_IMPORT_LIMIT=.*/TMDB_IMPORT_LIMIT=5000/' "${tmdb_env}"
+else
+  printf '\nTMDB_IMPORT_LIMIT=5000\n' >> "${tmdb_env}"
+fi
+chmod 600 "${tmdb_env}"
+printf 'Set TMDB_IMPORT_LIMIT to 5000 in %s.\n' "${tmdb_env}"
 
 generate_tls_pair() {
   openssl req -x509 -newkey rsa:2048 -nodes -days 365 \
@@ -61,20 +68,10 @@ generate_jwt_pair() {
 
 ensure_key_pair() {
   local label="$1"
-  local local_private="$2"
-  local local_public="$3"
-  local private_key="$4"
-  local public_key="$5"
-  local copy_message="$6"
-  local generated_message="$7"
-  local generator="$8"
-
-  if [[ ! -e "${private_key}" && ! -e "${public_key}" ]] && \
-     [[ -s "${local_private}" && -s "${local_public}" ]]; then
-    cp "${local_private}" "${private_key}"
-    cp "${local_public}" "${public_key}"
-    printf '%s\n' "${copy_message}"
-  fi
+  local private_key="$2"
+  local public_key="$3"
+  local generated_message="$4"
+  local generator="$5"
 
   if [[ -e "${private_key}" && ! -s "${public_key}" ]] || \
      [[ -e "${public_key}" && ! -s "${private_key}" ]]; then
@@ -92,17 +89,13 @@ ensure_key_pair() {
 
 ensure_key_pair \
   'PostgreSQL TLS files' \
-  "${LOCAL_SECRETS_DIR}/tls/server.key" "${LOCAL_SECRETS_DIR}/tls/server.crt" \
   "${SECRETS_DIR}/tls/server.key" "${SECRETS_DIR}/tls/server.crt" \
-  'Copied configured local PostgreSQL TLS files.' \
   'Generated PostgreSQL TLS files.' \
   generate_tls_pair
 
 ensure_key_pair \
   'JWT key files' \
-  "${LOCAL_SECRETS_DIR}/jwt-private.pem" "${LOCAL_SECRETS_DIR}/jwt-public.pem" \
   "${SECRETS_DIR}/jwt-private.pem" "${SECRETS_DIR}/jwt-public.pem" \
-  'Copied configured local JWT keys.' \
   'Generated JWT signing keys.' \
   generate_jwt_pair
 
