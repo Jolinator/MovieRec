@@ -397,6 +397,9 @@ spec:
           env:
             - { name: GF_SECURITY_ADMIN_USER, value: admin }
             - { name: GF_SECURITY_ADMIN_PASSWORD, valueFrom: { secretKeyRef: { name: grafana-config, key: admin-password } } }
+            - { name: GF_SERVER_ROOT_URL, value: "http://localhost:3000/" }
+            - { name: GF_SECURITY_CSRF_ADDITIONAL_HEADERS, value: "X-Forwarded-Host" }
+            - { name: GF_LIVE_ALLOWED_ORIGINS, value: "https://*-cs-*.cloudshell.dev,http://localhost:*,http://127.0.0.1:*" }
           volumeMounts:
             - { name: data, mountPath: /var/lib/grafana }
             - { name: dashboards, mountPath: /etc/grafana/provisioning/dashboards, readOnly: true }

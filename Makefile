@@ -66,7 +66,7 @@ help:
 	  '  make infra-plan [GPU=on|off|auto] [GPU_TYPE=nvidia-tesla-t4] [MODEL_ONLY=1] [TF_PARALLELISM=n] Plan resources; default parallelism is 2' \
 	  '  make infra-apply [GPU=on|off|auto] [GPU_TYPE=nvidia-tesla-t4] [MODEL_ONLY=1] [TF_AUTO_APPROVE=1] Apply resources; GPU affects only model VM' \
 	  '  make ssh-machine MACHINE=app|database|model  SSH to a VM over IAP (interactive)' \
-	  '  make grafana                         Open Grafana through IAP; align its root URL with the Cloud Shell preview' \
+	  '  make grafana                         Open Grafana through IAP with a per-admin Cloud Shell preview tunnel' \
 	  '  make pause-app                       Scale website and model workloads to zero; keep VMs, databases and monitoring running' \
 	  '  make resume-app                      Restore website and model workloads to one replica' \
 	  '  make reboot MACHINE=app|database|model|all   Reboot one VM or all sequentially over IAP' \
@@ -194,19 +194,15 @@ grafana: ssh-access
 	grafana_remote_port=$$((40000 + RANDOM % 20000)); \
 	if [[ -n "$${WEB_HOST:-}" ]]; then \
 	  [[ "$${WEB_HOST}" =~ ^[A-Za-z0-9.-]+$$ ]] || { printf '%s\n' 'WEB_HOST contains invalid characters.' >&2; exit 2; }; \
-	  grafana_root_url="https://$${grafana_local_port}-$${WEB_HOST}/"; \
-	  printf 'Open Cloud Shell Web Preview > Preview on port %s.\n' "$${grafana_local_port}"; \
+	  printf 'Grafana: https://%s-%s/\n' "$${grafana_local_port}" "$${WEB_HOST}"; \
 	else \
-	  grafana_root_url="http://localhost:$${grafana_local_port}/"; \
-	  printf 'Open %s in a local browser.\n' "$${grafana_root_url%/}"; \
+	  printf 'Open http://localhost:%s in a local browser.\n' "$${grafana_local_port}"; \
 	fi; \
-	grafana_csrf_host="$${grafana_root_url#*://}"; \
-	grafana_csrf_host="$${grafana_csrf_host%/}"; \
-	printf '%s\n' "Setting Grafana root URL to $${grafana_root_url}." 'Press Ctrl-C to close the tunnel.'; \
+	printf '%s\n' 'Configuring stable Grafana proxy settings; this only rolls out Grafana if they changed.' 'Press Ctrl-C to close the tunnel.'; \
 	gcloud compute ssh "$(MOVIEREC_RESOURCE_NAME)-app" \
 	  --project="$(GCP_PROJECT_ID)" --zone="$(GCP_ZONE)" --tunnel-through-iap --quiet \
 	  --ssh-flag="-L 127.0.0.1:$${grafana_local_port}:localhost:$${grafana_remote_port}" \
-	  --command="sudo k3s kubectl -n movierec set env deployment/grafana GF_SERVER_ROOT_URL=$$grafana_root_url GF_SECURITY_CSRF_TRUSTED_ORIGINS=$$grafana_csrf_host && sudo k3s kubectl -n movierec rollout status deployment/grafana --timeout=5m && sudo k3s kubectl -n movierec port-forward service/grafana $${grafana_remote_port}:3000 --address 127.0.0.1"
+	  --command="sudo k3s kubectl -n movierec set env deployment/grafana GF_SERVER_ROOT_URL=http://localhost:3000/ GF_SECURITY_CSRF_ADDITIONAL_HEADERS=X-Forwarded-Host 'GF_LIVE_ALLOWED_ORIGINS=https://*-cs-*.cloudshell.dev,http://localhost:*,http://127.0.0.1:*' GF_SECURITY_CSRF_TRUSTED_ORIGINS- && sudo k3s kubectl -n movierec rollout status deployment/grafana --timeout=5m && sudo k3s kubectl -n movierec port-forward service/grafana $${grafana_remote_port}:3000 --address 127.0.0.1"
 
 MOVIEREC_APP_DEPLOYMENTS := deployment/frontend deployment/gateway deployment/auth deployment/movies \
 	deployment/recommendations deployment/llama-embedding deployment/llama-generation
