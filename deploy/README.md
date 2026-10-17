@@ -133,7 +133,7 @@ All Make defaults are maintained in <code>deploy/gcp/secrets-examples/server.env
 | <code>artifact-registry-cleanup</code> | Lists Artifact Registry repositories outside the keep location and asks before deleting them. It applies to all repositories in the project, not only MovieRec. |
 | <code>gpu-capacity</code> | Prompts, then tries model-only T4/L4 Terraform applies in documented zones for <code>GPU_REGION=europe</code> or <code>us</code>. |
 | <code>ssh-machine</code> | Opens an interactive IAP SSH session to <code>MACHINE=app</code>, <code>database</code>, or <code>model</code>. |
-| <code>grafana</code> | Opens a temporary IAP tunnel to the deployed Grafana workload. Apply infrastructure and deploy the cluster/workload first; for an existing deployment in a new checkout, restore its Terraform state. |
+| <code>grafana</code> | Opens a temporary IAP tunnel to the deployed Grafana workload. Apply infrastructure and deploy the cluster/workload first. If Terraform outputs are missing, the SSH helper looks up the configured VM name in the zone saved by <code>make glean-vars</code>. |
 | <code>container-logs</code> | Streams logs from a workload or finds its workload by <code>CONTAINER</code>; accepts <code>NAMESPACE</code>, <code>TAIL_LINES</code>, and <code>FOLLOW=1</code>. |
 | <code>pause-app</code> | Scales frontend/API/model workloads to zero while leaving databases and monitoring running. |
 | <code>resume-app</code> | Restores the frontend/API/model workloads to one replica. |

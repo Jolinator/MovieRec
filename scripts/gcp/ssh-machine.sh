@@ -83,16 +83,44 @@ done
 if ! project_id="$(bash "${SCRIPT_DIR}/gcp-context.sh" project-id)"; then
   exit 1
 fi
-if ! instance="$(terraform -chdir="${TF_DIR}" output -raw "${instance_output}")" || [[ -z "${instance}" ]]; then
-  printf 'Could not read Terraform output %s from %s; Terraform state may be missing or the VM may not have been provisioned.\n' \
-    "${instance_output}" "${TF_DIR}" >&2
-  printf 'For a fresh deployment, run make infra-plan, review it, then make infra-apply. For an existing deployment, restore its Terraform state. make secrets-init prepares local configuration and secrets but does not provision VMs.\n' >&2
-  exit 1
+instance=""
+zone=""
+if output="$(terraform -chdir="${TF_DIR}" output -raw "${instance_output}" 2>/dev/null)" && [[ -n "${output}" ]]; then
+  instance="${output}"
 fi
-if ! zone="$(terraform -chdir="${TF_DIR}" output -raw "${zone_output}")" || [[ -z "${zone}" ]]; then
-  printf 'Could not read Terraform output %s from %s; Terraform state may be missing or the VM may not have been provisioned.\n' \
-    "${zone_output}" "${TF_DIR}" >&2
-  exit 1
+if output="$(terraform -chdir="${TF_DIR}" output -raw "${zone_output}" 2>/dev/null)" && [[ -n "${output}" ]]; then
+  zone="${output}"
+fi
+
+if [[ -z "${instance}" || -z "${zone}" ]]; then
+  resource_name="${MOVIEREC_RESOURCE_NAME:-}"
+  configured_zone="${GCP_ZONE:-}"
+  if [[ "${machine}" == model ]]; then
+    model_zone="${MODEL_ZONE:-}"
+    if [[ -z "${model_zone}" ]]; then
+      model_zone="$(python3 "${SCRIPT_DIR}/gcp-config.py" get-tfvar model_zone 2>/dev/null || true)"
+    fi
+    if [[ -n "${model_zone}" && "${model_zone}" != null ]]; then
+      configured_zone="${model_zone}"
+    fi
+  fi
+
+  expected_instance="${resource_name}-${machine}"
+  if [[ -z "${resource_name}" || -z "${configured_zone}" ]]; then
+    printf 'Terraform outputs %s and %s are unavailable, and the configured VM name or zone is missing. Run make glean-vars and retry.\n' \
+      "${instance_output}" "${zone_output}" >&2
+    exit 1
+  fi
+
+  # Use any output that is available, then use gleaned settings for the missing value.
+  instance="${instance:-${expected_instance}}"
+  zone="${zone:-${configured_zone}}"
+  if ! existing_instance="$(gcloud compute instances describe "${instance}" \
+    --project="${project_id}" --zone="${zone}" --format='value(name)' --quiet)" || [[ "${existing_instance}" != "${instance}" ]]; then
+    printf 'Terraform outputs are unavailable and GCP could not confirm VM %s in project %s, zone %s. For a fresh deployment, review make infra-plan and run make infra-apply.\n' \
+      "${instance}" "${project_id}" "${zone}" >&2
+    exit 1
+  fi
 fi
 
 gcloud_args=(
