@@ -33,8 +33,8 @@ func indexCandidates(candidates []common.MovieResponse) (map[int]common.MovieRes
 }
 
 func matchParsedRecommendations(parsed []parsedRecommendation, byID map[int]common.MovieResponse, byTitle map[string]common.MovieResponse) ([]common.MovieResponse, []parsedRecommendation) {
-	recommended := make([]common.MovieResponse, 0, 3)
-	entries := make([]parsedRecommendation, 0, 3)
+	recommended := make([]common.MovieResponse, 0, chatRecommendationLimit)
+	entries := make([]parsedRecommendation, 0, chatRecommendationLimit)
 	for _, item := range parsed {
 		movie, ok := matchCandidate(item, byID, byTitle)
 		if !ok || containsMovie(recommended, movie.TMDBID) {
@@ -42,7 +42,7 @@ func matchParsedRecommendations(parsed []parsedRecommendation, byID map[int]comm
 		}
 		recommended = append(recommended, movie)
 		entries = append(entries, parsedRecommendation{title: movie.Title, reason: cleanReason(item.reason)})
-		if len(recommended) == 3 {
+		if len(recommended) == chatRecommendationLimit {
 			break
 		}
 	}
@@ -64,7 +64,7 @@ func matchCandidate(item parsedRecommendation, byID map[int]common.MovieResponse
 
 func appendFallbackRecommendations(recommended *[]common.MovieResponse, entries *[]parsedRecommendation, candidates []common.MovieResponse) {
 	for _, candidate := range candidates {
-		if len(*recommended) == 3 {
+		if len(*recommended) == chatRecommendationLimit {
 			return
 		}
 		if containsMovie(*recommended, candidate.TMDBID) {

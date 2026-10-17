@@ -108,10 +108,10 @@ func TestNormalizeRecommendationsMatchesByTitleThenID(t *testing.T) {
    Reason: Over the limit.
    [ID:4]`
 	movies, message := normalizeRecommendations(answer, candidates)
-	if !reflect.DeepEqual(ids(movies), []int{3, 2, 1}) {
+	if !reflect.DeepEqual(ids(movies), []int{3, 2, 1, 4}) {
 		t.Fatalf("ids = %v", ids(movies))
 	}
-	if strings.Contains(message, "*") || strings.Contains(message, "Delta") {
+	if strings.Contains(message, "*") {
 		t.Fatalf("message = %q", message)
 	}
 	if !strings.HasPrefix(message, "1. Title: Gamma\n   Reason: Great one.") {
@@ -131,11 +131,11 @@ func TestNormalizeRecommendationsIgnoresInventedAndDuplicateMovies(t *testing.T)
    Reason: Invented.
    [ID:999]`
 	movies, message := normalizeRecommendations(answer, candidates)
-	if !reflect.DeepEqual(ids(movies), []int{1, 2, 3}) {
+	if !reflect.DeepEqual(ids(movies), []int{1, 2, 3, 4}) {
 		t.Fatalf("ids = %v", ids(movies))
 	}
-	if strings.Count(message, "This movie matches the themes and tone of your request.") != 2 {
-		t.Fatalf("expected two default reasons in %q", message)
+	if strings.Count(message, "This movie matches the themes and tone of your request.") != 3 {
+		t.Fatalf("expected three default reasons in %q", message)
 	}
 	if strings.Contains(message, "Invented") || strings.Contains(message, "Duplicate") {
 		t.Fatalf("message = %q", message)

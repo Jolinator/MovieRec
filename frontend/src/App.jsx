@@ -4,7 +4,7 @@ import Login from './pages/Login'
 import MyList from './pages/MyList'
 import UserList from './pages/UserList'
 import UserSearch from './pages/UserSearch'
-import { getSession, logout } from './services/api'
+import { getSession, logout, setUnauthorizedHandler } from './services/api'
 
 export default function App() {
   const [page, setPage] = useState('home')
@@ -12,6 +12,13 @@ export default function App() {
   const [loginNotice, setLoginNotice] = useState('')
   const [selectedUser, setSelectedUser] = useState(null)
   const [isSessionLoading, setIsSessionLoading] = useState(true)
+
+  useEffect(() => setUnauthorizedHandler(() => {
+    setUsername('')
+    setSelectedUser(null)
+    setLoginNotice('Your session has expired. Please log in again.')
+    setPage('login')
+  }), [])
 
   useEffect(() => {
     let isCurrent = true

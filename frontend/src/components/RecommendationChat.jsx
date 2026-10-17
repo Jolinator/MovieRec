@@ -31,7 +31,7 @@ export default function RecommendationChat({
     try {
       const result = await chatRecommendations(message.trim())
       setReply(result.message)
-      setMovies((result.movies ?? []).slice(0, 3))
+      setMovies((result.movies ?? []).slice(0, 5))
       setMessage('')
     }
     catch (requestError) { setError(requestError instanceof Error ? requestError.message : 'Chat unavailable.') }

@@ -11,15 +11,27 @@ const USERS_ENDPOINT = '/movieAPI/users'
 const RECOMMENDATIONS_ENDPOINT = '/movieAPI/recommendations/chat'
 const PERSONALIZED_RECOMMENDATIONS_ENDPOINT = '/movieAPI/recommendations'
 
+let unauthorizedHandler = null
 
+export function setUnauthorizedHandler(handler) {
+  unauthorizedHandler = handler
+  return () => {
+    if (unauthorizedHandler === handler) {
+      unauthorizedHandler = null
+    }
+  }
+}
 
-async function readResponse(response) {
+async function readResponse(response, { handleUnauthorized = false } = {}) {
   const contentType = response.headers.get('content-type') ?? ''
   const body = contentType.includes('application/json')
     ? await response.json()
     : await response.text()
 
   if (!response.ok) {
+    if (response.status === 401 && handleUnauthorized) {
+      unauthorizedHandler?.()
+    }
     const detail = typeof body === 'string' ? body : JSON.stringify(body)
     throw new Error(`Request failed (${response.status})${detail ? `: ${detail}` : ''}`)
   }
@@ -106,7 +118,7 @@ export async function getMyList() {
     credentials: 'include',
     headers: { Accept: 'application/json' },
   })
-  return readResponse(response)
+  return readResponse(response, { handleUnauthorized: true })
 }
 
 export async function addMovieToList(tmdbId) {
@@ -119,7 +131,7 @@ export async function addMovieToList(tmdbId) {
     },
     body: JSON.stringify({ tmdbId }),
   })
-  return readResponse(response)
+  return readResponse(response, { handleUnauthorized: true })
 }
 
 export async function removeMovieFromList(tmdbId) {
@@ -128,7 +140,7 @@ export async function removeMovieFromList(tmdbId) {
     credentials: 'include',
     headers: { Accept: 'application/json' },
   })
-  return readResponse(response)
+  return readResponse(response, { handleUnauthorized: true })
 }
 
 export async function searchUsers(query) {
@@ -137,7 +149,7 @@ export async function searchUsers(query) {
     credentials: 'include',
     headers: { Accept: 'application/json' },
   })
-  return readResponse(response)
+  return readResponse(response, { handleUnauthorized: true })
 }
 
 export async function getUserList(userId) {
@@ -145,7 +157,7 @@ export async function getUserList(userId) {
     credentials: 'include',
     headers: { Accept: 'application/json' },
   })
-  return readResponse(response)
+  return readResponse(response, { handleUnauthorized: true })
 }
 
 export async function chatRecommendations(message) {
@@ -154,7 +166,7 @@ export async function chatRecommendations(message) {
     headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
     body: JSON.stringify({ message }),
   })
-  return readResponse(response)
+  return readResponse(response, { handleUnauthorized: true })
 }
 
 export async function getPersonalizedRecommendations() {
@@ -163,5 +175,5 @@ export async function getPersonalizedRecommendations() {
     cache: 'no-store',
     headers: { Accept: 'application/json' },
   })
-  return readResponse(response)
+  return readResponse(response, { handleUnauthorized: true })
 }
