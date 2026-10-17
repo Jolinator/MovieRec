@@ -36,7 +36,7 @@ export GCP_PROJECT_ID GCP_REGION GCP_ZONE GCP_ARTIFACT_REGISTRY_REGION MOVIEREC_
 export TF_PARALLELISM
 
 .PHONY: help cloud-shell-setup glean-vars infra-plan infra-apply \
-        ssh-machine grafana pause-app resume-app reboot clear-databases clear-databases-reboot-all cluster-bootstrap secrets-init secrets-passwords set-region artifact-registry-cleanup docker-push-limit docker-push-limit-reset build-push \
+        ssh-machine grafana grafana-stop pause-app resume-app reboot clear-databases clear-databases-reboot-all cluster-bootstrap secrets-init secrets-passwords set-region artifact-registry-cleanup docker-push-limit docker-push-limit-reset build-push \
         k8s-config models deploy update-app gpu-capacity container-logs start stop destroy benchmark benchmark-stress
 
 help:
@@ -50,6 +50,7 @@ help:
 	  '  make infra-apply [GPU=on|off|auto] [GPU_TYPE=nvidia-tesla-t4] [MODEL_ONLY=1] [TF_AUTO_APPROVE=1] Initialize, format, validate, and apply; GPU affects only model VM' \
 	  '  make ssh-machine MACHINE=app|database|model  SSH to a VM over IAP (interactive)' \
 	  '  make grafana                         Open deployed Grafana through IAP (requires applied infrastructure and a deployed Grafana workload)' \
+	  '  make grafana-stop                    Stop this local user's tracked Grafana tunnels' \
 	  '  make pause-app                       Scale website and model workloads to zero; keep VMs, databases and monitoring running' \
 	  '  make resume-app                      Restore website and model workloads to one replica' \
 	  '  make reboot MACHINE=app|database|model|all   Reboot one VM or all sequentially over IAP' \
@@ -160,20 +161,10 @@ k8s-config:
 
 grafana:
 	$(SSH_ACCESS)
-	@grafana_local_port=$$((20000 + RANDOM % 20000)); \
-	grafana_remote_port=$$((40000 + RANDOM % 20000)); \
-	grafana_local_bind=127.0.0.1; \
-	if [[ -n "$${WEB_HOST:-}" ]]; then \
-	  [[ "$${WEB_HOST}" =~ ^[A-Za-z0-9.-]+$$ ]] || { printf '%s\n' 'WEB_HOST contains invalid characters.' >&2; exit 2; }; \
-	  grafana_local_bind=0.0.0.0; \
-	  printf 'Grafana: https://%s-%s/\n' "$${grafana_local_port}" "$${WEB_HOST}"; \
-	else \
-	  printf 'Open http://localhost:%s in a local browser.\n' "$${grafana_local_port}"; \
-	fi; \
-	printf '%s\n' 'Configuring stable Grafana proxy settings; this only rolls out Grafana if they changed.' 'Press Ctrl-C to close the tunnel.'; \
-	bash $(GCP_SCRIPTS)/ssh-machine.sh app \
-	  --ssh-flag="-L $${grafana_local_bind}:$${grafana_local_port}:localhost:$${grafana_remote_port}" \
-	  --command="sudo k3s kubectl -n movierec set env deployment/grafana GF_SERVER_ROOT_URL=http://localhost:3000/ GF_SECURITY_CSRF_ADDITIONAL_HEADERS=X-Forwarded-Host 'GF_LIVE_ALLOWED_ORIGINS=https://*-cs-*.cloudshell.dev,http://localhost:*,http://127.0.0.1:*' GF_SECURITY_CSRF_TRUSTED_ORIGINS- && sudo k3s kubectl -n movierec rollout status deployment/grafana --timeout=5m && sudo k3s kubectl -n movierec port-forward service/grafana $${grafana_remote_port}:3000 --address 127.0.0.1"
+	bash $(GCP_SCRIPTS)/grafana-tunnel.sh start
+
+grafana-stop:
+	bash $(GCP_SCRIPTS)/grafana-tunnel.sh stop
 
 MOVIEREC_APP_DEPLOYMENTS := deployment/frontend deployment/gateway deployment/auth deployment/movies \
 	deployment/recommendations deployment/llama-embedding deployment/llama-generation
