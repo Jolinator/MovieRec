@@ -52,7 +52,7 @@ export GCP_PROJECT_ID GCP_REGION GCP_ZONE GCP_ARTIFACT_REGISTRY_REGION MOVIEREC_
 export TF_PARALLELISM
 
 .PHONY: help cloud-shell-setup infra-config infra-init infra-fmt infra-validate infra-plan infra-apply \
-        ssh-access ssh-machine reboot cluster-bootstrap secrets-init secrets-passwords set-region artifact-registry-cleanup docker-push-limit docker-push-limit-reset build-push \
+        ssh-access ssh-machine reboot clear-databases clear-databases-reboot-all cluster-bootstrap secrets-init secrets-passwords set-region artifact-registry-cleanup docker-push-limit docker-push-limit-reset build-push \
         k8s-config models deploy update-app gpu-runtime gpu-setup gpu-capacity gpu-capacity-europe container-logs start stop destroy benchmark benchmark-stress
 
 help:
@@ -67,6 +67,8 @@ help:
 	  '  make infra-apply [GPU=on|off|auto] [GPU_TYPE=nvidia-tesla-t4] [MODEL_ONLY=1] [TF_AUTO_APPROVE=1] Apply resources; GPU affects only model VM' \
 	  '  make ssh-machine MACHINE=app|database|model  SSH to a VM over IAP (interactive)' \
 	  '  make reboot MACHINE=app|database|model|all   Reboot one VM or all sequentially over IAP' \
+	  '  make clear-databases CONFIRM_CLEAR_DATABASES=1  Erase and recreate the three PostgreSQL databases' \
+	  '  make clear-databases-reboot-all CONFIRM_CLEAR_DATABASES=1  Clear PostgreSQL data, then reboot every VM' \
 	  '  make cluster-bootstrap             Join worker VMs; automatically set up GPU runtime/plugin when GPU is enabled' \
 	  '  make secrets-init                 Create server.env, fill its project ID, and prepare secrets/keys' \
 	  '  make secrets-passwords            Generate matching random passwords for the three databases' \
@@ -88,7 +90,7 @@ help:
 	  '  make gpu-runtime                  Install NVIDIA drivers/runtime on the model VM after infra-apply GPU=on' \
 	  '  make gpu-setup                    Install the Kubernetes GPU device plugin after gpu-runtime' \
 	  '  make gpu-capacity [GPU_REGION=europe|us]  Try model-only T4/L4 applies in documented zones until one succeeds' \
-	  '  make container-logs WORKLOAD=name [CONTAINER=name] [NAMESPACE=movierec] [FOLLOW=1]  Read Kubernetes logs through the app VM' \
+	  '  make container-logs [WORKLOAD=name] CONTAINER=name [NAMESPACE=movierec] [FOLLOW=1]  Infer workload from container when omitted' \
 	  '' \
 	  'Performance:' \
 	  '  make benchmark                    Run ApacheBench (AB_URL, AB_REQUESTS, AB_CONCURRENCY)' \
@@ -144,6 +146,14 @@ ssh-machine:
 reboot:
 	@test -n "$(MACHINE)" || { printf '%s\n' 'Set MACHINE to app, database, model, or all.'; exit 2; }
 	bash $(GCP_SCRIPTS)/reboot-machine.sh "$(MACHINE)"
+
+clear-databases:
+	@test "$(CONFIRM_CLEAR_DATABASES)" = 1 || { printf '%s\n' 'Refusing to erase PostgreSQL data. Use: make clear-databases CONFIRM_CLEAR_DATABASES=1'; exit 2; }
+	bash $(GCP_SCRIPTS)/clear-databases.sh
+
+clear-databases-reboot-all:
+	@test "$(CONFIRM_CLEAR_DATABASES)" = 1 || { printf '%s\n' 'Refusing to erase PostgreSQL data. Use: make clear-databases-reboot-all CONFIRM_CLEAR_DATABASES=1'; exit 2; }
+	$(MAKE) clear-databases CONFIRM_CLEAR_DATABASES=1 && $(MAKE) reboot MACHINE=all
 
 cluster-bootstrap: ssh-access
 	$(ANSIBLE_PLAY) playbooks/cluster.yml
@@ -201,8 +211,8 @@ gpu-capacity-europe:
 	$(MAKE) gpu-capacity GPU_REGION=europe
 
 container-logs:
-	@test -n "$(WORKLOAD)" || { printf '%s\n' 'Set WORKLOAD, for example: make container-logs WORKLOAD=llama-generation'; exit 2; }
-	bash $(GCP_SCRIPTS)/container-logs.sh "$(WORKLOAD)" \
+	@test -n "$(WORKLOAD)$(CONTAINER)" || { printf '%s\n' 'Set CONTAINER to infer the workload, or set WORKLOAD.'; exit 2; }
+	bash $(GCP_SCRIPTS)/container-logs.sh $(if $(strip $(WORKLOAD)),"$(WORKLOAD)",) \
 	  $(if $(strip $(CONTAINER)),--container "$(CONTAINER)",) \
 	  $(if $(strip $(NAMESPACE)),--namespace "$(NAMESPACE)",) \
 	  $(if $(strip $(TAIL_LINES)),--tail "$(TAIL_LINES)",) \
