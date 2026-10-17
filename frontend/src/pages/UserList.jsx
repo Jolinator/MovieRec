@@ -45,10 +45,10 @@ export default function UserList({ user, onHomeClick, onMyListClick, onSearchCli
     }
   }, [user.id])
 
-  async function handleToggleList() {
-    if (!selectedMovie) return false
+  async function handleToggleList(movie = selectedMovie) {
+    if (!movie) return false
 
-    const tmdbId = selectedMovie.tmdbId
+    const tmdbId = movie.tmdbId
     const isInMyList = myListMovieIds.has(tmdbId)
     setIsUpdatingList(true)
     try {
@@ -118,7 +118,14 @@ export default function UserList({ user, onHomeClick, onMyListClick, onSearchCli
             showListActions={Boolean(username)}
           />
         )}
-        {isChatOpen && <RecommendationChat onClose={() => setIsChatOpen(false)} />}
+        {isChatOpen && (
+          <RecommendationChat
+            onClose={() => setIsChatOpen(false)}
+            onToggleList={username ? handleToggleList : undefined}
+            isAddingToList={isUpdatingList}
+            myListMovieIds={myListMovieIds}
+          />
+        )}
       </main>
     </div>
   )

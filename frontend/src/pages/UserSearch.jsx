@@ -6,7 +6,7 @@ import RecommendationChat from '../components/RecommendationChat'
 import UserBadge from '../components/UserBadge'
 import UserSearchBar from '../components/UserSearchBar'
 import UserSearchResult from '../components/UserSearchResult'
-import { searchUsers } from '../services/api'
+import { addMovieToList, getMyList, removeMovieFromList, searchUsers } from '../services/api'
 import styles from './Home.module.css'
 
 export default function UserSearch({ onHomeClick, onMyListClick, onSearchClick, onLoginClick, onLogout, onUserSelect, onRecommendationClick, username }) {
@@ -17,6 +17,8 @@ export default function UserSearch({ onHomeClick, onMyListClick, onSearchClick, 
   const [isLogoutBannerOpen, setIsLogoutBannerOpen] = useState(false)
   const [hasSearched, setHasSearched] = useState(false)
   const [isChatOpen, setIsChatOpen] = useState(false)
+  const [myListMovieIds, setMyListMovieIds] = useState(() => new Set())
+  const [isUpdatingList, setIsUpdatingList] = useState(false)
   const searchRequestId = useRef(0)
   const debounceTimer = useRef(null)
   const queryValue = useRef('')
@@ -78,6 +80,30 @@ export default function UserSearch({ onHomeClick, onMyListClick, onSearchClick, 
     searchRequestId.current += 1
   }, [])
 
+  useEffect(() => {
+    let isCurrentRequest = true
+    if (!username) {
+      setMyListMovieIds(new Set())
+      return () => {
+        isCurrentRequest = false
+      }
+    }
+
+    getMyList().then((movies) => {
+      if (isCurrentRequest) {
+        setMyListMovieIds(new Set(movies.map((movie) => movie.tmdbId)))
+      }
+    }).catch((requestError) => {
+      if (isCurrentRequest) {
+        setError(requestError instanceof Error ? requestError.message : 'Unable to load your list.')
+      }
+    })
+
+    return () => {
+      isCurrentRequest = false
+    }
+  }, [username])
+
   function openRecommendations() {
     setIsChatOpen(true)
   }
@@ -96,6 +122,33 @@ export default function UserSearch({ onHomeClick, onMyListClick, onSearchClick, 
     setHasSearched(false)
     setIsLoading(false)
     setError('')
+  }
+
+  async function handleToggleList(movie) {
+    if (!username) return false
+
+    const isInList = myListMovieIds.has(movie.tmdbId)
+    setIsUpdatingList(true)
+    try {
+      if (isInList) {
+        await removeMovieFromList(movie.tmdbId)
+        setMyListMovieIds((currentIds) => {
+          const nextIds = new Set(currentIds)
+          nextIds.delete(movie.tmdbId)
+          return nextIds
+        })
+        return false
+      }
+
+      await addMovieToList(movie.tmdbId)
+      setMyListMovieIds((currentIds) => new Set(currentIds).add(movie.tmdbId))
+      return true
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'Unable to update your list.')
+      throw requestError
+    } finally {
+      setIsUpdatingList(false)
+    }
   }
 
   async function confirmLogout() {
@@ -146,7 +199,14 @@ export default function UserSearch({ onHomeClick, onMyListClick, onSearchClick, 
         {isLogoutBannerOpen && (
           <LogoutBanner onCancel={() => setIsLogoutBannerOpen(false)} onConfirm={confirmLogout} />
         )}
-        {isChatOpen && <RecommendationChat onClose={() => setIsChatOpen(false)} />}
+        {isChatOpen && (
+          <RecommendationChat
+            onClose={() => setIsChatOpen(false)}
+            onToggleList={username ? handleToggleList : undefined}
+            isAddingToList={isUpdatingList}
+            myListMovieIds={myListMovieIds}
+          />
+        )}
       </main>
     </div>
   )
