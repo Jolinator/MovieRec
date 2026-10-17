@@ -7,6 +7,13 @@ variable "region" {
   type = string
 }
 
+variable "artifact_registry_region" {
+  description = "Artifact Registry location. Defaults to region, but can stay fixed while compute moves."
+  type        = string
+  default     = null
+  nullable    = true
+}
+
 variable "zone" {
   description = "Zone for the app/database VMs and their persistent disks."
   type        = string
@@ -14,6 +21,55 @@ variable "zone" {
 
 variable "model_zone" {
   description = "Zone for the model VM and its data disk. Defaults to zone when unset."
+  type        = string
+  default     = null
+  nullable    = true
+}
+
+variable "app_private_ip" {
+  description = "Optional fixed private IP for the app VM, used to preserve the K3s API endpoint during a region move."
+  type        = string
+  default     = null
+  nullable    = true
+}
+
+variable "app_boot_disk_snapshot" {
+  description = "Optional snapshot used when recreating the app boot disk during a migration."
+  type        = string
+  default     = null
+  nullable    = true
+}
+
+variable "database_boot_disk_snapshot" {
+  description = "Optional snapshot used when recreating the database boot disk during a migration."
+  type        = string
+  default     = null
+  nullable    = true
+}
+
+variable "model_boot_disk_snapshot" {
+  description = "Optional snapshot used when recreating the model boot disk during a full-cluster migration."
+  type        = string
+  default     = null
+  nullable    = true
+}
+
+variable "app_data_disk_snapshot" {
+  description = "Optional snapshot used when recreating the app data disk during a migration."
+  type        = string
+  default     = null
+  nullable    = true
+}
+
+variable "database_data_disk_snapshot" {
+  description = "Optional snapshot used when recreating the database data disk during a migration."
+  type        = string
+  default     = null
+  nullable    = true
+}
+
+variable "model_data_disk_snapshot" {
+  description = "Optional snapshot used when recreating the model data disk during a full-cluster migration."
   type        = string
   default     = null
   nullable    = true

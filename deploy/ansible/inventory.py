@@ -33,6 +33,7 @@ def deployment_config():
     project_id = active_project()
     zone = os.environ.get("GCP_ZONE", "")
     region = os.environ.get("GCP_REGION", "")
+    artifact_registry_region = os.environ.get("GCP_ARTIFACT_REGISTRY_REGION") or region
     resource_name = os.environ.get("MOVIEREC_RESOURCE_NAME", "movierec")
     if not zone or not region or not resource_name:
         sys.exit("GCP_ZONE, GCP_REGION, and MOVIEREC_RESOURCE_NAME must not be empty.")
@@ -119,7 +120,7 @@ def deployment_config():
         "model_instance_name": instances["model"]["name"],
         "app_private_ip": interfaces[0]["networkIP"],
         "public_ip": public_ip,
-        "artifact_registry": f"{region}-docker.pkg.dev/{project_id}/{resource_name}",
+        "artifact_registry": f"{artifact_registry_region}-docker.pkg.dev/{project_id}/{resource_name}",
         "model_gpu_enabled": gpu_enabled,
     }
 

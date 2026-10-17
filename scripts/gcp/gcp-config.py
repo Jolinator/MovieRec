@@ -131,6 +131,17 @@ def resolve(
             process_env.get("TF_VAR_zone"),
         )
 
+    if name == "GCP_ARTIFACT_REGISTRY_REGION":
+        artifact_region = tfvars.get("artifact_registry_region")
+        if artifact_region in {None, "", "null"}:
+            artifact_region = None
+        return first_value(
+            artifact_region,
+            tfvars.get("region"),
+            file_env.get(name),
+            process_env.get(name),
+        )
+
     if name == "TF_VAR_project_id":
         return first_value(file_env.get(name), process_env.get(name))
 
@@ -300,6 +311,9 @@ def main() -> None:
     set_parser.add_argument("value")
     set_parser.add_argument("--raw", action="store_true", help="write value as a Terraform expression")
 
+    get_parser = commands.add_parser("get-tfvar", help="read a Terraform variable")
+    get_parser.add_argument("key")
+
     set_env_parser = commands.add_parser("set-server-env", help="set a value in the server environment file")
     set_env_parser.add_argument("key")
     set_env_parser.add_argument("value")
@@ -327,12 +341,13 @@ def main() -> None:
     if args.command == "make-vars":
         file_env = read_server_env()
         process_env = dict(os.environ)
-        tfvars = read_tfvars({"region", "zone"})
+        tfvars = read_tfvars({"region", "zone", "artifact_registry_region"})
         names = (
             "TF_VAR_project_id",
             "GCP_PROJECT_ID",
             "GCP_REGION",
             "GCP_ZONE",
+            "GCP_ARTIFACT_REGISTRY_REGION",
             "MOVIEREC_RESOURCE_NAME",
         )
         for name in names:
@@ -342,6 +357,8 @@ def main() -> None:
             print(f"{name}={value}")
     elif args.command == "set-tfvar":
         write_tfvar(args.key, args.value, raw=args.raw)
+    elif args.command == "get-tfvar":
+        print(read_tfvars({args.key}).get(args.key, ""))
     elif args.command == "gpu-mode":
         try:
             print(validate_gpu_options(args.mode, args.type, args.machine_type, args.count))

@@ -93,6 +93,9 @@ Before using the job:
    - `GCP_ZONE` is required. Set it to the app/database zone provisioned by
      Terraform. The deployment job derives `GCP_REGION` from this zone, so no
      separate region variable is needed.
+   - `GCP_ARTIFACT_REGISTRY_REGION` is optional. Set it only when Artifact
+     Registry is intentionally in a different region from the app/database
+     VMs; otherwise it defaults to the region derived from `GCP_ZONE`.
    - `MOVIEREC_RESOURCE_NAME`, if it differs from `movierec`.
    - `PUBLIC_HOST`, if the deployment should use a DNS name instead of the
      default IP based `nip.io` hostname.
@@ -100,18 +103,20 @@ Before using the job:
 2. Protect the `production` environment in GitLab so only intended maintainers
    can start the manual deployment.
 
-If you move the app/database VMs to another zone, update the GitLab CI/CD
-variable `GCP_ZONE` to that new app/database zone. The job derives its region
-from `GCP_ZONE`; the model VM can remain in its separate `model_zone`. If the
-Terraform move recreates Artifact Registry in the new region, run the deployment
-job (or build and push images there) so the new regional repository has the
-images before deployment.
+After moving the app/database VMs, update the GitLab CI/CD variable `GCP_ZONE`
+to their new zone. `make set-region` moves Artifact Registry to the target region
+and deletes every other regional copy of MovieRec's Docker repository after a
+successful deploy. Update or unset
+any existing `GCP_ARTIFACT_REGISTRY_REGION` override so CI uses the new region.
+With `SCOPE=app-db`, the model VM can remain in its separate `model_zone`. Use
+`SCOPE=all` to move it too when it is not already in the destination zone.
 
 The `update_app` job does not initialize Terraform or access Terraform state.
 The Terraform state is local to the Cloud Shell checkout and is not available
-to GitLab. The job derives the region from the configured app/database zone,
-builds the Artifact Registry path, then uses `gcloud` to read the configured VM
-instances for Ansible. GitLab-managed Terraform state is optional and is only
+to GitLab. The job derives the compute region from the configured app/database
+zone, builds the Artifact Registry path using `GCP_ARTIFACT_REGISTRY_REGION`
+when set, then uses `gcloud` to read the configured VM instances for Ansible.
+GitLab-managed Terraform state is optional and is only
 needed if you want Terraform commands in different environments to share state.
 Manual Cloud Shell Terraform commands can continue using their local state.
 

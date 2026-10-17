@@ -21,6 +21,8 @@ GPU_REGION ?= europe
 MODEL_ONLY ?= 0
 TF_AUTO_APPROVE ?= 0
 GPU_SET_VARS_ARGS = --mode "$(GPU)" $(if $(filter on,$(GPU)),--type "$(GPU_TYPE)" --machine-type "$(GPU_MACHINE_TYPE)" --count "$(GPU_COUNT)")
+SCOPE ?= app-db
+TARGET_ZONE ?= $(TARGET_MODEL_ZONE)
 TF_PLAN_FLAGS_RAW := $(shell $(GCP_CONFIG) terraform-flags --operation plan --model-only "$(MODEL_ONLY)" --auto-approve "$(TF_AUTO_APPROVE)" || echo invalid)
 TF_APPLY_FLAGS_RAW := $(shell $(GCP_CONFIG) terraform-flags --operation apply --model-only "$(MODEL_ONLY)" --auto-approve "$(TF_AUTO_APPROVE)" || echo invalid)
 ifneq ($(filter invalid,$(TF_PLAN_FLAGS_RAW) $(TF_APPLY_FLAGS_RAW)),)
@@ -46,11 +48,11 @@ ifneq ($(strip $(TF_VAR_project_id)),)
 export TF_VAR_project_id
 endif
 export TF_VAR_region TF_VAR_zone TF_VAR_name
-export GCP_PROJECT_ID GCP_REGION GCP_ZONE MOVIEREC_RESOURCE_NAME
+export GCP_PROJECT_ID GCP_REGION GCP_ZONE GCP_ARTIFACT_REGISTRY_REGION MOVIEREC_RESOURCE_NAME
 export TF_PARALLELISM
 
 .PHONY: help cloud-shell-setup infra-config infra-init infra-fmt infra-validate infra-plan infra-apply \
-        ssh-access ssh-machine reboot cluster-bootstrap secrets-init secrets-passwords set-region docker-push-limit docker-push-limit-reset build-push \
+        ssh-access ssh-machine reboot cluster-bootstrap secrets-init secrets-passwords set-region artifact-registry-cleanup docker-push-limit docker-push-limit-reset build-push \
         k8s-config models deploy update-app gpu-runtime gpu-setup gpu-capacity gpu-capacity-europe container-logs start stop destroy benchmark benchmark-stress
 
 help:
@@ -58,12 +60,13 @@ help:
 	  'Cloud workflow:' \
 	  '  make cloud-shell-setup            Install tools, limit Docker uploads to 2, and enable optional IAP NumPy optimization' \
 	  '  make infra-config                Set project_id from gcloud; use Terraform locations, falling back to GCP_REGION/GCP_ZONE' \
-	  '  make set-region TARGET_REGION=... TARGET_ZONE=... [TARGET_MODEL_ZONE=...]  Update server.env and Terraform locations; does not apply changes' \
+	  '  make set-region OLD_ZONE=... TARGET_ZONE=... [SCOPE=app-db|all] [IMAGE_TAG=tag] [PUBLIC_HOST=host]  Migrate and deploy, then remove old registry copies' \
+	  '  make artifact-registry-cleanup [KEEP_LOCATION=...]  Keep the region derived from GCP_ZONE by default' \
 	  '  make infra-init                   Initialize Terraform (local state in Cloud Shell)' \
 	  '  make infra-plan [GPU=on|off|auto] [GPU_TYPE=nvidia-tesla-t4] [MODEL_ONLY=1] [TF_PARALLELISM=n] Plan resources; default parallelism is 2' \
 	  '  make infra-apply [GPU=on|off|auto] [GPU_TYPE=nvidia-tesla-t4] [MODEL_ONLY=1] [TF_AUTO_APPROVE=1] Apply resources; GPU affects only model VM' \
 	  '  make ssh-machine MACHINE=app|database|model  SSH to a VM over IAP (interactive)' \
-	  '  make reboot MACHINE=app|database|model       Reboot a VM guest over IAP and wait for it to return' \
+	  '  make reboot MACHINE=app|database|model|all   Reboot one VM or all sequentially over IAP' \
 	  '  make cluster-bootstrap             Join worker VMs; automatically set up GPU runtime/plugin when GPU is enabled' \
 	  '  make secrets-init                 Create server.env, fill its project ID, and prepare secrets/keys' \
 	  '  make secrets-passwords            Generate matching random passwords for the three databases' \
@@ -139,7 +142,7 @@ ssh-machine:
 	bash $(GCP_SCRIPTS)/ssh-machine.sh "$(MACHINE)"
 
 reboot:
-	@test -n "$(MACHINE)" || { printf '%s\n' 'Set MACHINE to app, database, or model.'; exit 2; }
+	@test -n "$(MACHINE)" || { printf '%s\n' 'Set MACHINE to app, database, model, or all.'; exit 2; }
 	bash $(GCP_SCRIPTS)/reboot-machine.sh "$(MACHINE)"
 
 cluster-bootstrap: ssh-access
@@ -150,7 +153,13 @@ secrets-init:
 	bash $(GCP_SCRIPTS)/init-secrets.sh
 
 set-region:
-	bash $(GCP_SCRIPTS)/set-region.sh --region "$(TARGET_REGION)" --zone "$(TARGET_ZONE)" $(if $(strip $(TARGET_MODEL_ZONE)),--model-zone "$(TARGET_MODEL_ZONE)",)
+	@test -n "$(OLD_ZONE)" || { printf '%s\n' 'Set OLD_ZONE to the current app/database zone.'; exit 2; }
+	@test -n "$(TARGET_ZONE)" || { printf '%s\n' 'Set TARGET_ZONE to the destination zone (TARGET_MODEL_ZONE is also accepted).'; exit 2; }
+	@test "$(SCOPE)" = app-db -o "$(SCOPE)" = all || { printf '%s\n' 'Set SCOPE to app-db or all.'; exit 2; }
+	python3 $(GCP_SCRIPTS)/migrate-region.py --old-zone "$(OLD_ZONE)" --target-zone "$(TARGET_ZONE)" --scope "$(SCOPE)" $(if $(strip $(IMAGE_TAG)),--image-tag "$(IMAGE_TAG)",) $(if $(strip $(PUBLIC_HOST)),--public-host "$(PUBLIC_HOST)",)
+
+artifact-registry-cleanup:
+	python3 $(GCP_SCRIPTS)/cleanup-artifact-registry.py $(if $(strip $(KEEP_LOCATION)),--keep-location "$(KEEP_LOCATION)",)
 
 secrets-passwords:
 	python3 $(GCP_SCRIPTS)/generate-db-passwords.py
