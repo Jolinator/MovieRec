@@ -52,7 +52,7 @@ export GCP_PROJECT_ID GCP_REGION GCP_ZONE GCP_ARTIFACT_REGISTRY_REGION MOVIEREC_
 export TF_PARALLELISM
 
 .PHONY: help cloud-shell-setup infra-config infra-init infra-fmt infra-validate infra-plan infra-apply \
-        ssh-access ssh-machine reboot clear-databases clear-databases-reboot-all cluster-bootstrap secrets-init secrets-passwords set-region artifact-registry-cleanup docker-push-limit docker-push-limit-reset build-push \
+        ssh-access ssh-machine grafana reboot clear-databases clear-databases-reboot-all cluster-bootstrap secrets-init secrets-passwords set-region artifact-registry-cleanup docker-push-limit docker-push-limit-reset build-push \
         k8s-config models deploy update-app gpu-runtime gpu-setup gpu-capacity gpu-capacity-europe container-logs start stop destroy benchmark benchmark-stress
 
 help:
@@ -66,6 +66,7 @@ help:
 	  '  make infra-plan [GPU=on|off|auto] [GPU_TYPE=nvidia-tesla-t4] [MODEL_ONLY=1] [TF_PARALLELISM=n] Plan resources; default parallelism is 2' \
 	  '  make infra-apply [GPU=on|off|auto] [GPU_TYPE=nvidia-tesla-t4] [MODEL_ONLY=1] [TF_AUTO_APPROVE=1] Apply resources; GPU affects only model VM' \
 	  '  make ssh-machine MACHINE=app|database|model  SSH to a VM over IAP (interactive)' \
+	  '  make grafana                         Open Grafana through a private IAP tunnel (Cloud Shell Web Preview port 3000)' \
 	  '  make reboot MACHINE=app|database|model|all   Reboot one VM or all sequentially over IAP' \
 	  '  make clear-databases CONFIRM_CLEAR_DATABASES=1  Erase and recreate the three PostgreSQL databases' \
 	  '  make clear-databases-reboot-all CONFIRM_CLEAR_DATABASES=1  Clear PostgreSQL data, then reboot every VM' \
@@ -185,6 +186,16 @@ build-push:
 
 k8s-config: ssh-access
 	$(ANSIBLE_PLAY) playbooks/config.yml -e public_host="$(PUBLIC_HOST)"
+
+grafana: ssh-access
+	@printf '%s\n' \
+	  'Starting the Grafana IAP tunnel on port 3000.' \
+	  'Open Cloud Shell Web Preview > Preview on port 3000, or http://localhost:3000 when running locally.' \
+	  'Press Ctrl-C to close the tunnel.'
+	gcloud compute ssh "$(MOVIEREC_RESOURCE_NAME)-app" \
+	  --project="$(GCP_PROJECT_ID)" --zone="$(GCP_ZONE)" --tunnel-through-iap --quiet \
+	  --ssh-flag="-L 3000:localhost:3000" \
+	  --command="sudo k3s kubectl -n movierec port-forward service/grafana 3000:3000 --address 127.0.0.1"
 
 models: ssh-access
 	$(ANSIBLE_PLAY) playbooks/models.yml
