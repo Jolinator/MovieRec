@@ -194,7 +194,7 @@ grafana: ssh-access
 	grafana_remote_port=$$((40000 + RANDOM % 20000)); \
 	if [[ -n "$${WEB_HOST:-}" ]]; then \
 	  [[ "$${WEB_HOST}" =~ ^[A-Za-z0-9.-]+$$ ]] || { printf '%s\n' 'WEB_HOST contains invalid characters.' >&2; exit 2; }; \
-	  printf 'Open Cloud Shell Web Preview > Preview on port %s.\n' "$${grafana_local_port}"; \
+	  printf 'Grafana: https://%s-%s/\n' "$${grafana_local_port}" "$${WEB_HOST}"; \
 	else \
 	  printf 'Open http://localhost:%s in a local browser.\n' "$${grafana_local_port}"; \
 	fi; \
