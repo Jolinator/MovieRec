@@ -84,7 +84,7 @@ def plot_throughput(results: list[dict[str, float | str]], output_dir: Path) -> 
             label=f"{workload} failures",
         )
     axes.set_xlabel("Concurrent clients")
-    axes.set_ylabel("Request rate (requests/second)")
+    axes.set_ylabel("Requests per second")
     failure_axes.set_ylabel("Failed requests (%)")
     axes.set_title("Throughput, offered load, and failures as clients increase")
     axes.set_xscale("log", base=2)
