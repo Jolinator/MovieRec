@@ -66,7 +66,7 @@ help:
 	  '  make infra-plan [GPU=on|off|auto] [GPU_TYPE=nvidia-tesla-t4] [MODEL_ONLY=1] [TF_PARALLELISM=n] Plan resources; default parallelism is 2' \
 	  '  make infra-apply [GPU=on|off|auto] [GPU_TYPE=nvidia-tesla-t4] [MODEL_ONLY=1] [TF_AUTO_APPROVE=1] Apply resources; GPU affects only model VM' \
 	  '  make ssh-machine MACHINE=app|database|model  SSH to a VM over IAP (interactive)' \
-	  '  make grafana                         Open Grafana through a private IAP tunnel (Cloud Shell Web Preview port 3000)' \
+	  '  make grafana                         Open Grafana through IAP; align its root URL with the Cloud Shell preview' \
 	  '  make reboot MACHINE=app|database|model|all   Reboot one VM or all sequentially over IAP' \
 	  '  make clear-databases CONFIRM_CLEAR_DATABASES=1  Erase and recreate the three PostgreSQL databases' \
 	  '  make clear-databases-reboot-all CONFIRM_CLEAR_DATABASES=1  Clear PostgreSQL data, then reboot every VM' \
@@ -188,14 +188,19 @@ k8s-config: ssh-access
 	$(ANSIBLE_PLAY) playbooks/config.yml -e public_host="$(PUBLIC_HOST)"
 
 grafana: ssh-access
-	@printf '%s\n' \
-	  'Starting the Grafana IAP tunnel on port 3000.' \
-	  'Open Cloud Shell Web Preview > Preview on port 3000, or http://localhost:3000 when running locally.' \
-	  'Press Ctrl-C to close the tunnel.'
+	@grafana_root_url='http://localhost:3000/'; \
+	if [[ -n "$${WEB_HOST:-}" ]]; then \
+	  [[ "$${WEB_HOST}" =~ ^[A-Za-z0-9.-]+$$ ]] || { printf '%s\n' 'WEB_HOST contains invalid characters.' >&2; exit 2; }; \
+	  grafana_root_url="https://3000-$${WEB_HOST}/"; \
+	  printf '%s\n' 'Open Cloud Shell Web Preview > Preview on port 3000.'; \
+	else \
+	  printf '%s\n' 'Open http://localhost:3000 in a local browser.'; \
+	fi; \
+	printf '%s\n' "Setting Grafana root URL to $${grafana_root_url}." 'Press Ctrl-C to close the tunnel.'; \
 	gcloud compute ssh "$(MOVIEREC_RESOURCE_NAME)-app" \
 	  --project="$(GCP_PROJECT_ID)" --zone="$(GCP_ZONE)" --tunnel-through-iap --quiet \
-	  --ssh-flag="-L 3000:localhost:3000" \
-	  --command="sudo k3s kubectl -n movierec port-forward service/grafana 3000:3000 --address 127.0.0.1"
+	  --ssh-flag="-L 127.0.0.1:3000:localhost:3000" \
+	  --command="sudo k3s kubectl -n movierec set env deployment/grafana GF_SERVER_ROOT_URL=$$grafana_root_url && sudo k3s kubectl -n movierec rollout status deployment/grafana --timeout=5m && sudo k3s kubectl -n movierec port-forward service/grafana 3000:3000 --address 127.0.0.1"
 
 models: ssh-access
 	$(ANSIBLE_PLAY) playbooks/models.yml
