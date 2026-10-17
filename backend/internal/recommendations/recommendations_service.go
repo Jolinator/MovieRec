@@ -25,9 +25,11 @@ type Service struct {
 	ready      atomic.Bool
 }
 
+const chatRecommendationLimit = 5
+
 const chatSystemPrompt = `You are a friendly movie recommendation assistant.
-Use only the movies in the supplied JSON and choose exactly three.
-Respond using exactly three numbered entries and no introduction or conclusion.
+Use only the movies in the supplied JSON and choose exactly five.
+Respond using exactly five numbered entries and no introduction or conclusion.
 Use this format for every entry:
 1. Title: exact movie title
    Reason: one concise, specific sentence explaining why it matches the user's request, based on the supplied synopsis or tone
