@@ -52,7 +52,7 @@ export GCP_PROJECT_ID GCP_REGION GCP_ZONE GCP_ARTIFACT_REGISTRY_REGION MOVIEREC_
 export TF_PARALLELISM
 
 .PHONY: help cloud-shell-setup infra-config infra-init infra-fmt infra-validate infra-plan infra-apply \
-        ssh-access ssh-machine grafana reboot clear-databases clear-databases-reboot-all cluster-bootstrap secrets-init secrets-passwords set-region artifact-registry-cleanup docker-push-limit docker-push-limit-reset build-push \
+        ssh-access ssh-machine grafana pause-app resume-app reboot clear-databases clear-databases-reboot-all cluster-bootstrap secrets-init secrets-passwords set-region artifact-registry-cleanup docker-push-limit docker-push-limit-reset build-push \
         k8s-config models deploy update-app gpu-runtime gpu-setup gpu-capacity gpu-capacity-europe container-logs start stop destroy benchmark benchmark-stress
 
 help:
@@ -67,6 +67,8 @@ help:
 	  '  make infra-apply [GPU=on|off|auto] [GPU_TYPE=nvidia-tesla-t4] [MODEL_ONLY=1] [TF_AUTO_APPROVE=1] Apply resources; GPU affects only model VM' \
 	  '  make ssh-machine MACHINE=app|database|model  SSH to a VM over IAP (interactive)' \
 	  '  make grafana                         Open Grafana through IAP; align its root URL with the Cloud Shell preview' \
+	  '  make pause-app                       Scale website and model workloads to zero; keep VMs, databases and monitoring running' \
+	  '  make resume-app                      Restore website and model workloads to one replica' \
 	  '  make reboot MACHINE=app|database|model|all   Reboot one VM or all sequentially over IAP' \
 	  '  make clear-databases CONFIRM_CLEAR_DATABASES=1  Erase and recreate the three PostgreSQL databases' \
 	  '  make clear-databases-reboot-all CONFIRM_CLEAR_DATABASES=1  Clear PostgreSQL data, then reboot every VM' \
@@ -188,19 +190,32 @@ k8s-config: ssh-access
 	$(ANSIBLE_PLAY) playbooks/config.yml -e public_host="$(PUBLIC_HOST)"
 
 grafana: ssh-access
-	@grafana_root_url='http://localhost:3000/'; \
+	@grafana_local_port=$$((20000 + RANDOM % 20000)); \
+	grafana_remote_port=$$((40000 + RANDOM % 20000)); \
 	if [[ -n "$${WEB_HOST:-}" ]]; then \
 	  [[ "$${WEB_HOST}" =~ ^[A-Za-z0-9.-]+$$ ]] || { printf '%s\n' 'WEB_HOST contains invalid characters.' >&2; exit 2; }; \
-	  grafana_root_url="https://3000-$${WEB_HOST}/"; \
-	  printf '%s\n' 'Open Cloud Shell Web Preview > Preview on port 3000.'; \
+	  grafana_root_url="https://$${grafana_local_port}-$${WEB_HOST}/"; \
+	  printf 'Open Cloud Shell Web Preview > Preview on port %s.\n' "$${grafana_local_port}"; \
 	else \
-	  printf '%s\n' 'Open http://localhost:3000 in a local browser.'; \
+	  grafana_root_url="http://localhost:$${grafana_local_port}/"; \
+	  printf 'Open %s in a local browser.\n' "$${grafana_root_url%/}"; \
 	fi; \
 	printf '%s\n' "Setting Grafana root URL to $${grafana_root_url}." 'Press Ctrl-C to close the tunnel.'; \
 	gcloud compute ssh "$(MOVIEREC_RESOURCE_NAME)-app" \
 	  --project="$(GCP_PROJECT_ID)" --zone="$(GCP_ZONE)" --tunnel-through-iap --quiet \
-	  --ssh-flag="-L 127.0.0.1:3000:localhost:3000" \
-	  --command="sudo k3s kubectl -n movierec set env deployment/grafana GF_SERVER_ROOT_URL=$$grafana_root_url && sudo k3s kubectl -n movierec rollout status deployment/grafana --timeout=5m && sudo k3s kubectl -n movierec port-forward service/grafana 3000:3000 --address 127.0.0.1"
+	  --ssh-flag="-L 127.0.0.1:$${grafana_local_port}:localhost:$${grafana_remote_port}" \
+	  --command="sudo k3s kubectl -n movierec set env deployment/grafana GF_SERVER_ROOT_URL=$$grafana_root_url && sudo k3s kubectl -n movierec rollout status deployment/grafana --timeout=5m && sudo k3s kubectl -n movierec port-forward service/grafana $${grafana_remote_port}:3000 --address 127.0.0.1"
+
+MOVIEREC_APP_DEPLOYMENTS := deployment/frontend deployment/gateway deployment/auth deployment/movies \
+	deployment/recommendations deployment/llama-embedding deployment/llama-generation
+
+pause-app: ssh-access
+	bash $(GCP_SCRIPTS)/ssh-machine.sh app --command \
+	  "sudo k3s kubectl -n movierec scale $(MOVIEREC_APP_DEPLOYMENTS) --replicas=0"
+
+resume-app: ssh-access
+	bash $(GCP_SCRIPTS)/ssh-machine.sh app --command \
+	  "sudo k3s kubectl -n movierec scale $(MOVIEREC_APP_DEPLOYMENTS) --replicas=1"
 
 models: ssh-access
 	$(ANSIBLE_PLAY) playbooks/models.yml
