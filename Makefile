@@ -30,7 +30,7 @@ ANSIBLE_DIR := deploy/ansible
 ANSIBLE_CONFIG_FILE := $(CURDIR)/$(ANSIBLE_DIR)/ansible.cfg
 ANSIBLE_PLAY := cd $(ANSIBLE_DIR) && ANSIBLE_CONFIG="$(ANSIBLE_CONFIG_FILE)" ansible-playbook -i inventory.py
 SSH_ACCESS := bash $(GCP_SCRIPTS)/ssh-machine.sh app --command true
-TF_PREPARE := terraform -chdir=$(TF_DIR) init && terraform -chdir=$(TF_DIR) fmt && terraform -chdir=$(TF_DIR) validate
+TF_PREPARE := terraform -chdir=$(TF_DIR) init -input=false && terraform -chdir=$(TF_DIR) fmt && terraform -chdir=$(TF_DIR) validate
 
 export GCP_PROJECT_ID GCP_REGION GCP_ZONE GCP_ARTIFACT_REGISTRY_REGION MOVIEREC_RESOURCE_NAME NAMESPACE
 export TF_PARALLELISM
