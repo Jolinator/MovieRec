@@ -48,7 +48,7 @@ help:
 	  '  make artifact-registry-cleanup [KEEP_LOCATION=...]  Keep the region derived from GCP_ZONE by default' \
 	  '  make infra-plan [GPU=on|off|auto] [GPU_TYPE=nvidia-tesla-t4] [MODEL_ONLY=1] [TF_PARALLELISM=n] Initialize, format, validate, and plan; default parallelism is 2' \
 	  '  make infra-apply [GPU=on|off|auto] [GPU_TYPE=nvidia-tesla-t4] [MODEL_ONLY=1] [TF_AUTO_APPROVE=1] Initialize, format, validate, and apply; GPU affects only model VM' \
-	  '  make tf-backend-setup           Create the shared GCS Terraform backend and migrate the complete local state' \
+	  '  make tf-backend-setup           Create the shared GCS Terraform backend, collect admin emails until stop, and migrate state' \
 	  '  make tf-backend-join             Connect this shell to the shared Terraform state' \
 	  '  make ssh-machine MACHINE=app|database|model  SSH to a VM over IAP (interactive)' \
 	  '  make grafana                         Open deployed Grafana through IAP (requires applied infrastructure and a deployed Grafana workload)' \

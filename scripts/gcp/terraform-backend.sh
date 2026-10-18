@@ -25,18 +25,19 @@ Configure or join the shared GCS Terraform state for this project.
 
 Usage:
   bash scripts/gcp/terraform-backend.sh setup [--project ID] [--bucket NAME]
-       [--location LOCATION] [--other-admin EMAIL]
+       [--location LOCATION] [--admin EMAIL ...]
   bash scripts/gcp/terraform-backend.sh join
 
 Run `setup` once from the shell with the complete Terraform state. It creates
-the bucket, grants both admins access, writes backend.tf, and migrates that
-state. Commit and share backend.tf; the other admin then runs `join`.
+the bucket, grants all listed admins access, writes backend.tf, and migrates
+that state. Commit and share backend.tf; the other admins then run `join`.
 
 Options for setup:
   --project ID         Defaults to the existing GCP project resolver.
   --bucket NAME        Defaults to <project>-g21-tfstate.
   --location LOCATION  GCS location; defaults to EU.
-  --other-admin EMAIL  Other admin's Google account; prompted if omitted.
+  --admin EMAIL        Add an admin account; repeat as needed. Without this
+                       option, prompts for emails until you type 'stop'.
 EOF
 }
 
@@ -53,7 +54,7 @@ parse_setup_args() {
   SETUP_PROJECT="${GCP_PROJECT_ID:-}"
   SETUP_BUCKET=""
   SETUP_LOCATION="EU"
-  OTHER_ADMIN=""
+  PROVIDED_ADMINS=()
 
   while (($#)); do
     case "$1" in
@@ -72,9 +73,9 @@ parse_setup_args() {
         SETUP_LOCATION="$2"
         shift 2
         ;;
-      --other-admin)
-        (($# >= 2)) || fail "Missing value for --other-admin"
-        OTHER_ADMIN="$2"
+      --admin)
+        (($# >= 2)) || fail "Missing value for --admin"
+        PROVIDED_ADMINS+=("$2")
         shift 2
         ;;
       -h|--help)
@@ -102,6 +103,60 @@ active_account() {
 
 validate_email() {
   [[ "$1" =~ ^[^[:space:]@]+@[^[:space:]@]+$ ]] || fail "Invalid Google account email: $1"
+}
+
+add_admin_email() {
+  local email="$1"
+  local existing
+  validate_email "${email}"
+  for existing in "${ADMIN_EMAILS[@]}"; do
+    if [[ "${existing,,}" == "${email,,}" ]]; then
+      printf 'Already included: %s\n' "${email}"
+      return
+    fi
+  done
+  ADMIN_EMAILS+=("${email}")
+}
+
+collect_admin_emails() {
+  local active_account="$1"
+  local email
+  ADMIN_EMAILS=()
+  add_admin_email "${active_account}"
+
+  if ((${#PROVIDED_ADMINS[@]})); then
+    for email in "${PROVIDED_ADMINS[@]}"; do
+      add_admin_email "${email}"
+    done
+  elif [[ -t 0 ]]; then
+    printf 'Included active account: %s\n' "${active_account}"
+    while true; do
+      read -r -p "Additional admin email (or type 'stop' to finish): " email
+      email="${email#"${email%%[![:space:]]*}"}"
+      email="${email%"${email##*[![:space:]]}"}"
+      case "${email,,}" in
+        stop|done)
+          break
+          ;;
+        "")
+          printf "Enter an email or type 'stop'.\n"
+          ;;
+        *)
+          if [[ "${email}" =~ ^[^[:space:]@]+@[^[:space:]@]+$ ]]; then
+            add_admin_email "${email}"
+          else
+            printf "%s\n" "That does not look like an email address. Try again or type 'stop'."
+          fi
+          ;;
+      esac
+    done
+  else
+    fail "Pass --admin EMAIL once for each additional admin when running non-interactively."
+  fi
+
+  if ((${#ADMIN_EMAILS[@]} < 2)); then
+    fail "Add at least one additional admin before stopping."
+  fi
 }
 
 cached_backend_type() {
@@ -193,10 +248,11 @@ ensure_bucket() {
   fi
 
   gcloud storage buckets update "${bucket_url}" --versioning
-  gcloud storage buckets add-iam-policy-binding "${bucket_url}" \
-    --member="user:${CURRENT_ADMIN}" --role="roles/storage.objectAdmin"
-  gcloud storage buckets add-iam-policy-binding "${bucket_url}" \
-    --member="user:${OTHER_ADMIN}" --role="roles/storage.objectAdmin"
+  local admin_email
+  for admin_email in "${ADMIN_EMAILS[@]}"; do
+    gcloud storage buckets add-iam-policy-binding "${bucket_url}" \
+      --member="user:${admin_email}" --role="roles/storage.objectAdmin"
+  done
 }
 
 write_backend_config() {
@@ -225,17 +281,7 @@ setup_backend() {
 
   project_id_for_setup
   CURRENT_ADMIN="$(active_account)"
-  if [[ -z "${OTHER_ADMIN}" ]]; then
-    if [[ -t 0 ]]; then
-      read -r -p "Other admin's Google account email: " OTHER_ADMIN
-    else
-      fail "Pass --other-admin EMAIL when running non-interactively."
-    fi
-  fi
-  validate_email "${CURRENT_ADMIN}"
-  validate_email "${OTHER_ADMIN}"
-  [[ "${CURRENT_ADMIN,,}" != "${OTHER_ADMIN,,}" ]] \
-    || fail "The other admin email matches the active account."
+  collect_admin_emails "${CURRENT_ADMIN}"
 
   if [[ -z "${SETUP_BUCKET}" ]]; then
     local suggested_bucket="${SETUP_PROJECT}-g21-tfstate"
@@ -261,7 +307,9 @@ setup_backend() {
   printf '\nProject:       %s\n' "${SETUP_PROJECT}"
   printf 'Bucket:        gs://%s (%s)\n' "${SETUP_BUCKET}" "${SETUP_LOCATION}"
   printf 'State source:  local default workspace (%s resources)\n' "${#STATE_ADDRESSES[@]}"
-  printf 'Admins:        %s, %s\n\n' "${CURRENT_ADMIN}" "${OTHER_ADMIN}"
+  printf 'Admins:\n'
+  printf '  %s\n' "${ADMIN_EMAILS[@]}"
+  printf '\n'
   if [[ -t 0 ]]; then
     local confirmation
     read -r -p "Type MIGRATE to create/configure the bucket and move this state: " confirmation
