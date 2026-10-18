@@ -4,6 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
 TFVARS="${REPO_ROOT}/deploy/gcp/terraform/terraform.tfvars"
+TF_DIR="${REPO_ROOT}/deploy/gcp/terraform"
 GCP_CONFIG="${SCRIPT_DIR}/gcp-config.py"
 
 region=""
@@ -135,6 +136,60 @@ print_errors() {
     | grep -Ev '^make(\[[0-9]+\])?: \*\*\*' || true
 }
 
+model_disk_tracked=0
+model_disk_imported=0
+ensure_model_data_disk_state() {
+  local zone="$1"
+  local state_list project_id resource_name disk_name disk_size disk_json import_id validation_message
+
+  model_disk_tracked=0
+  model_disk_imported=0
+
+  : >"${LOG_FILE}"
+  if ! state_list="$(terraform -chdir="${TF_DIR}" state list 2>"${LOG_FILE}")"; then
+    print_errors "${LOG_FILE}"
+    return 1
+  fi
+
+  if grep -Fxq 'google_compute_disk.model_data' <<<"${state_list}"; then
+    model_disk_tracked=1
+    return 0
+  fi
+
+  project_id="$(python3 "${GCP_CONFIG}" get-tfvar project_id)"
+  resource_name="$(python3 "${GCP_CONFIG}" get-tfvar name)"
+  disk_size="$(python3 "${GCP_CONFIG}" get-tfvar model_data_disk_gb)"
+  if [[ -z "${project_id}" || -z "${resource_name}" || ! "${disk_size}" =~ ^[0-9]+$ ]]; then
+    printf 'Cannot safely check the model data disk: project_id, name, or model_data_disk_gb is missing from terraform.tfvars.\n' >&2
+    return 1
+  fi
+  disk_name="${resource_name}-model-data"
+
+  : >"${LOG_FILE}"
+  if ! disk_json="$(gcloud compute disks describe "${disk_name}" --project="${project_id}" --zone="${zone}" --format=json 2>"${LOG_FILE}")"; then
+    if grep -Eiq 'was not found|not found' "${LOG_FILE}"; then
+      return 0
+    fi
+    print_errors "${LOG_FILE}"
+    return 1
+  fi
+
+  if ! validation_message="$(printf '%s\n' "${disk_json}" | python3 "${SCRIPT_DIR}/validate-model-data-disk.py" "${disk_name}" "${zone}" "${disk_size}")"; then
+    printf 'Found existing model data disk %s, but will not import it automatically: %s.\n' "${disk_name}" "${validation_message:-disk attributes did not pass validation}" >&2
+    return 1
+  fi
+
+  import_id="projects/${project_id}/zones/${zone}/disks/${disk_name}"
+  printf 'Importing existing unattached model data disk %s into Terraform state.\n' "${disk_name}"
+  : >"${LOG_FILE}"
+  if ! terraform -chdir="${TF_DIR}" import -input=false google_compute_disk.model_data "${import_id}" >"${LOG_FILE}" 2>&1; then
+    print_errors "${LOG_FILE}"
+    return 1
+  fi
+  model_disk_tracked=1
+  model_disk_imported=1
+}
+
 for candidate in "${candidates[@]}"; do
   read -r zone gpu_type <<<"${candidate}"
   printf 'Trying %s with GPU %s\n' "${zone}" "${gpu_type}"
@@ -150,6 +205,24 @@ for candidate in "${candidates[@]}"; do
   # keep GPU_COUNT at one because only N1+T4 supports multi-GPU counts.
   if ! make infra-plan MODEL_ONLY=1 GPU=on GPU_TYPE="${gpu_type}" GPU_MACHINE_TYPE= GPU_COUNT=1 >"${LOG_FILE}" 2>&1; then
     print_errors "${LOG_FILE}"
+    exit 1
+  fi
+
+  if ! ensure_model_data_disk_state "${zone}"; then
+    exit 1
+  fi
+
+  if ((model_disk_imported)); then
+    printf 'Replanning after importing the existing model data disk.\n'
+    if ! make infra-plan MODEL_ONLY=1 GPU=on GPU_TYPE="${gpu_type}" GPU_MACHINE_TYPE= GPU_COUNT=1 >"${LOG_FILE}" 2>&1; then
+      print_errors "${LOG_FILE}"
+      exit 1
+    fi
+  fi
+
+  if ((model_disk_tracked)) && grep -Eq '^  # google_compute_disk\.model_data ' "${LOG_FILE}"; then
+    printf 'Refusing to apply because this trial would change the existing model data disk. Review the plan and move or snapshot the disk before trying a different zone.\n' >&2
+    grep -E '^  # google_compute_disk\.model_data ' "${LOG_FILE}" >&2 || true
     exit 1
   fi
 
