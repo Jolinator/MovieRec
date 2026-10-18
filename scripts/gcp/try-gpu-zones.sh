@@ -145,13 +145,16 @@ for candidate in "${candidates[@]}"; do
     exit 1
   fi
 
-  if ! make infra-plan MODEL_ONLY=1 GPU=on GPU_TYPE="${gpu_type}" >"${LOG_FILE}" 2>&1; then
+  # Capacity trials use Terraform's machine-type default for each GPU family.
+  # Clear overrides such as n1-standard-* that are incompatible with L4, and
+  # keep GPU_COUNT at one because only N1+T4 supports multi-GPU counts.
+  if ! make infra-plan MODEL_ONLY=1 GPU=on GPU_TYPE="${gpu_type}" GPU_MACHINE_TYPE= GPU_COUNT=1 >"${LOG_FILE}" 2>&1; then
     print_errors "${LOG_FILE}"
     exit 1
   fi
 
   : >"${LOG_FILE}"
-  if make infra-apply MODEL_ONLY=1 TF_AUTO_APPROVE=1 GPU=auto >"${LOG_FILE}" 2>&1; then
+  if make infra-apply MODEL_ONLY=1 TF_AUTO_APPROVE=1 GPU=auto GPU_MACHINE_TYPE= GPU_COUNT=1 >"${LOG_FILE}" 2>&1; then
     printf 'Success: GPU VM created in %s with %s\n' "${zone}" "${gpu_type}"
     exit 0
   else
