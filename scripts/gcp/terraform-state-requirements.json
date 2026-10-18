@@ -1,0 +1,15 @@
+{
+  "state_prefix": "g21/terraform",
+  "minimum_resources": 20,
+  "required_resources": [
+    "google_artifact_registry_repository.images",
+    "google_compute_address.movierec",
+    "google_compute_disk.app_data",
+    "google_compute_disk.database_data",
+    "google_compute_disk.model_data",
+    "google_compute_instance.app",
+    "google_compute_instance.database",
+    "google_compute_network.movierec",
+    "google_service_account.node"
+  ]
+}

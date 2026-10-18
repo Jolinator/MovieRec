@@ -30,12 +30,12 @@ ANSIBLE_DIR := deploy/ansible
 ANSIBLE_CONFIG_FILE := $(CURDIR)/$(ANSIBLE_DIR)/ansible.cfg
 ANSIBLE_PLAY := cd $(ANSIBLE_DIR) && ANSIBLE_CONFIG="$(ANSIBLE_CONFIG_FILE)" ansible-playbook -i inventory.py
 SSH_ACCESS := bash $(GCP_SCRIPTS)/ssh-machine.sh app --command true
-TF_PREPARE := terraform -chdir=$(TF_DIR) init -input=false && terraform -chdir=$(TF_DIR) fmt && terraform -chdir=$(TF_DIR) validate
+TF_PREPARE := terraform -chdir=$(TF_DIR) init && terraform -chdir=$(TF_DIR) fmt && terraform -chdir=$(TF_DIR) validate
 
 export GCP_PROJECT_ID GCP_REGION GCP_ZONE GCP_ARTIFACT_REGISTRY_REGION MOVIEREC_RESOURCE_NAME NAMESPACE
 export TF_PARALLELISM
 
-.PHONY: help cloud-shell-setup glean-vars infra-plan infra-apply tf-backend-setup tf-backend-join \
+.PHONY: help cloud-shell-setup glean-vars infra-plan infra-apply tf-backend-setup tf-backend-join tf-backend-restore \
         ssh-machine grafana grafana-stop pause-app resume-app reboot clear-databases clear-databases-reboot-all cluster-bootstrap secrets-init secrets-passwords set-region artifact-registry-cleanup docker-push-limit docker-push-limit-reset build-push \
         k8s-config models deploy update-app gpu-capacity container-logs start stop destroy benchmark benchmark-stress
 
@@ -50,6 +50,7 @@ help:
 	  '  make infra-apply [GPU=on|off|auto] [GPU_TYPE=nvidia-tesla-t4] [MODEL_ONLY=1] [TF_AUTO_APPROVE=1] Initialize, format, validate, and apply; GPU affects only model VM' \
 	  '  make tf-backend-setup           Create the shared GCS Terraform backend, collect admin emails until stop, and migrate state' \
 	  '  make tf-backend-join             Connect this shell to the shared Terraform state' \
+	  '  make tf-backend-restore           Restore a validated GCS state backup' \
 	  '  make ssh-machine MACHINE=app|database|model  SSH to a VM over IAP (interactive)' \
 	  '  make grafana                         Open deployed Grafana through IAP (requires applied infrastructure and a deployed Grafana workload)' \
 	  '  make grafana-stop                    Stop this local user'\''s tracked Grafana tunnels' \
@@ -116,6 +117,9 @@ tf-backend-setup:
 
 tf-backend-join:
 	bash $(GCP_SCRIPTS)/terraform-backend.sh join
+
+tf-backend-restore:
+	bash $(GCP_SCRIPTS)/terraform-backend.sh restore
 
 ssh-machine:
 	@test -n "$(MACHINE)" || { printf '%s\n' 'Set MACHINE to app, database, or model.'; exit 2; }

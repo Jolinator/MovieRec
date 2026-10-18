@@ -5,19 +5,10 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
 TF_DIR="${REPO_ROOT}/deploy/gcp/terraform"
 BACKEND_FILE="${TF_DIR}/backend.tf"
-STATE_PREFIX="g21/terraform"
-MIN_STATE_RESOURCES=20
-REQUIRED_STATE_RESOURCES=(
-  "google_artifact_registry_repository.images"
-  "google_compute_address.movierec"
-  "google_compute_disk.app_data"
-  "google_compute_disk.database_data"
-  "google_compute_disk.model_data"
-  "google_compute_instance.app"
-  "google_compute_instance.database"
-  "google_compute_network.movierec"
-  "google_service_account.node"
-)
+STATE_REQUIREMENTS_FILE="${SCRIPT_DIR}/terraform-state-requirements.json"
+STATE_PREFIX=""
+MIN_STATE_RESOURCES=0
+REQUIRED_STATE_RESOURCES=()
 
 usage() {
   cat <<'EOF'
@@ -27,10 +18,15 @@ Usage:
   bash scripts/gcp/terraform-backend.sh setup [--project ID] [--bucket NAME]
        [--location LOCATION] [--admin EMAIL ...]
   bash scripts/gcp/terraform-backend.sh join
+  bash scripts/gcp/terraform-backend.sh restore [--generation NUMBER]
 
-Run `setup` once from the shell with the complete Terraform state. It creates
-the bucket, grants all listed admins access, writes backend.tf, and migrates
-that state. Commit and share backend.tf; the other admins then run `join`.
+Run `setup` once from one admin's shell with the complete Terraform state. It
+creates the bucket, grants all listed admins access, writes backend.tf, and
+migrates that state. Setup refuses to migrate if its GCS state prefix already
+contains objects. Commit and share backend.tf; the other admins then run `join`.
+
+Run `restore` to choose a validated full state snapshot from GCS object history.
+It backs up the current remote state locally and requires typing RESTORE.
 
 Options for setup:
   --project ID         Defaults to the existing GCP project resolver.
@@ -48,6 +44,31 @@ fail() {
 
 need_command() {
   command -v "$1" >/dev/null 2>&1 || fail "Required command not found: $1"
+}
+
+load_state_requirements() {
+  local requirement_text
+  requirement_text="$(python3 -c '
+import json, sys
+with open(sys.argv[1], encoding="utf-8") as requirements_file:
+    requirements = json.load(requirements_file)
+print(requirements["state_prefix"])
+print(requirements["minimum_resources"])
+for address in requirements["required_resources"]:
+    print(address)
+' "${STATE_REQUIREMENTS_FILE}")" \
+    || fail "Could not load ${STATE_REQUIREMENTS_FILE}."
+
+  local -a requirements=()
+  mapfile -t requirements <<<"${requirement_text}"
+  ((${#requirements[@]} >= 3)) \
+    || fail "Invalid state requirements in ${STATE_REQUIREMENTS_FILE}."
+  [[ "${requirements[1]}" =~ ^[0-9]+$ ]] \
+    || fail "Invalid minimum resource count in ${STATE_REQUIREMENTS_FILE}."
+
+  STATE_PREFIX="${requirements[0]}"
+  MIN_STATE_RESOURCES="${requirements[1]}"
+  REQUIRED_STATE_RESOURCES=("${requirements[@]:2}")
 }
 
 parse_setup_args() {
@@ -215,13 +236,13 @@ validate_shared_state() {
 }
 
 state_backup_path() {
-  printf '%s/terraform.pre-gcs-%s.tfstate' "${TF_DIR}" "$(date -u +%Y%m%dT%H%M%SZ)"
+  printf '%s/terraform.pre-gcs-%s-%s.tfstate' "${TF_DIR}" "$(date -u +%Y%m%dT%H%M%SZ)" "$$"
 }
 
 backup_active_state() {
   local backup
   backup="$(state_backup_path)"
-  (umask 077; terraform -chdir="${TF_DIR}" state pull >"${backup}") \
+  (umask 077; set -o noclobber; terraform -chdir="${TF_DIR}" state pull >"${backup}") \
     || fail "Could not create a local state backup. No backend migration was started."
   chmod 600 "${backup}"
   printf 'Private state backup: %s\n' "${backup}"
@@ -247,12 +268,31 @@ ensure_bucket() {
       --uniform-bucket-level-access
   fi
 
+  ensure_state_destination_empty "${bucket_url}"
+
   gcloud storage buckets update "${bucket_url}" --versioning
   local admin_email
   for admin_email in "${ADMIN_EMAILS[@]}"; do
     gcloud storage buckets add-iam-policy-binding "${bucket_url}" \
       --member="user:${admin_email}" --role="roles/storage.objectAdmin"
   done
+}
+
+ensure_state_destination_empty() {
+  local bucket_url="$1"
+  local state_prefix_url="${bucket_url}/${STATE_PREFIX}/"
+  local objects object_url
+
+  objects="$(gcloud storage ls --all-versions --recursive "${bucket_url}")" \
+    || fail "Cannot inspect ${bucket_url}; refusing to migrate local state into an unverified destination."
+
+  while IFS= read -r object_url; do
+    case "${object_url}" in
+      "${state_prefix_url}"*)
+        fail "Terraform state already exists under ${state_prefix_url}. Refusing setup because 'terraform init -migrate-state' could replace it; use the existing shared backend or its restore workflow."
+        ;;
+    esac
+  done <<<"${objects}"
 }
 
 write_backend_config() {
@@ -275,6 +315,7 @@ setup_backend() {
   need_command terraform
   need_command python3
   need_command sed
+  load_state_requirements
 
   [[ ! -e "${BACKEND_FILE}" ]] \
     || fail "${BACKEND_FILE} already exists. Run 'join' from the other admin's shell, or inspect the existing backend setup."
@@ -339,10 +380,17 @@ EOF
 read_backend_bucket() {
   [[ -f "${BACKEND_FILE}" ]] \
     || fail "${BACKEND_FILE} is missing. The state-owning admin must run 'make tf-backend-setup' and share the generated file first."
-  local buckets
+  local buckets prefixes
+  grep -Eq 'backend[[:space:]]+"gcs"[[:space:]]*\{' "${BACKEND_FILE}" \
+    || fail "${BACKEND_FILE} does not configure the GCS backend."
   buckets="$(sed -nE 's/^[[:space:]]*bucket[[:space:]]*=[[:space:]]*"([a-z0-9-]+)"[[:space:]]*$/\1/p' "${BACKEND_FILE}")"
   [[ -n "${buckets}" && "$(printf '%s\n' "${buckets}" | wc -l | tr -d ' ')" == 1 ]] \
     || fail "Could not read exactly one GCS bucket from ${BACKEND_FILE}."
+  prefixes="$(sed -nE 's/^[[:space:]]*prefix[[:space:]]*=[[:space:]]*"([^"]+)"[[:space:]]*$/\1/p' "${BACKEND_FILE}")"
+  [[ -n "${prefixes}" && "$(printf '%s\n' "${prefixes}" | wc -l | tr -d ' ')" == 1 ]] \
+    || fail "Could not read exactly one GCS prefix from ${BACKEND_FILE}."
+  [[ "${prefixes}" == "${STATE_PREFIX}" ]] \
+    || fail "Expected GCS prefix ${STATE_PREFIX}, found ${prefixes}; refusing to join a different Terraform state."
   BACKEND_BUCKET="${buckets}"
 }
 
@@ -352,7 +400,7 @@ backup_local_files() {
   local state_files=("${TF_DIR}/terraform.tfstate" "${TF_DIR}/terraform.tfstate.d"/*/terraform.tfstate)
   for source in "${state_files[@]}"; do
     [[ -f "${source}" ]] || continue
-    backup="${source%.tfstate}.pre-shared-${timestamp}.tfstate"
+    backup="${source%.tfstate}.pre-shared-${timestamp}-$$.tfstate"
     (umask 077; cp -- "${source}" "${backup}")
     chmod 600 "${backup}"
     printf 'Saved local state copy: %s\n' "${backup}"
@@ -367,7 +415,10 @@ join_backend() {
   (($# == 0)) || fail "The join command takes no options."
   need_command gcloud
   need_command terraform
+  need_command python3
   need_command sed
+  need_command grep
+  load_state_requirements
 
   read_backend_bucket
   gcloud storage buckets describe "gs://${BACKEND_BUCKET}" >/dev/null \
@@ -390,12 +441,16 @@ main() {
     join)
       join_backend "$@"
       ;;
+    restore)
+      need_command python3
+      python3 "${SCRIPT_DIR}/restore-terraform-state.py" "$@"
+      ;;
     -h|--help|help)
       usage
       ;;
     *)
       usage >&2
-      fail "Choose 'setup' or 'join'."
+      fail "Choose 'setup', 'join', or 'restore'."
       ;;
   esac
 }
