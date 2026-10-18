@@ -35,7 +35,7 @@ TF_PREPARE := terraform -chdir=$(TF_DIR) init && terraform -chdir=$(TF_DIR) fmt 
 export GCP_PROJECT_ID GCP_REGION GCP_ZONE GCP_ARTIFACT_REGISTRY_REGION MOVIEREC_RESOURCE_NAME NAMESPACE
 export TF_PARALLELISM
 
-.PHONY: help cloud-shell-setup glean-vars infra-plan infra-apply \
+.PHONY: help cloud-shell-setup glean-vars infra-plan infra-apply tf-backend-setup tf-backend-join \
         ssh-machine grafana grafana-stop pause-app resume-app reboot clear-databases clear-databases-reboot-all cluster-bootstrap secrets-init secrets-passwords set-region artifact-registry-cleanup docker-push-limit docker-push-limit-reset build-push \
         k8s-config models deploy update-app gpu-capacity container-logs start stop destroy benchmark benchmark-stress
 
@@ -48,6 +48,8 @@ help:
 	  '  make artifact-registry-cleanup [KEEP_LOCATION=...]  Keep the region derived from GCP_ZONE by default' \
 	  '  make infra-plan [GPU=on|off|auto] [GPU_TYPE=nvidia-tesla-t4] [MODEL_ONLY=1] [TF_PARALLELISM=n] Initialize, format, validate, and plan; default parallelism is 2' \
 	  '  make infra-apply [GPU=on|off|auto] [GPU_TYPE=nvidia-tesla-t4] [MODEL_ONLY=1] [TF_AUTO_APPROVE=1] Initialize, format, validate, and apply; GPU affects only model VM' \
+	  '  make tf-backend-setup           Create the shared GCS Terraform backend and migrate the complete local state' \
+	  '  make tf-backend-join             Connect this shell to the shared Terraform state' \
 	  '  make ssh-machine MACHINE=app|database|model  SSH to a VM over IAP (interactive)' \
 	  '  make grafana                         Open deployed Grafana through IAP (requires applied infrastructure and a deployed Grafana workload)' \
 	  '  make grafana-stop                    Stop this local user'\''s tracked Grafana tunnels' \
@@ -108,6 +110,12 @@ infra-apply:
 	fi
 	$(GCP_CONFIG) set-gpu-vars $(GPU_SET_VARS_ARGS)
 	terraform -chdir=$(TF_DIR) apply $(TF_PARALLELISM_FLAG) $(TF_APPLY_FLAGS)
+
+tf-backend-setup:
+	bash $(GCP_SCRIPTS)/terraform-backend.sh setup
+
+tf-backend-join:
+	bash $(GCP_SCRIPTS)/terraform-backend.sh join
 
 ssh-machine:
 	@test -n "$(MACHINE)" || { printf '%s\n' 'Set MACHINE to app, database, or model.'; exit 2; }
