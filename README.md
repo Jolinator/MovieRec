@@ -9,6 +9,42 @@ MovieRec is a movie discovery app with accounts, personal watch lists, recommend
 - Prometheus and Grafana provide metrics and dashboards.
 - Docker Compose runs the stack locally. The GCP deployment uses Terraform for VMs/networking, K3s for workloads, Ansible for cluster configuration, and Kustomize for Kubernetes manifests.
 
+## Navigate the repository
+
+Start at the root files when you need to understand or run the project:
+
+- `README.md` — project overview, local startup, deployment entry points, and links to testing documentation.
+- `Makefile` — the command reference for infrastructure, deployment, model management, logs, and benchmarks.
+- `compose.yaml` and `compose.services.yaml` — local Docker Compose orchestration.
+- `.gitlab-ci.yml` — GitLab validation, test, image-build, and deployment pipeline.
+
+The main directories are organized by responsibility:
+
+```text
+backend/                 Go API services and shared backend packages
+frontend/                React/Vite web application
+database/                PostgreSQL migrations and database-related files
+deploy/                  GCP, Terraform, Ansible, and Kubernetes deployment configuration
+monitoring/              Prometheus configuration and Grafana resources
+scripts/                 Local, CI, model, secret, and GCP helper scripts
+testing/                 Backend unit, integration, and load-test resources
+ci-cd/                   CI helper scripts and pipeline notes
+secrets-example/         Templates and instructions for local development secrets
+```
+
+Use these paths as the usual entry points:
+
+- To change the API, begin in `backend/cmd/` for service entry points and `backend/internal/` for implementation.
+- To change the web interface, begin in `frontend/src/`; use `frontend/package.json` for available commands.
+- To change database structure, inspect `database/migrations/` and the service code that applies those migrations.
+- To change local services, networking, or ports, inspect `compose.yaml`, `compose.services.yaml`, and `secrets-example/`.
+- To change cloud infrastructure, begin with `deploy/README.md`, then inspect `deploy/gcp/terraform/`.
+- To change cluster configuration or rollout behavior, inspect `deploy/k8s/` and `deploy/ansible/`.
+- To change CI behavior, inspect `.gitlab-ci.yml` and the scripts under `ci-cd/`.
+- To add or update tests, use the matching area under `testing/`; backend unit tests are also colocated with packages under `backend/internal/`.
+
+Keep real credentials and generated deployment state out of version control. The local `secrets/` and GCP `deploy/gcp/secrets/` directories are ignored; use the tracked example files as templates.
+
 ## Run locally
 
 Install Docker Compose v2, Python 3, and OpenSSL. From the repository root, generate the ignored local secret files:
